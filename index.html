@@ -289,6 +289,8 @@
             if (truck) truck.defaultScale = 0.6;
             const jeep = modelLibrary.find(i => i.id === 'jeep' || (i.url && i.url.includes('jeep.glb')));
             if (jeep) jeep.defaultScale = 0.6;
+            const police = modelLibrary.find(i => (i.name && i.name.toLowerCase().includes('police')) || (i.url && i.url.includes('cop_sedan')));
+            if (police) police.defaultScale = 0.5;
             saveLibrary(modelLibrary);
         } catch (e) {}
     })();
