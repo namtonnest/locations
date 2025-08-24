@@ -4,7 +4,21 @@ const { Redis } = require('@upstash/redis');
 // Expect these env vars to be set in Vercel dashboard
 const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN });
 
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
 module.exports = async (req, res) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    setCors(res);
+    return res.status(204).end();
+  }
+
+  setCors(res);
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
     const body = req.body || {};
