@@ -94,6 +94,9 @@
 <body>
 <script src="https://unpkg.com/three@0.126.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.126.0/examples/js/loaders/GLTFLoader.js"></script>
+<!-- Load font and text geometry helpers so we can generate 3D text at runtime -->
+<script src="https://unpkg.com/three@0.126.0/examples/js/loaders/FontLoader.js"></script>
+<script src="https://unpkg.com/three@0.126.0/examples/js/geometries/TextGeometry.js"></script>
 <!-- Topbar markup: buttons are defined in HTML so JS doesn't inline-style them -->
 <div class="topbar">
     <div class="controls-left">
@@ -259,6 +262,14 @@
         saveLibrary(modelLibrary);
     }
 
+    // helper to add a 3D-text entry into the library (type: '3dtext')
+    function addTextModelToLibrary(name) {
+        if (modelLibrary.some(i => i.type === '3dtext' && i.name === name)) return;
+        const id = 'm_' + Date.now();
+        modelLibrary.unshift({ id, name: name || '3D Text', type: '3dtext' });
+        saveLibrary(modelLibrary);
+    }
+
     // ensure any previously-added Car entry is removed (user requested removal)
     modelLibrary = modelLibrary.filter(i => i.url !== 'https://raw.githubusercontent.com/namtonnest/LocationLocations/main/car.glb');
     saveLibrary(modelLibrary);
@@ -271,6 +282,9 @@
 
     // Add truck model requested by user (idempotent)
     addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/truck.glb', 'truck');
+
+    // Add a 3D Text helper entry so users can add custom 3D text from the library
+    addTextModelToLibrary('3D Text');
 
     // thumbnail cache key
     const THUMB_KEY = 'model_thumbs_v1';
@@ -374,6 +388,17 @@
             const selectBtn = document.createElement('button');
             selectBtn.textContent = 'Use';
             selectBtn.addEventListener('click', () => {
+                if (item.type === '3dtext') {
+                    // prompt for text and enable text placement mode
+                    const txt = prompt('Enter text to place');
+                    if (!txt) return;
+                    placingText = { text: txt };
+                    placingModel = true; addBtn.setAttribute('aria-pressed', 'true'); addBtn.textContent = 'Cancel';
+                    note.textContent = 'Click on map to place 3D text';
+                    note.style.display = 'block';
+                    libraryPanel.style.display = 'none';
+                    return;
+                }
                 modelUrl = item.url;
                 // open placement mode for convenience
                 placingModel = true; addBtn.setAttribute('aria-pressed', 'true'); addBtn.textContent = 'Cancel';
@@ -417,12 +442,80 @@
 
     let placingModel = false;
     let modelUrl = defaultModelUrl;
+    // state for placing 3D text: { text: '...' } when awaiting a click
+    let placingText = null;
 
     addBtn.addEventListener('click', () => {
         placingModel = !placingModel;
         addBtn.setAttribute('aria-pressed', String(placingModel));
         addBtn.textContent = placingModel ? 'Cancel' : 'Add model';
         note.style.display = placingModel ? 'block' : 'none';
+    });
+
+    // Helper to create and place 3D text into the three.js scene.
+    // Usage: add3DText('Hello', [lng, lat], { size: 2, height: 0.4, color: 0xff6a00 })
+    async function add3DText(text, lngLat, options = {}) {
+        if (!modelLayerRef || !modelLayerRef.scene) {
+            alert('3D layer not ready');
+            return null;
+        }
+        const opt = Object.assign({ size: 1.5, height: 0.3, color: 0xff6a00, fontUrl: 'https://threejs.org/examples/fonts/helvetiker_regular.typeface.json' }, options);
+        return new Promise((resolve, reject) => {
+            try {
+                const loader = new THREE.FontLoader();
+                loader.load(opt.fontUrl, (font) => {
+                    // Create geometry with a unit size and center it. The custom layer
+                    // render loop will apply the mercator-based transform so the mesh
+                    // itself should remain at the origin.
+                    const geom = new THREE.TextGeometry(text, { font, size: 1, height: opt.height, curveSegments: 8 });
+                    geom.computeBoundingBox();
+                    geom.center();
+                    const mat = new THREE.MeshBasicMaterial({ color: opt.color });
+                    const mesh = new THREE.Mesh(geom, mat);
+                    // compute mercator reference and scale multiplier
+                    const mc = mapboxgl.MercatorCoordinate.fromLngLat(lngLat, 0);
+                    const mcScale = mc.meterInMercatorCoordinateUnits();
+                    // create transform that the 3D layer's render() will apply
+                    const id = 'text_' + Date.now();
+                    const transform = {
+                        translateX: mc.x,
+                        translateY: mc.y,
+                        translateZ: mc.z,
+                        rotateX: Math.PI / 2,
+                        rotateY: 0,
+                        rotateZ: 0,
+                        scale: mcScale * (opt.size || 1)
+                    };
+                    const entry = { id, name: text, transform: Object.assign({}, transform), original: Object.assign({}, transform), meterScale: mcScale, object: mesh, url: null, geo: { lng: lngLat[0], lat: lngLat[1], alt: 0 } };
+                    // keep the mesh at origin; the layer render will position it via transform
+                    mesh.position.set(0, 0, 0);
+                    mesh.scale.set(1, 1, 1);
+                    placedModels.push(entry);
+                    modelLayerRef.scene.add(mesh);
+                    renderSidebar();
+                    if (map) map.triggerRepaint();
+                    resolve(entry.id);
+                }, undefined, (err) => { console.warn('Font load failed', err); reject(err); });
+            } catch (e) { reject(e); }
+        });
+    }
+
+    // UX: allow Shift+click on map when placingModel is active to create 3D text via prompt
+    map.on('click', async (e) => {
+        if (!placingModel) return; // handled elsewhere for models
+        if (!e.originalEvent) return; // safety
+        const isShift = e.originalEvent.shiftKey;
+        if (!isShift) return; // normal model placement handled elsewhere
+        const txt = prompt('Enter text for 3D label');
+        if (!txt) return;
+        const coords = [e.lngLat.lng, e.lngLat.lat];
+        try {
+            await add3DText(txt, coords, { size: 1.5, height: 0.2, color: 0xff6a00 });
+            alert('3D text added');
+        } catch (err) {
+            console.warn('Failed to add 3D text', err);
+            alert('Failed to add 3D text');
+        }
     });
 
     // helper to toggle overlays so they don't block map clicks during placement
@@ -1135,7 +1228,7 @@
     }
 
     // support clicking on the map to place the model when in placingModel mode
-    map.on('click', (e) => {
+    map.on('click', async (e) => {
         const lngLat = [e.lngLat.lng, e.lngLat.lat];
 
         if (!placingModel) {
@@ -1168,6 +1261,21 @@
         }
 
         // placing flow
+        if (placingText && placingText.text) {
+            // place 3D text at click location
+            try {
+                await add3DText(placingText.text, lngLat, { size: 1.5, height: 0.25, color: 0xff6a00 });
+                placingText = null;
+                note.textContent = 'Click on the map to place the model, or click the button again to cancel.';
+                note.style.display = 'none';
+            } catch (e) {
+                console.warn('Failed to place 3D text', e);
+                alert('Failed to place 3D text');
+            }
+            if (map) map.triggerRepaint();
+            return;
+        }
+
         const altitude = 0;
         const modelAsMercatorCoordinate = mapboxgl.MercatorCoordinate.fromLngLat(
             lngLat,
