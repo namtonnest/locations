@@ -1,4 +1,6 @@
-const { nanoid } = require('nanoid');
+// nanoid is published as an ES module; require() fails in the Vercel runtime.
+// Use dynamic import inside the handler to load it at runtime.
+let nanoid;
 const { Redis } = require('@upstash/redis');
 
 // Expect these env vars to be set in Vercel dashboard
@@ -26,6 +28,10 @@ module.exports = async (req, res) => {
     if (!state) return res.status(400).json({ error: 'Missing state in request body' });
 
     // generate an 8-char id
+    if (!nanoid) {
+      const mod = await import('nanoid');
+      nanoid = mod.nanoid || (mod.default && mod.default.nanoid) || mod.default || mod;
+    }
     const id = nanoid(8);
     // save as stringified JSON under key state:<id>
     await redis.set(`state:${id}`, JSON.stringify(state));
