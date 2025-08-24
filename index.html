@@ -147,6 +147,14 @@
     // Raw URL for the provided GitHub model (encoded for spaces)
     const defaultModelUrl = 'https://raw.githubusercontent.com/namtonnest/3dmodels/main/food_truck.glb';
 
+    // Detect small/mobile viewports and adapt heavy work accordingly.
+    const isMobile = window.matchMedia && window.matchMedia('(max-width:640px)').matches;
+    // On low-memory/older mobile devices, generating thumbnails and doing
+    // complex WebGL work can cause the page to crash. We'll be defensive:
+    // - Avoid running expensive thumbnail rendering on mobile; use SVG fallback.
+    // - Make the custom three.js layer tolerate renderer creation failures.
+
+
     // UI: reference existing markup buttons
     const addBtn = document.getElementById('add-model-btn');
     addBtn.type = 'button';
@@ -244,15 +252,29 @@
 
     // generate thumbnail: load model with GLTFLoader into an offscreen renderer and capture
     async function generateThumbnail(url, id) {
-        // already cached
-        if (thumbCache[url]) return thumbCache[url];
+    // On mobile devices skip expensive thumbnail generation and return a
+    // lightweight SVG fallback. This avoids creating extra WebGL contexts
+    // which can exhaust GPU/webgl resources on phones.
+    if (isMobile) return fallbackThumb(id || url.split('/').pop() || 'Model');
+
+    // already cached
+    if (thumbCache[url]) return thumbCache[url];
         return new Promise((resolve) => {
             try {
                 const loader = new THREE.GLTFLoader();
                 // offscreen canvas
                 const canvas = document.createElement('canvas');
                 canvas.width = 240; canvas.height = 160;
-                const renderer = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true });
+                let renderer;
+                try {
+                    renderer = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true });
+                } catch (err) {
+                    // If renderer creation fails (common on some mobile browsers),
+                    // bail out and return the SVG fallback.
+                    console.warn('Thumbnail renderer creation failed, returning SVG fallback', err);
+                    resolve(fallbackThumb(id || 'Model'));
+                    return;
+                }
                 renderer.setSize(canvas.width, canvas.height);
                 const scene = new THREE.Scene();
                 const camera = new THREE.PerspectiveCamera(45, canvas.width / canvas.height, 0.1, 1000);
@@ -871,12 +893,23 @@
             this.scene.add(ambientLight);
 
             this.map = map;
-            this.renderer = new THREE.WebGLRenderer({
-                canvas: map.getCanvas(),
-                context: gl,
-                antialias: true
-            });
-            this.renderer.autoClear = false;
+            // Creating a WebGLRenderer using the map's GL context can fail on
+            // some mobile browsers or low-resource environments. Wrap in try/catch
+            // and gracefully disable the 3D layer when unavailable.
+            try {
+                this.renderer = new THREE.WebGLRenderer({
+                    canvas: map.getCanvas(),
+                    context: gl,
+                    antialias: true
+                });
+                this.renderer.autoClear = false;
+            } catch (err) {
+                console.warn('Three.js renderer creation failed; disabling 3D layer', err);
+                // mark layer as disabled so render() is a no-op
+                this._disabled = true;
+                modelLayerRef = null;
+                return;
+            }
 
             // expose ref so outer code can call loadModel
             modelLayerRef = this;
@@ -942,6 +975,9 @@
             };
         },
         render: function (gl, matrix) {
+            // no-op when layer disabled due to missing WebGL support
+            if (this._disabled) return;
+
             if (!placedModels.length) return;
 
             const m = new THREE.Matrix4().fromArray(matrix);
