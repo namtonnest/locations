@@ -599,11 +599,6 @@
         controls.id = 'model-controls';
         controls.innerHTML = `
                 <div style="font-weight:600;margin-bottom:6px;">Model controls</div>
-                <label style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">Animate models:
-                    <input id="animateModelsToggle" type="checkbox" style="margin-left:8px">
-                    <span style="font-size:12px;color:var(--muted);margin-left:6px">Speed (deg/s):</span>
-                    <input id="animateSpeed" type="number" value="30" step="1" style="width:72px;margin-left:6px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
-                </label>
                 <label style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">Rotate (deg):
                     <button id="rot-dec" type="button" class="btn secondary" style="padding:4px 8px;min-width:36px">◀</button>
                     <input id="rot" type="number" value="0" step="1" style="width:88px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
@@ -628,6 +623,12 @@
                     <label style="font-size:13px;margin-left:8px">Step: <input id="altStep" type="number" value="1" style="width:60px;margin-left:6px"></label>
                     <button id="altUp" style="margin-left:8px">Up</button>
                     <button id="altDown" style="margin-left:4px">Down</button>
+                </div>
+                <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+                    <button id="animateBtn" type="button" class="btn secondary" style="padding:6px 10px">Toggle animate</button>
+                    <label style="font-size:13px;display:flex;align-items:center;gap:6px">Speed:
+                        <input id="spinSpeed" type="number" value="0.01" step="0.005" style="width:86px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
+                    </label>
                 </div>
         `;
         document.body.appendChild(controls);
@@ -701,15 +702,10 @@
     const altStepInput = document.getElementById('altStep');
     const altUpBtn = document.getElementById('altUp');
     const altDownBtn = document.getElementById('altDown');
-    const animateToggle = document.getElementById('animateModelsToggle');
-    const animateSpeedInput = document.getElementById('animateSpeed');
 
     // disabled until a model is placed
     function setControlsDisabled(disabled) {
-        const elems = [rot, rotInc, rotDec, rotStepInput, scaleInput, nudgeStep, nudgeN, nudgeS, nudgeE, nudgeW, resetModelBtn, removeModelBtn, altitudeInput, altStepInput, altUpBtn, altDownBtn, animateToggle, animateSpeedInput];
-        elems.forEach(el => {
-            try { if (el) el.disabled = disabled; } catch (e) { /* ignore */ }
-        });
+        [rot, rotInc, rotDec, rotStepInput, scaleInput, nudgeStep, nudgeN, nudgeS, nudgeE, nudgeW, resetModelBtn, removeModelBtn, altitudeInput, altStepInput, altUpBtn, altDownBtn].forEach(el => { if (el) el.disabled = disabled; });
     }
     setControlsDisabled(true);
 
@@ -755,6 +751,33 @@
         applyTransformsFromInputs();
     });
     scaleInput.addEventListener('input', applyTransformsFromInputs);
+
+    // animate button wiring (toggle animation state on selected model)
+    const animateBtn = document.getElementById('animateBtn');
+    if (animateBtn) {
+        animateBtn.addEventListener('click', () => {
+            if (!selectedModelId) return alert('Select a model first');
+            const entry = placedModels.find(p => p.id === selectedModelId);
+            if (!entry) return;
+            entry.animated = !entry.animated;
+            renderSidebar();
+            if (map) map.triggerRepaint();
+        });
+    }
+
+    // spin speed input wiring
+    const spinSpeedInput = document.getElementById('spinSpeed');
+    if (spinSpeedInput) {
+        spinSpeedInput.addEventListener('change', () => {
+            if (!selectedModelId) return alert('Select a model first');
+            const entry = placedModels.find(p => p.id === selectedModelId);
+            if (!entry) return;
+            const v = Number(spinSpeedInput.value) || 0.01;
+            entry.spinSpeed = v;
+            renderSidebar();
+            if (map) map.triggerRepaint();
+        });
+    }
 
     function nudge(direction) {
         if (!selectedModelId) return;
@@ -860,6 +883,8 @@
             original: Object.assign({}, p.original),
             meterScale: p.meterScale,
             geo: p.geo ? { lng: p.geo.lng, lat: p.geo.lat, alt: p.geo.alt } : null,
+            animated: !!p.animated,
+            spinSpeed: (p.spinSpeed || 0.01),
             originalGeoLat: p.originalGeoLat,
             originalGeoLng: p.originalGeoLng
         }));
@@ -874,12 +899,14 @@
             // clear existing models
             placedModels.slice().forEach(p => removeModel(p.id));
             // restore saved models
-            (parsed.models || []).forEach(m => {
-                const url = (m.url && m.url.length) ? m.url : defaultModelUrl;
-                const transform = Object.assign({}, m.transform);
-                const geo = m.geo ? [m.geo.lng, m.geo.lat, m.geo.alt || 0] : null;
-                if (modelLayerRef && modelLayerRef.loadModel) modelLayerRef.loadModel(encodeURI(url), transform, geo, m.id, m.name);
-            });
+                (parsed.models || []).forEach(m => {
+                    const url = (m.url && m.url.length) ? m.url : defaultModelUrl;
+                    const transform = Object.assign({}, m.transform);
+                    // include animated flag in transform so loadModel can pick it up
+                    if (m.animated) transform.animated = true;
+                    const geo = m.geo ? [m.geo.lng, m.geo.lat, m.geo.alt || 0] : null;
+                    if (modelLayerRef && modelLayerRef.loadModel) modelLayerRef.loadModel(encodeURI(url), transform, geo, m.id, m.name);
+                });
             renderSidebar();
         } catch (e) { console.warn('Failed to restore parsed state', e); }
     }
@@ -1077,6 +1104,16 @@
         setControlsDisabled(false);
     if (rot) rot.value = Math.round((entry.transform.rotateY * 180 / Math.PI) * 100) / 100;
         scaleInput.value = Math.round((entry.transform.scale / (entry.meterScale || 1)) * 100) / 100;
+        // sync animate button text to reflect entry state
+        try {
+            const animateBtn = document.getElementById('animateBtn');
+            if (animateBtn) animateBtn.textContent = entry.animated ? 'Stop animation' : 'Animate';
+        } catch (e) {}
+        // sync spinSpeed input
+        try {
+            const spinInput = document.getElementById('spinSpeed');
+            if (spinInput) spinInput.value = (entry.spinSpeed !== undefined) ? entry.spinSpeed : 0.01;
+        } catch (e) {}
         renderSidebar();
         if (map) map.triggerRepaint();
     }
@@ -1148,7 +1185,9 @@
         transform: Object.assign({}, transform),
             original: Object.assign({}, transform),
             meterScale: transform.scale,
-        object: null,
+    object: null,
+    animated: !!(transform && transform.animated),
+    spinSpeed: (transform && transform.spinSpeed) ? transform.spinSpeed : 0.01,
         // persist the original URL so serializePlacedModels can save it
         url: url,
         geo: geo ? { lng: geo[0], lat: geo[1], alt: geo[2] || 0 } : null,
@@ -1193,24 +1232,8 @@
                                 }
                             }
                         });
-                        // center the loaded model so rotations occur around its geometric center
-                        try {
-                            // compute bounding box of the loaded scene
-                            const box = new THREE.Box3().setFromObject(gltf.scene);
-                            const center = box.getCenter(new THREE.Vector3());
-                            // shift the model so its center is at the scene origin
-                            gltf.scene.position.x -= center.x;
-                            gltf.scene.position.y -= center.y;
-                            gltf.scene.position.z -= center.z;
-                        } catch (e) {
-                            // if bounding box fails, continue without centering
-                            console.warn('Failed to center model', e);
-                        }
-                        // wrap the model in a group so entry.object references a single root we can toggle visibility on
-                        const wrapper = new THREE.Group();
-                        wrapper.add(gltf.scene);
-                        entry.object = wrapper;
-                        this.scene.add(wrapper);
+                        entry.object = gltf.scene;
+                        this.scene.add(gltf.scene);
                         renderSidebar();
                     },
                     undefined,
@@ -1231,18 +1254,6 @@
 
             if (!placedModels.length) return;
 
-            // animation support: rotate models on Y when enabled
-            if (typeof this._lastFrameTime === 'undefined') this._lastFrameTime = performance.now();
-            const now = performance.now();
-            const dt = (now - this._lastFrameTime) / 1000; // seconds
-            this._lastFrameTime = now;
-
-            const animateToggle = document.getElementById('animateModelsToggle');
-            const animateSpeedInput = document.getElementById('animateSpeed');
-            const animateEnabled = animateToggle && animateToggle.checked;
-            const animateSpeedDeg = animateSpeedInput ? Number(animateSpeedInput.value || 0) : 0;
-            const animateSpeedRad = (animateSpeedDeg * Math.PI / 180);
-
             const m = new THREE.Matrix4().fromArray(matrix);
 
             // render each placed model separately
@@ -1250,16 +1261,16 @@
                 const entry = placedModels[i];
                 if (!entry.object) continue; // not loaded yet
 
+                // if entry is animated, apply a Y-axis spin using its spinSpeed
+                if (entry.animated) {
+                    const speed = (entry.spinSpeed !== undefined) ? entry.spinSpeed : 0.01;
+                    entry.transform.rotateY = (entry.transform.rotateY || 0) + speed;
+                }
+
                 const rotationX = new THREE.Matrix4().makeRotationAxis(
                     new THREE.Vector3(1, 0, 0),
                     entry.transform.rotateX
                 );
-                // apply animated Y rotation if enabled
-                if (animateEnabled && animateSpeedRad) {
-                    entry.transform.rotateY = (entry.transform.rotateY || 0) + animateSpeedRad * dt;
-                    // keep within reasonable bounds
-                    if (entry.transform.rotateY > Math.PI * 2) entry.transform.rotateY -= Math.PI * 2;
-                }
                 const rotationY = new THREE.Matrix4().makeRotationAxis(
                     new THREE.Vector3(0, 1, 0),
                     entry.transform.rotateY
