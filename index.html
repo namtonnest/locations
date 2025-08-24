@@ -627,7 +627,7 @@
                 <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
                     <button id="animateBtn" type="button" class="btn secondary" style="padding:6px 10px">Toggle animate</button>
                     <label style="font-size:13px;display:flex;align-items:center;gap:6px">Speed:
-                        <input id="spinSpeed" type="number" value="0.01" step="0.005" style="width:86px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
+                        <input id="spinSpeed" type="number" value="0.5" step="0.005" style="width:86px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
                     </label>
                 </div>
         `;
@@ -772,7 +772,7 @@
             if (!selectedModelId) return alert('Select a model first');
             const entry = placedModels.find(p => p.id === selectedModelId);
             if (!entry) return;
-            const v = Number(spinSpeedInput.value) || 0.01;
+            const v = Number(spinSpeedInput.value) || 0.5;
             entry.spinSpeed = v;
             renderSidebar();
             if (map) map.triggerRepaint();
@@ -884,7 +884,7 @@
             meterScale: p.meterScale,
             geo: p.geo ? { lng: p.geo.lng, lat: p.geo.lat, alt: p.geo.alt } : null,
             animated: !!p.animated,
-            spinSpeed: (p.spinSpeed || 0.01),
+            spinSpeed: (p.spinSpeed || 0.5),
             originalGeoLat: p.originalGeoLat,
             originalGeoLng: p.originalGeoLng
         }));
@@ -1112,7 +1112,7 @@
         // sync spinSpeed input
         try {
             const spinInput = document.getElementById('spinSpeed');
-            if (spinInput) spinInput.value = (entry.spinSpeed !== undefined) ? entry.spinSpeed : 0.01;
+            if (spinInput) spinInput.value = (entry.spinSpeed !== undefined) ? entry.spinSpeed : 0.5;
         } catch (e) {}
         renderSidebar();
         if (map) map.triggerRepaint();
@@ -1187,7 +1187,7 @@
             meterScale: transform.scale,
     object: null,
     animated: !!(transform && transform.animated),
-    spinSpeed: (transform && transform.spinSpeed) ? transform.spinSpeed : 0.01,
+    spinSpeed: (transform && transform.spinSpeed) ? transform.spinSpeed : 0.5,
         // persist the original URL so serializePlacedModels can save it
         url: url,
         geo: geo ? { lng: geo[0], lat: geo[1], alt: geo[2] || 0 } : null,
@@ -1232,6 +1232,18 @@
                                 }
                             }
                         });
+                        // center the model geometry so rotations occur around its center
+                        try {
+                            const obj = gltf.scene || gltf.scenes[0];
+                            const box = new THREE.Box3().setFromObject(obj);
+                            const center = box.getCenter(new THREE.Vector3());
+                            // move the model so its center is at the origin (pivot)
+                            obj.position.x -= center.x;
+                            obj.position.y -= center.y;
+                            obj.position.z -= center.z;
+                        } catch (e) {
+                            console.warn('Failed to center model', e);
+                        }
                         entry.object = gltf.scene;
                         this.scene.add(gltf.scene);
                         renderSidebar();
@@ -1263,7 +1275,7 @@
 
                 // if entry is animated, apply a Y-axis spin using its spinSpeed
                 if (entry.animated) {
-                    const speed = (entry.spinSpeed !== undefined) ? entry.spinSpeed : 0.01;
+                    const speed = (entry.spinSpeed !== undefined) ? entry.spinSpeed : 0.5;
                     entry.transform.rotateY = (entry.transform.rotateY || 0) + speed;
                 }
 
