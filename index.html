@@ -164,7 +164,7 @@
     // - Make the custom three.js layer tolerate renderer creation failures.
 
     // Mobile safety limits
-    const MAX_MOBILE_MODELS = 6; // prevent adding more than this on mobile
+    // Removed hard model cap on mobile per user request. Keep lower concurrency on mobile.
     const LOAD_CONCURRENCY = isMobile ? 1 : 3; // limit concurrent GLTF loads on mobile
     let loaderQueue = [];
     let activeLoads = 0;
@@ -1185,8 +1185,6 @@
         };
 
     // load the model into the three.js scene
-    // enforce mobile model limit
-    if (isMobile && placedModels.length >= MAX_MOBILE_MODELS) { alert('Model limit reached on mobile. Remove a model before adding more.'); return; }
     const rawUrl = githubBlobToRaw(modelUrl);
     if (modelLayerRef && modelLayerRef.loadModel) {
             const id = modelLayerRef.loadModel(encodeURI(rawUrl), transform, lngLat.concat([0]));
