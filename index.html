@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Location Locations</title>
+<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.14.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.14.0/mapbox-gl.js"></script>
+<style>
+    :root{
+        --bg: #0f1724;
+        --card: #ffffff;
+        --muted: #6b7280;
+        --accent: #06b6d4;
+        --ui-text: #ff6a00; /* primary orange for UI text on white backgrounds */
+        --glass: rgba(255,255,255,0.06);
+        --shadow: 0 6px 18px rgba(2,6,23,0.3);
+    }
+    html,body{height:100%;}
+    body { margin: 0; padding: 0; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; background: var(--bg); color: #111827; }
+    #map { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+    /* Topbar */
+    .topbar{
+        position: absolute; left: 16px; right: 16px; top: 12px; z-index: 6; display:flex; justify-content:space-between; gap:12px;
+        pointer-events: auto;
+    }
+    .controls-left{display:flex; gap:8px; align-items:center}
+    .topbar .btn{background: linear-gradient(180deg, #ffffff, #f8fafc); border: 1px solid rgba(2,6,23,0.06); padding:8px 12px; border-radius:10px; cursor:pointer; color:#0f1724; font-weight:600; box-shadow: var(--shadow); transition: transform .08s ease, box-shadow .08s ease}
+    .topbar .btn:hover{transform: translateY(-1px);}
+    .topbar .btn.secondary{background:transparent; border: 1px solid rgba(255,255,255,0.06); color: var(--ui-text); box-shadow:none}
+    .topbar .brand{font-weight:700; color:#fff; padding:8px 12px; border-radius:10px; background:linear-gradient(90deg,var(--accent),#7c3aed); box-shadow:var(--shadow)}
+
+    /* Note */
+    #map-note{position:absolute; top:56px; left:18px; z-index:6; background: rgba(255,255,255,0.95); padding:8px 10px; border-radius:8px; display:none; font-size:13px; box-shadow:0 6px 18px rgba(15,23,36,0.14)}
+
+    /* Sidebar */
+    #sidebar{position:absolute; left:0; top:0; bottom:0; width:300px; background:linear-gradient(180deg, rgba(255,255,255,0.98), rgba(250,250,250,0.98)); z-index:4; padding:14px; overflow:auto; box-shadow:2px 0 18px rgba(2,6,23,0.12); border-right:1px solid rgba(2,6,23,0.04)}
+    #sidebar.hidden{display:none}
+    #sidebar h3{margin:0 0 8px 0; font-size:16px; color:var(--ui-text)}
+    .model-row{padding:10px; border-radius:8px; display:flex; justify-content:space-between; gap:8px; align-items:flex-start}
+    .model-row + .model-row{margin-top:8px}
+    .model-row.selected{background:#eef9ff}
+    .model-row .label{font-weight:600; color:var(--ui-text)}
+    .model-row .info{font-size:12px; color:rgba(255,106,0,0.85); margin-top:6px}
+    .model-row button{background:transparent; border:none; color:var(--ui-text); cursor:pointer; font-weight:600}
+    .model-left{display:flex;flex-direction:column}
+    .model-actions{display:flex;gap:8px;align-items:center}
+    .rename-input{width:140px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)}
+
+    /* Library panel */
+    #library{position:absolute; left:50%; transform:translateX(-50%); top:72px; z-index:6; background:rgba(255,255,255,0.98); padding:12px; border-radius:12px; box-shadow:var(--shadow); min-width:360px; display:none}
+    #library h4{margin:0 0 8px 0; color:var(--ui-text)}
+    #library-list{display:flex;flex-direction:column;gap:8px;max-height:260px;overflow:auto}
+    .lib-item{display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;border:1px solid rgba(2,6,23,0.04)}
+    .lib-item .url{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+    .lib-item button{background:transparent;border:none;color:var(--ui-text);cursor:pointer;font-weight:600}
+    #add-model-url{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(2,6,23,0.06);margin-top:8px}
+    .lib-item img.thumb{width:120px;height:80px;object-fit:cover;border-radius:6px;border:1px solid rgba(2,6,23,0.04);margin-right:8px}
+
+    /* Model controls */
+    #model-controls{position:absolute; right:18px; top:12px; z-index:12; background:rgba(255,255,255,0.98); padding:12px; border-radius:12px; box-shadow:var(--shadow); min-width:220px; pointer-events:auto}
+    #model-controls label{display:block; font-size:13px; color:var(--ui-text)}
+    #model-controls input[type=number]{width:86px; padding:6px; margin-left:8px; border-radius:6px; border:1px solid rgba(2,6,23,0.06)}
+
+    @media(max-width:640px){
+        #sidebar{width:100%; height:260px; bottom:auto;}
+        .topbar{left:8px; right:8px}
+        #model-controls{right:8px; left:8px; top:auto; bottom:12px}
+        /* hide controls by default on mobile; a toggle button will open them */
+        #model-controls{display:none}
+        #controls-toggle-btn{display:block}
+    }
+
+    /* Controls toggle (default hidden on desktop) - positioned below the topbar */
+    #controls-toggle-btn{position:absolute; right:18px; top:56px; z-index:7; display:none;}
+
+    /* Address/search bar at bottom */
+    #address-bar{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;z-index:9;background:rgba(255,255,255,0.98);padding:8px;border-radius:10px;box-shadow:var(--shadow);display:flex;gap:8px;align-items:center;min-width:320px;max-width:90%}
+    #address-bar input{flex:1;padding:8px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)}
+    #address-bar button{padding:8px 10px;border-radius:8px}
+
+</style>
+</head>
+<body>
+<script src="https://unpkg.com/three@0.126.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.126.0/examples/js/loaders/GLTFLoader.js"></script>
+<!-- Topbar markup: buttons are defined in HTML so JS doesn't inline-style them -->
+<div class="topbar">
+    <div class="controls-left">
+        <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start;margin-right:6px">
+            <div style="display:flex;align-items:center;gap:8px">
+                <div class="brand">Location</div>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <button id="open-models-btn" class="btn secondary">Models</button>
+                    <button id="open-library-btn" class="btn secondary">Library</button>
+                    <button id="share-btn" class="btn secondary">Share</button>
+                </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+                <button id="add-image-btn" class="btn" style="padding:6px 10px;font-weight:600;">Add image</button>
+                <button id="add-model-btn" class="btn" style="padding:6px 10px;">Add model</button>
+                <button id="desktop-controls-btn" class="btn" style="padding:6px 10px;display:none">Controls</button>
+            </div>
+        </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+        <!-- placeholder for future search / account -->
+    </div>
+</div>
+
+<div id="map-note">Click on the map to place the model, or click the button again to cancel.</div>
+<div id="map"></div>
+<!-- Model library panel -->
+<div id="library" aria-hidden="true">
+    <h4>Model library</h4>
+    <div id="library-list"></div>
+    <input id="add-model-url" placeholder="Paste GLB url and press Add" />
+    <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="add-model-to-lib" class="btn">Add</button>
+        <button id="close-library" class="btn secondary">Close</button>
+    </div>
+</div>
+<script>
+    mapboxgl.accessToken = "pk.eyJ1IjoicHVycGhhY3RzIiwiYSI6ImNsdzY1bzVvNzFwb3IyamxyOG1vY3oyM2gifQ.2LikTeWKwlWsAcEneBXW0Q";
+    const map = new mapboxgl.Map({
+        container: 'map',
+        // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
+        style: 'mapbox://styles/mapbox/standard',
+        config: {
+            basemap: {
+                theme: 'monochrome'
+            }
+        },
+    zoom: 18,
+    center: [-79.3875, 43.6426],
+        pitch: 60,
+        antialias: true // create the gl context with MSAA antialiasing, so custom layers are antialiased
+    });
+
+    // Backend endpoint that stores state and returns an 8-character id.
+    // Deploy the server code (README in repo) and set this to your deployed URL, e.g.
+    // const BACKEND_STATE_ENDPOINT = 'https://your-deployment.example.com/api/state';
+    const BACKEND_STATE_ENDPOINT = '';
+
+    // Prepare to allow adding a GLTF model interactively.
+    // Raw URL for the provided GitHub model (encoded for spaces)
+    const defaultModelUrl = 'https://raw.githubusercontent.com/namtonnest/3dmodels/main/food_truck.glb';
+
+    // UI: reference existing markup buttons
+    const addBtn = document.getElementById('add-model-btn');
+    addBtn.type = 'button';
+    addBtn.setAttribute('aria-pressed', 'false');
+
+    const modelsBtn = document.getElementById('open-models-btn');
+
+    // make the top-left brand act as a quick "reset to empty" action
+    const brandBtn = document.querySelector('.brand');
+    if (brandBtn) {
+        brandBtn.style.cursor = 'pointer';
+        brandBtn.title = 'Reload page without any placed models';
+        brandBtn.addEventListener('click', () => {
+            // remove all placed models from the scene
+            try {
+                placedModels.slice().forEach(p => removeModel(p.id));
+            } catch (e) { /* ignore if not ready */ }
+            // reload cleanly
+            // reload without query string or hash
+            const base = window.location.origin + window.location.pathname;
+            window.location.href = base;
+        });
+    }
+
+    // topbar buttons exist in DOM; just reference them
+    const shareBtn = document.getElementById('share-btn');
+
+    const note = document.getElementById('map-note');
+
+    // Library panel elements
+    const libraryPanel = document.getElementById('library');
+    const openLibraryBtn = document.getElementById('open-library-btn');
+    const libraryList = document.getElementById('library-list');
+    const addModelUrlInput = document.getElementById('add-model-url');
+    const addModelToLibBtn = document.getElementById('add-model-to-lib');
+    const closeLibraryBtn = document.getElementById('close-library');
+
+    // model library persistence key
+    const LIB_KEY = 'model_library_v1';
+    // default library items
+    const defaultLibrary = [
+        { id: 'jeep', name: 'Jeep', url: 'https://raw.githubusercontent.com/namtonnest/3dmodels/main/jeep.glb' },
+        { id: 'foodtruck', name: 'Food truck', url: 'https://raw.githubusercontent.com/namtonnest/3dmodels/main/food_truck.glb' }
+    ];
+
+
+    function loadLibrary() {
+        try {
+            const raw = localStorage.getItem(LIB_KEY);
+            if (!raw) return defaultLibrary.slice();
+            return JSON.parse(raw);
+        } catch (e) { return defaultLibrary.slice(); }
+    }
+
+    function saveLibrary(items) {
+        localStorage.setItem(LIB_KEY, JSON.stringify(items));
+    }
+
+    let modelLibrary = loadLibrary();
+
+    // helper to add a model URL into the library if not already present
+    function addModelToLibraryUrl(url, name) {
+        if (!url) return;
+        if (modelLibrary.some(i => i.url === url)) return;
+        const id = 'm_' + Date.now();
+        modelLibrary.unshift({ id, name: name || url.split('/').pop(), url });
+        saveLibrary(modelLibrary);
+    }
+
+    // ensure any previously-added Car entry is removed (user requested removal)
+    modelLibrary = modelLibrary.filter(i => i.url !== 'https://raw.githubusercontent.com/namtonnest/LocationLocations/main/car.glb');
+    saveLibrary(modelLibrary);
+
+    // Add traffic cone model requested by user (idempotent)
+    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/3dmodels/main/traffic_cone.glb', 'Traffic cone');
+
+    // Add police car model requested by user (idempotent)
+    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/3dmodels/main/cop_sedan_90_-_low_poly_model.glb', 'Police car');
+
+    // thumbnail cache key
+    const THUMB_KEY = 'model_thumbs_v1';
+    let thumbCache = {};
+    try { thumbCache = JSON.parse(localStorage.getItem(THUMB_KEY) || '{}'); } catch (e) { thumbCache = {}; }
+
+    // small helper to save thumbnail cache (try/catch to avoid quota errors)
+    function saveThumbCache() {
+        try { localStorage.setItem(THUMB_KEY, JSON.stringify(thumbCache)); } catch (e) { /* ignore quota errors */ }
+    }
+
+    // fallback svg data url
+    function fallbackThumb(name) {
+        const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='240' height='160'><rect width='100%' height='100%' fill='#f3f4f6'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#ff6a00' font-family='Arial' font-size='18'>${name}</text></svg>`;
+        return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+    }
+
+    // generate thumbnail: load model with GLTFLoader into an offscreen renderer and capture
+    async function generateThumbnail(url, id) {
+        // already cached
+        if (thumbCache[url]) return thumbCache[url];
+        return new Promise((resolve) => {
+            try {
+                const loader = new THREE.GLTFLoader();
+                // offscreen canvas
+                const canvas = document.createElement('canvas');
+                canvas.width = 240; canvas.height = 160;
+                const renderer = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true });
+                renderer.setSize(canvas.width, canvas.height);
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(45, canvas.width / canvas.height, 0.1, 1000);
+                const light = new THREE.DirectionalLight(0xffffff, 1);
+                light.position.set(10,10,10); scene.add(light);
+                const ambient = new THREE.AmbientLight(0xffffff, 0.6); scene.add(ambient);
+                loader.load(url, (gltf) => {
+                    const obj = gltf.scene || gltf.scenes[0];
+                    // normalize and position
+                    const box = new THREE.Box3().setFromObject(obj);
+                    const size = box.getSize(new THREE.Vector3());
+                    const center = box.getCenter(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    obj.position.x -= center.x; obj.position.y -= center.y; obj.position.z -= center.z;
+                    scene.add(obj);
+                    camera.position.set(0, maxDim * 0.7, maxDim * 1.8);
+                    camera.lookAt(new THREE.Vector3(0,0,0));
+                    renderer.render(scene, camera);
+                    const dataUrl = canvas.toDataURL('image/png');
+                    thumbCache[url] = dataUrl;
+                    saveThumbCache();
+                    // cleanup
+                    renderer.dispose();
+                    try { scene.remove(obj); } catch (e) {}
+                    resolve(dataUrl);
+                }, undefined, (err) => {
+                    resolve(fallbackThumb(id || 'Model'));
+                });
+                // safety timeout: if loader doesn't respond in 6s, return fallback
+                setTimeout(() => { if (!thumbCache[url]) resolve(fallbackThumb(id || 'Model')); }, 6000);
+            } catch (e) { resolve(fallbackThumb(id || 'Model')); }
+        });
+    }
+
+    function renderLibrary() {
+        libraryList.innerHTML = '';
+        modelLibrary.forEach(item => {
+            const row = document.createElement('div');
+            row.className = 'lib-item';
+            const info = document.createElement('div');
+            info.style.flex = '1';
+            // thumbnail
+            const thumbImg = document.createElement('img');
+            thumbImg.className = 'thumb';
+            thumbImg.alt = item.name || 'model';
+            // if cached thumb available, show it; otherwise start generation and use fallback
+            if (thumbCache[item.url]) {
+                thumbImg.src = thumbCache[item.url];
+            } else {
+                thumbImg.src = fallbackThumb(item.name || 'Model');
+                // async generate and update when ready
+                generateThumbnail(item.url, item.name).then(dataUrl => { thumbImg.src = dataUrl; });
+            }
+            const title = document.createElement('div');
+            title.textContent = item.name || 'Model';
+            info.appendChild(title);
+            const actions = document.createElement('div');
+            const selectBtn = document.createElement('button');
+            selectBtn.textContent = 'Use';
+            selectBtn.addEventListener('click', () => {
+                modelUrl = item.url;
+                // open placement mode for convenience
+                placingModel = true; addBtn.setAttribute('aria-pressed', 'true'); addBtn.textContent = 'Cancel';
+                note.style.display = 'block';
+                libraryPanel.style.display = 'none';
+            });
+            const removeBtn = document.createElement('button');
+            removeBtn.textContent = 'Remove';
+            removeBtn.addEventListener('click', () => {
+                modelLibrary = modelLibrary.filter(i => i.id !== item.id);
+                saveLibrary(modelLibrary);
+                renderLibrary();
+            });
+            actions.appendChild(selectBtn);
+            actions.appendChild(removeBtn);
+            row.appendChild(thumbImg);
+            row.appendChild(info);
+            row.appendChild(actions);
+            libraryList.appendChild(row);
+        });
+    }
+
+    openLibraryBtn.addEventListener('click', () => {
+        const showing = libraryPanel.style.display === 'block';
+        libraryPanel.style.display = showing ? 'none' : 'block';
+        if (!showing) renderLibrary();
+    });
+
+    closeLibraryBtn.addEventListener('click', () => { libraryPanel.style.display = 'none'; });
+
+    addModelToLibBtn.addEventListener('click', () => {
+        const url = (addModelUrlInput.value || '').trim();
+        if (!url) return alert('Paste a GLB URL');
+        const id = 'm_' + Date.now();
+        modelLibrary.unshift({ id, name: url.split('/').pop(), url });
+        saveLibrary(modelLibrary);
+        addModelUrlInput.value = '';
+        renderLibrary();
+    });
+
+
+    let placingModel = false;
+    let modelUrl = defaultModelUrl;
+
+    addBtn.addEventListener('click', () => {
+        placingModel = !placingModel;
+        addBtn.setAttribute('aria-pressed', String(placingModel));
+        addBtn.textContent = placingModel ? 'Cancel' : 'Add model';
+        note.style.display = placingModel ? 'block' : 'none';
+    });
+
+    // helper to toggle overlays so they don't block map clicks during placement
+    function setOverlayBlocking(block) {
+        // block=true => overlays accept pointer events (normal)
+        // block=false => overlays ignore pointer events so map can receive clicks
+        // keep the control buttons clickable (addBtn, modelsBtn)
+        try {
+            sidebar.style.pointerEvents = block ? 'auto' : 'none';
+            controls.style.pointerEvents = block ? 'auto' : 'none';
+            note.style.pointerEvents = block ? 'auto' : 'none';
+        } catch (e) { /* ignore */ }
+        // ensure the Add and Models buttons remain clickable
+        addBtn.style.pointerEvents = 'auto';
+        const mb = document.getElementById('open-models-btn');
+        if (mb) mb.style.pointerEvents = 'auto';
+        // cursor on the map
+        if (map && map.getCanvas()) map.getCanvas().style.cursor = block ? '' : 'crosshair';
+    }
+
+    // wire overlay toggling into the add button behavior
+    (function patchAddBtn() {
+        const orig = addBtn.onclick;
+        // also listen for changes to placingModel
+        addBtn.addEventListener('click', () => {
+            setOverlayBlocking(!placingModel); // when placingModel true, we disable overlays
+        });
+    })();
+
+        // --- control panel for manipulating the model after placement ---
+        const controls = document.createElement('div');
+        controls.id = 'model-controls';
+        controls.innerHTML = `
+                <div style="font-weight:600;margin-bottom:6px;">Model controls</div>
+                <label style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">Rotate (deg):
+                    <button id="rot-dec" type="button" class="btn secondary" style="padding:4px 8px;min-width:36px">◀</button>
+                    <input id="rot" type="number" value="0" step="1" style="width:88px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
+                    <button id="rot-inc" type="button" class="btn secondary" style="padding:4px 8px;min-width:36px">▶</button>
+                    <span style="font-size:12px;color:var(--muted);margin-left:6px">Step:</span>
+                    <input id="rotStep" type="number" value="15" step="1" style="width:64px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
+                </label>
+                <label>Scale: <input id="scale" type="number" step="0.1" value="1"></label>
+                <div style="margin-top:8px;font-size:12px">Nudge (meters): <input id="nudgeStep" type="number" value="1" style="width:60px"> </div>
+                <div style="margin-top:6px">
+                    <button id="nudgeN">N</button>
+                    <button id="nudgeW">W</button>
+                    <button id="nudgeE">E</button>
+                    <button id="nudgeS">S</button>
+                </div>
+                <div style="margin-top:8px">
+                    <button id="resetModel">Reset</button>
+                    <button id="removeModel" style="margin-left:8px;background:#fee2e2;border:1px solid #fecaca;color:#7f1d1d;border-radius:6px;padding:6px 8px;">Remove</button>
+                </div>
+                <div style="margin-top:8px">
+                    <label style="font-size:13px">Altitude (m): <input id="altitude" type="number" value="0" style="width:80px;margin-left:8px"></label>
+                    <label style="font-size:13px;margin-left:8px">Step: <input id="altStep" type="number" value="1" style="width:60px;margin-left:6px"></label>
+                    <button id="altUp" style="margin-left:8px">Up</button>
+                    <button id="altDown" style="margin-left:4px">Down</button>
+                </div>
+        `;
+        document.body.appendChild(controls);
+
+    // add a toggle button to show/hide controls on small screens
+    const controlsToggle = document.createElement('button');
+    controlsToggle.id = 'controls-toggle-btn';
+    controlsToggle.className = 'btn secondary';
+    controlsToggle.textContent = 'Controls';
+    controlsToggle.style.display = 'none';
+    // place the toggle inside the left topbar column so it sits under the brand and buttons
+    const leftColumn = document.querySelector('.controls-left > div') || document.querySelector('.controls-left') || document.body;
+    // remove absolute positioning so it participates in the layout
+    controlsToggle.style.position = 'static';
+    controlsToggle.style.right = '';
+    controlsToggle.style.top = '';
+    controlsToggle.style.marginTop = '6px';
+    leftColumn.appendChild(controlsToggle);
+
+        // wire toggle behavior
+        controlsToggle.addEventListener('click', () => {
+            const showing = controls.style.display === 'block';
+            controls.style.display = showing ? 'none' : 'block';
+            controlsToggle.textContent = showing ? 'Controls' : 'Close';
+            // when controls are open, make sure overlays accept pointer events
+            setOverlayBlocking(!showing);
+        });
+
+        // show toggle if on mobile-sized viewport
+        function refreshControlsToggleVisibility() {
+            const isMobile = window.matchMedia && window.matchMedia('(max-width:640px)').matches;
+            controlsToggle.style.display = isMobile ? 'block' : 'none';
+            // do not auto-open the controls panel on load; user can open it explicitly
+            if (!isMobile) controls.style.display = 'none';
+        }
+        window.addEventListener('resize', refreshControlsToggleVisibility);
+        refreshControlsToggleVisibility();
+
+        // Desktop controls button (visible only on non-mobile) - wire to same toggle logic
+        const desktopControlsBtn = document.getElementById('desktop-controls-btn');
+        function refreshDesktopControlsVisibility() {
+            const isMobile = window.matchMedia && window.matchMedia('(max-width:640px)').matches;
+            if (desktopControlsBtn) desktopControlsBtn.style.display = isMobile ? 'none' : 'block';
+        }
+        if (desktopControlsBtn) {
+            desktopControlsBtn.addEventListener('click', () => {
+                const showing = controls.style.display === 'block';
+                controls.style.display = showing ? 'none' : 'block';
+                // when controls are open, ensure overlays accept pointer events
+                setOverlayBlocking(!showing);
+                desktopControlsBtn.textContent = showing ? 'Controls' : 'Close';
+            });
+        }
+        window.addEventListener('resize', refreshDesktopControlsVisibility);
+        refreshDesktopControlsVisibility();
+
+    // control elements
+    const rot = document.getElementById('rot');
+    const rotInc = document.getElementById('rot-inc');
+    const rotDec = document.getElementById('rot-dec');
+    const rotStepInput = document.getElementById('rotStep');
+    const scaleInput = document.getElementById('scale');
+    const nudgeStep = document.getElementById('nudgeStep');
+    const nudgeN = document.getElementById('nudgeN');
+    const nudgeS = document.getElementById('nudgeS');
+    const nudgeE = document.getElementById('nudgeE');
+    const nudgeW = document.getElementById('nudgeW');
+    const resetModelBtn = document.getElementById('resetModel');
+    const removeModelBtn = document.getElementById('removeModel');
+    const altitudeInput = document.getElementById('altitude');
+    const altStepInput = document.getElementById('altStep');
+    const altUpBtn = document.getElementById('altUp');
+    const altDownBtn = document.getElementById('altDown');
+
+    // disabled until a model is placed
+    function setControlsDisabled(disabled) {
+        [rot, rotInc, rotDec, rotStepInput, scaleInput, nudgeStep, nudgeN, nudgeS, nudgeE, nudgeW, resetModelBtn, removeModelBtn, altitudeInput, altStepInput, altUpBtn, altDownBtn].forEach(el => { if (el) el.disabled = disabled; });
+    }
+    setControlsDisabled(true);
+
+    // helpers
+    const degToRad = (d) => (d * Math.PI) / 180;
+
+    function applyTransformsFromInputs() {
+        if (!selectedModelId) return;
+        const entry = placedModels.find(p => p.id === selectedModelId);
+        if (!entry) return;
+        // Only allow yaw (Y) rotation from the UI. Keep X/Z rotations at their stored values.
+        entry.transform.rotateY = degToRad(Number(rot.value || 0));
+        // scaleInput is a multiplier on the stored meterScale
+        if (entry.meterScale) {
+            entry.transform.scale = entry.meterScale * Number(scaleInput.value || 1);
+        }
+    // update geographic coords shown in the sidebar
+    updateEntryGeo(entry);
+    renderSidebar();
+    if (map) map.triggerRepaint();
+    }
+    // debounce helper so rapid input changes (mobile) don't trigger excessive map repaints
+    function debounce(fn, wait) {
+        let t = null;
+        return function (...args) {
+            if (t) clearTimeout(t);
+            t = setTimeout(() => { t = null; fn.apply(this, args); }, wait);
+        };
+    }
+
+    const debouncedApply = debounce(applyTransformsFromInputs, 120);
+    if (rot) rot.addEventListener('input', debouncedApply);
+
+    // step buttons to change yaw by rotStep degrees for easier mobile use
+    if (rotInc) rotInc.addEventListener('click', () => {
+        const step = Number(rotStepInput && rotStepInput.value) || 15;
+        rot.value = Number(rot.value || 0) + step;
+        applyTransformsFromInputs();
+    });
+    if (rotDec) rotDec.addEventListener('click', () => {
+        const step = Number(rotStepInput && rotStepInput.value) || 15;
+        rot.value = Number(rot.value || 0) - step;
+        applyTransformsFromInputs();
+    });
+    scaleInput.addEventListener('input', applyTransformsFromInputs);
+
+    function nudge(direction) {
+        if (!selectedModelId) return;
+        const entry = placedModels.find(p => p.id === selectedModelId);
+        if (!entry || !entry.meterScale) return;
+        const stepMeters = Number(nudgeStep.value) || 1;
+        const delta = stepMeters * entry.meterScale; // convert meters to mercator units
+        switch (direction) {
+            case 'N':
+                entry.transform.translateY += delta; break;
+            case 'S':
+                entry.transform.translateY -= delta; break;
+            case 'E':
+                entry.transform.translateX += delta; break;
+            case 'W':
+                entry.transform.translateX -= delta; break;
+        }
+    // update geographic coords shown in the sidebar
+    updateEntryGeo(entry);
+    renderSidebar();
+    if (map) map.triggerRepaint();
+    }
+
+    nudgeN.addEventListener('click', () => nudge('N'));
+    nudgeS.addEventListener('click', () => nudge('S'));
+    nudgeE.addEventListener('click', () => nudge('E'));
+    nudgeW.addEventListener('click', () => nudge('W'));
+
+    resetModelBtn.addEventListener('click', () => {
+        if (!selectedModelId) return;
+        const entry = placedModels.find(p => p.id === selectedModelId);
+        if (!entry || !entry.original) return;
+        // restore original transform
+        entry.transform.translateX = entry.original.translateX;
+        entry.transform.translateY = entry.original.translateY;
+        entry.transform.translateZ = entry.original.translateZ;
+    // preserve original X/Z rotations, but restore yaw (Y) from original
+    entry.transform.rotateY = entry.original.rotateY;
+        if (entry.meterScale) entry.transform.scale = entry.meterScale;
+        // update UI
+    if (rot) rot.value = Math.round((entry.transform.rotateY * 180 / Math.PI) * 100) / 100;
+        scaleInput.value = 1;
+        // update coords/rotation shown in sidebar
+        updateEntryGeo(entry);
+        renderSidebar();
+        if (map) map.triggerRepaint();
+    });
+
+    // remove selected model
+    if (removeModelBtn) {
+        removeModelBtn.addEventListener('click', () => {
+            if (!selectedModelId) return;
+            removeModel(selectedModelId);
+        });
+    }
+
+    // altitude helpers
+    function changeAltitudeByMeters(deltaMeters) {
+        if (!selectedModelId) return;
+        const entry = placedModels.find(p => p.id === selectedModelId);
+        if (!entry) return;
+        // need meter->mercator conversion using entry.meterScale (mercator units per meter)
+        const scale = entry.meterScale || 1;
+        const deltaMerc = deltaMeters * scale;
+        entry.transform.translateZ = (entry.transform.translateZ || 0) + deltaMerc;
+        // update geo.alt (store altitude in meters)
+        entry.geo = entry.geo || { lng: 0, lat: 0, alt: 0 };
+        entry.geo.alt = (entry.geo.alt || 0) + deltaMeters;
+        // reflect in the altitude input
+        if (altitudeInput) altitudeInput.value = Math.round(entry.geo.alt * 100) / 100;
+        renderSidebar();
+        if (map) map.triggerRepaint();
+    }
+
+    if (altUpBtn) altUpBtn.addEventListener('click', () => {
+        const step = Number(altStepInput && altStepInput.value) || 1;
+        changeAltitudeByMeters(step);
+    });
+    if (altDownBtn) altDownBtn.addEventListener('click', () => {
+        const step = Number(altStepInput && altStepInput.value) || 1;
+        changeAltitudeByMeters(-step);
+    });
+
+    if (altitudeInput) {
+        altitudeInput.addEventListener('change', () => {
+            if (!selectedModelId) return;
+            const entry = placedModels.find(p => p.id === selectedModelId);
+            if (!entry) return;
+            const newAlt = Number(altitudeInput.value) || 0;
+            const currentAlt = (entry.geo && entry.geo.alt) ? entry.geo.alt : 0;
+            const delta = newAlt - currentAlt;
+            changeAltitudeByMeters(delta);
+        });
+    }
+
+    // --- Serialize placed models ---
+    function serializePlacedModels() {
+        return placedModels.map(p => ({
+            id: p.id,
+            url: p.url || defaultModelUrl,
+            name: p.name,
+            transform: Object.assign({}, p.transform),
+            original: Object.assign({}, p.original),
+            meterScale: p.meterScale,
+            geo: p.geo ? { lng: p.geo.lng, lat: p.geo.lat, alt: p.geo.alt } : null,
+            originalGeoLat: p.originalGeoLat,
+            originalGeoLng: p.originalGeoLng
+        }));
+    }
+    // helper to restore parsed state object (used by URL restore)
+    function restoreSavedState(parsed) {
+        try {
+            if (parsed.mapCenter) map.setCenter(parsed.mapCenter);
+            if (parsed.zoom) map.setZoom(parsed.zoom);
+            if (parsed.pitch) map.setPitch(parsed.pitch);
+            if (parsed.bearing) map.setBearing(parsed.bearing);
+            // clear existing models
+            placedModels.slice().forEach(p => removeModel(p.id));
+            // restore saved models
+            (parsed.models || []).forEach(m => {
+                const url = (m.url && m.url.length) ? m.url : defaultModelUrl;
+                const transform = Object.assign({}, m.transform);
+                const geo = m.geo ? [m.geo.lng, m.geo.lat, m.geo.alt || 0] : null;
+                if (modelLayerRef && modelLayerRef.loadModel) modelLayerRef.loadModel(encodeURI(url), transform, geo, m.id, m.name);
+            });
+            renderSidebar();
+        } catch (e) { console.warn('Failed to restore parsed state', e); }
+    }
+
+    shareBtn.addEventListener('click', () => {
+        (async () => {
+            try {
+                const data = serializePlacedModels();
+                const payload = { mapCenter: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), models: data };
+                if (BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
+                    // POST to backend which returns { id: '8char' }
+                    const res = await fetch(BACKEND_STATE_ENDPOINT, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ state: payload })
+                    });
+                    if (!res.ok) throw new Error('Backend save failed: ' + res.status);
+                    const j = await res.json();
+                    const id = j && j.id;
+                    if (!id) throw new Error('Invalid response from backend');
+                    const url = location.origin + location.pathname + '?state_id=' + encodeURIComponent(id);
+                    await navigator.clipboard.writeText(url);
+                    alert('Short share URL copied to clipboard');
+                } else {
+                    // fallback: embed long state in URL (legacy behavior)
+                    const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+                    const url = location.origin + location.pathname + '?state=' + encodeURIComponent(b64);
+                    await navigator.clipboard.writeText(url);
+                    alert('Share URL copied to clipboard');
+                }
+            } catch (e) { alert('Failed to create share URL: ' + (e && e.message)); }
+        })();
+    });
+
+    // Try to restore state from URL params on load: prefer short ?state_id= when backend is used
+    (function tryRestoreFromUrl(){
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const id = params.get('state_id');
+            const s = params.get('state');
+            if (id && BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
+                // fetch from backend by id
+                setTimeout(async () => {
+                    try {
+                        const res = await fetch(BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id));
+                        if (!res.ok) { console.warn('Failed to load state id', id); return; }
+                        const j = await res.json();
+                        if (j && j.state) restoreSavedState(j.state);
+                    } catch (e) { console.warn('Failed to load state from backend', e); }
+                }, 500);
+                return;
+            }
+            if (!s) return;
+            const json = decodeURIComponent(atob(s));
+            const parsed = JSON.parse(json);
+            // delay restoring until map and model layer ready
+            setTimeout(() => { restoreSavedState(parsed); }, 500);
+        } catch (e) { console.warn('Failed to restore from URL', e); }
+    })();
+
+    // helpers to convert mercator deltas to lat/lng deltas
+    function metersPerDegreeAtLat(latDeg) {
+        const lat = latDeg * Math.PI / 180;
+        // approximate constants
+        const mPerDegLat = 111132.92 - 559.82 * Math.cos(2 * lat) + 1.175 * Math.cos(4 * lat);
+        const mPerDegLng = 111412.84 * Math.cos(lat) - 93.5 * Math.cos(3 * lat);
+        return { mPerDegLat, mPerDegLng };
+    }
+
+    function updateEntryGeo(entry) {
+        if (!entry || !entry.original || !entry.geo || !entry.meterScale) return;
+        // compute mercator delta from original transform
+        const dx = entry.transform.translateX - entry.original.translateX;
+        const dy = entry.transform.translateY - entry.original.translateY;
+        // convert mercator units to meters using stored meterScale
+        const deltaEastMeters = dx / entry.meterScale;
+        const deltaNorthMeters = dy / entry.meterScale;
+        // compute degrees per meter approx at original latitude
+        const origLat = entry.originalGeoLat !== undefined && entry.originalGeoLat !== null ? entry.originalGeoLat : entry.geo.lat;
+        const { mPerDegLat, mPerDegLng } = metersPerDegreeAtLat(origLat);
+        const deltaLatDeg = deltaNorthMeters / mPerDegLat;
+        const deltaLngDeg = deltaEastMeters / mPerDegLng;
+        entry.geo.lat = (entry.originalGeoLat !== undefined && entry.originalGeoLat !== null) ? (entry.originalGeoLat + deltaLatDeg) : (entry.geo.lat + deltaLatDeg);
+        entry.geo.lng = (entry.originalGeoLng !== undefined && entry.originalGeoLng !== null) ? (entry.originalGeoLng + deltaLngDeg) : (entry.geo.lng + deltaLngDeg);
+    }
+
+    // store placed models (support multiple models)
+    // each entry: { id, name, transform, original, meterScale, object }
+    const placedModels = [];
+    let selectedModelId = null; // id of the model currently controlled
+
+    // --- sidebar for placed models ---
+    const sidebar = document.createElement('div');
+    sidebar.id = 'sidebar';
+    sidebar.className = 'hidden';
+    sidebar.innerHTML = '<div style="font-weight:700;margin-bottom:8px">Placed models</div><div id="models-list"></div>';
+    document.body.appendChild(sidebar);
+
+    // toggle sidebar open/close
+    modelsBtn.addEventListener('click', () => {
+        const wasHidden = sidebar.classList.contains('hidden');
+        sidebar.classList.toggle('hidden');
+        modelsBtn.textContent = wasHidden ? 'Close' : 'Models';
+        if (wasHidden) renderSidebar();
+    });
+
+    function renderSidebar() {
+        const list = document.getElementById('models-list');
+        list.innerHTML = '';
+        placedModels.forEach((entry, idx) => {
+            const row = document.createElement('div');
+            row.className = 'model-row' + (entry.id === selectedModelId ? ' selected' : '');
+            row.dataset.id = entry.id;
+
+            const label = document.createElement('span');
+            label.className = 'label';
+            label.textContent = entry.name || ('Model ' + (idx + 1));
+            label.style.cursor = 'pointer';
+            label.addEventListener('click', () => selectModel(entry.id));
+
+            // info: coordinates and rotation
+            const info = document.createElement('div');
+            info.className = 'info';
+            const coordText = entry.geo ? `Lng: ${entry.geo.lng.toFixed(6)}, Lat: ${entry.geo.lat.toFixed(6)}, Alt: ${entry.geo.alt}` : '';
+            const rotDeg = `R:${((entry.transform.rotateY*180/Math.PI)||0).toFixed(1)}°`;
+            info.textContent = (coordText ? coordText + ' • ' : '') + rotDeg;
+
+            const leftCol = document.createElement('div');
+            leftCol.className = 'model-left';
+            leftCol.appendChild(label);
+            leftCol.appendChild(info);
+
+            const actions = document.createElement('div');
+            actions.className = 'model-actions';
+
+            const renameBtn = document.createElement('button');
+            renameBtn.textContent = 'Rename';
+            renameBtn.addEventListener('click', () => {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = entry.name || '';
+                input.className = 'rename-input';
+                input.addEventListener('blur', () => { entry.name = input.value || entry.name; renderSidebar(); });
+                input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+                leftCol.replaceChild(input, label);
+                input.focus();
+            });
+            actions.appendChild(renameBtn);
+
+            const delBtn = document.createElement('button');
+            delBtn.textContent = 'Remove';
+            delBtn.addEventListener('click', () => removeModel(entry.id));
+            actions.appendChild(delBtn);
+
+            row.appendChild(leftCol);
+            row.appendChild(actions);
+            list.appendChild(row);
+        });
+    }
+
+    function selectModel(id) {
+        selectedModelId = id;
+        const entry = placedModels.find(p => p.id === id);
+        if (!entry) return;
+        setControlsDisabled(false);
+    if (rot) rot.value = Math.round((entry.transform.rotateY * 180 / Math.PI) * 100) / 100;
+        scaleInput.value = Math.round((entry.transform.scale / (entry.meterScale || 1)) * 100) / 100;
+        renderSidebar();
+        if (map) map.triggerRepaint();
+    }
+
+    function removeModel(id) {
+        const idx = placedModels.findIndex(p => p.id === id);
+        if (idx === -1) return;
+        const entry = placedModels[idx];
+        if (modelLayerRef && entry.object) {
+            try { modelLayerRef.scene.remove(entry.object); } catch (e) { console.warn(e); }
+        }
+        placedModels.splice(idx, 1);
+        if (selectedModelId === id) {
+            selectedModelId = null;
+            setControlsDisabled(true);
+        }
+        renderSidebar();
+        if (map) map.triggerRepaint();
+    }
+
+    // variables used by the custom three.js layer
+    let modelLayerRef = null; // set in onAdd
+
+    // create the custom layer (empty scene initially)
+    const customLayer = {
+        id: '3d-model',
+        type: 'custom',
+        renderingMode: '3d',
+        onAdd: function (map, gl) {
+            this.camera = new THREE.Camera();
+            this.scene = new THREE.Scene();
+            this.loader = new THREE.GLTFLoader();
+
+            // use an ambient light so the model is uniformly lit
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
+            this.scene.add(ambientLight);
+
+            this.map = map;
+            this.renderer = new THREE.WebGLRenderer({
+                canvas: map.getCanvas(),
+                context: gl,
+                antialias: true
+            });
+            this.renderer.autoClear = false;
+
+            // expose ref so outer code can call loadModel
+            modelLayerRef = this;
+
+            // helper to load a GLTF into the scene without clearing previous models
+            // accepts (url, transform) and returns an id for the placed model
+        // loadModel(url, transform, geo, preferredId, preferredName)
+        // Accept optional preferredId and preferredName so restored states can keep original ids and names
+        this.loadModel = (url, transform, geo, preferredId, preferredName) => {
+                const id = preferredId || (String(Date.now()) + '-' + Math.floor(Math.random() * 10000));
+        const entry = {
+            id,
+            name: preferredName || ('Model ' + (placedModels.length + 1)),
+        transform: Object.assign({}, transform),
+            original: Object.assign({}, transform),
+            meterScale: transform.scale,
+        object: null,
+        // persist the original URL so serializePlacedModels can save it
+        url: url,
+        geo: geo ? { lng: geo[0], lat: geo[1], alt: geo[2] || 0 } : null,
+        originalGeoLat: geo ? geo[1] : null,
+        originalGeoLng: geo ? geo[0] : null
+        };
+                placedModels.push(entry);
+                renderSidebar();
+                // load new gltf and attach to scene when ready
+                try {
+                    this.loader.load(
+                        url,
+                        (gltf) => {
+                            // convert materials to MeshBasicMaterial for uniform lighting
+                            gltf.scene.traverse(function (child) {
+                                if (child.isMesh) {
+                                    try {
+                                        const oldMat = child.material;
+                                        const params = {};
+                                        if (oldMat.map) params.map = oldMat.map;
+                                        if (oldMat.color) params.color = oldMat.color.clone();
+                                        if (oldMat.opacity !== undefined) {
+                                            params.opacity = oldMat.opacity;
+                                            params.transparent = oldMat.transparent;
+                                        }
+                                        child.material = new THREE.MeshBasicMaterial(params);
+                                    } catch (e) {
+                                        console.warn('Failed to convert material to MeshBasicMaterial', e);
+                                    }
+                                }
+                            });
+                            entry.object = gltf.scene;
+                            this.scene.add(gltf.scene);
+                        renderSidebar();
+                        },
+                        undefined,
+                        (err) => {
+                            console.error('Error loading GLTF:', err);
+                            alert('Failed to load model. See console for details.');
+                        }
+                    );
+                } catch (e) {
+                    console.error('Loader error', e);
+                }
+                return id;
+            };
+        },
+        render: function (gl, matrix) {
+            if (!placedModels.length) return;
+
+            const m = new THREE.Matrix4().fromArray(matrix);
+
+            // render each placed model separately
+            for (let i = 0; i < placedModels.length; i++) {
+                const entry = placedModels[i];
+                if (!entry.object) continue; // not loaded yet
+
+                const rotationX = new THREE.Matrix4().makeRotationAxis(
+                    new THREE.Vector3(1, 0, 0),
+                    entry.transform.rotateX
+                );
+                const rotationY = new THREE.Matrix4().makeRotationAxis(
+                    new THREE.Vector3(0, 1, 0),
+                    entry.transform.rotateY
+                );
+                const rotationZ = new THREE.Matrix4().makeRotationAxis(
+                    new THREE.Vector3(0, 0, 1),
+                    entry.transform.rotateZ
+                );
+
+                const l = new THREE.Matrix4()
+                    .makeTranslation(
+                        entry.transform.translateX,
+                        entry.transform.translateY,
+                        entry.transform.translateZ
+                    )
+                    .scale(
+                        new THREE.Vector3(
+                            entry.transform.scale,
+                            -entry.transform.scale,
+                            entry.transform.scale
+                        )
+                    )
+                    .multiply(rotationX)
+                    .multiply(rotationY)
+                    .multiply(rotationZ);
+
+                // hide all model objects except the one we're rendering
+                for (let c = 0; c < this.scene.children.length; c++) {
+                    const child = this.scene.children[c];
+                    if (child.type === 'AmbientLight') continue;
+                    child.visible = (child === entry.object) || (child.type === 'AmbientLight');
+                }
+
+                const cameraMatrix = new THREE.Matrix4().copy(m).multiply(l);
+                this.camera.projectionMatrix = cameraMatrix;
+                this.renderer.resetState();
+                this.renderer.render(this.scene, this.camera);
+            }
+
+            // ensure all children visible again
+            for (let c = 0; c < this.scene.children.length; c++) {
+                this.scene.children[c].visible = true;
+            }
+
+            this.map.triggerRepaint();
+        }
+    };
+
+    // add the custom layer at startup so the three.js scene is ready
+    map.on('style.load', () => {
+        map.addLayer(customLayer);
+    });
+
+    // convert the GitHub blob URL to a raw.githubusercontent.com URL
+    function githubBlobToRaw(url) {
+        try {
+            const u = new URL(url);
+            // expects: https://github.com/{owner}/{repo}/blob/{branch}/{path}
+            const parts = u.pathname.split('/');
+            const blobIndex = parts.indexOf('blob');
+            if (u.hostname === 'github.com' && blobIndex > -1) {
+                const owner = parts[1];
+                const repo = parts[2];
+                const branch = parts[blobIndex + 1];
+                const path = parts.slice(blobIndex + 2).join('/');
+                return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
+            }
+        } catch (e) {
+            // fall through
+        }
+        return url;
+    }
+
+    // support clicking on the map to place the model when in placingModel mode
+    map.on('click', (e) => {
+        const lngLat = [e.lngLat.lng, e.lngLat.lat];
+
+        if (!placingModel) {
+            // selection flow: find nearest placed model to click and select it
+            if (placedModels.length) {
+                const clicked = mapboxgl.MercatorCoordinate.fromLngLat(lngLat, 0);
+                let best = null;
+                let bestDist = Infinity;
+                for (const p of placedModels) {
+                    const dx = p.transform.translateX - clicked.x;
+                    const dy = p.transform.translateY - clicked.y;
+                    const dz = p.transform.translateZ - clicked.z;
+                    const d2 = dx*dx + dy*dy + dz*dz;
+                    if (d2 < bestDist) {
+                        bestDist = d2;
+                        best = p;
+                    }
+                }
+                if (best) {
+                    const threshold = Math.pow(50 * (best.meterScale || 1), 2); // ~50 meters
+                    if (bestDist < threshold) {
+                        selectedModelId = best.id;
+                        if (rot) rot.value = Math.round((best.transform.rotateY * 180 / Math.PI) * 100) / 100;
+                        scaleInput.value = Math.round((best.transform.scale / (best.meterScale || 1)) * 100) / 100;
+                        setControlsDisabled(false);
+                    }
+                }
+            }
+            return;
+        }
+
+        // placing flow
+        const altitude = 0;
+        const modelAsMercatorCoordinate = mapboxgl.MercatorCoordinate.fromLngLat(
+            lngLat,
+            altitude
+        );
+
+        // build a transform for the new model
+        const transform = {
+            translateX: modelAsMercatorCoordinate.x,
+            translateY: modelAsMercatorCoordinate.y,
+            translateZ: modelAsMercatorCoordinate.z,
+            rotateX: Math.PI / 2,
+            rotateY: 0,
+            rotateZ: 0,
+            scale: modelAsMercatorCoordinate.meterInMercatorCoordinateUnits()
+        };
+
+        // load the model into the three.js scene
+        const rawUrl = githubBlobToRaw(modelUrl);
+        if (modelLayerRef && modelLayerRef.loadModel) {
+            const id = modelLayerRef.loadModel(encodeURI(rawUrl), transform, lngLat.concat([0]));
+            selectedModelId = id;
+
+            // find the placed model entry and enable controls for it
+            const entry = placedModels.find(p => p.id === id);
+            if (entry) {
+                entry.meterScale = entry.meterScale || modelAsMercatorCoordinate.meterInMercatorCoordinateUnits();
+                entry.original = Object.assign({}, entry.transform);
+
+                setControlsDisabled(false);
+                if (rot) rot.value = Math.round((entry.transform.rotateY * 180 / Math.PI) * 100) / 100;
+                scaleInput.value = 1;
+            }
+        }
+
+    // keep placingMode active so multiple models can be placed
+    // (user can click Add model again to cancel)
+        if (map) map.triggerRepaint();
+    });
+
+    // --- Model hover tooltip (show model name when cursor is near a placed model) ---
+    const modelTooltip = document.createElement('div');
+    modelTooltip.id = 'model-tooltip';
+    modelTooltip.style.position = 'absolute';
+    modelTooltip.style.pointerEvents = 'none';
+    modelTooltip.style.padding = '6px 8px';
+    modelTooltip.style.background = 'rgba(255,255,255,0.95)';
+    modelTooltip.style.border = '1px solid rgba(0,0,0,0.08)';
+    modelTooltip.style.borderRadius = '6px';
+    modelTooltip.style.fontFamily = 'sans-serif';
+    modelTooltip.style.fontSize = '13px';
+    modelTooltip.style.color = '#0f1724';
+    modelTooltip.style.zIndex = '10';
+    modelTooltip.style.display = 'none';
+    document.body.appendChild(modelTooltip);
+
+    let hoveredModelId = null;
+
+    function hideModelTooltip() {
+        hoveredModelId = null;
+        modelTooltip.style.display = 'none';
+    }
+
+    // Use pixel-distance hover detection: project each model's geo to screen and compare to mouse point
+    map.on('mousemove', (e) => {
+        if (!placedModels || !placedModels.length) { hideModelTooltip(); return; }
+        const mousePoint = e.point; // pixel coords relative to map container
+        let bestEntry = null;
+        let bestProj = null;
+        let bestDist2 = Infinity;
+        for (const p of placedModels) {
+            if (!p.geo || p.geo.lng === undefined || p.geo.lat === undefined) continue;
+            const proj = map.project([p.geo.lng, p.geo.lat]);
+            const dx = proj.x - mousePoint.x;
+            const dy = proj.y - mousePoint.y;
+            const d2 = dx*dx + dy*dy;
+            if (d2 < bestDist2) { bestDist2 = d2; bestEntry = p; bestProj = proj; }
+        }
+        if (!bestEntry) { hideModelTooltip(); return; }
+        const pixelThreshold = 40; // hover radius in pixels
+        if (bestDist2 <= (pixelThreshold * pixelThreshold)) {
+            if (hoveredModelId !== bestEntry.id) {
+                hoveredModelId = bestEntry.id;
+                modelTooltip.textContent = bestEntry.name || ('Model ' + bestEntry.id);
+            }
+            // position tooltip near mouse pointer using absolute page coords
+            const canvasRect = map.getCanvas().getBoundingClientRect();
+            const absLeft = canvasRect.left + mousePoint.x;
+            const absTop = canvasRect.top + mousePoint.y;
+            modelTooltip.style.left = (absLeft + 12) + 'px';
+            modelTooltip.style.top = (absTop + 12) + 'px';
+            modelTooltip.style.display = 'block';
+        } else {
+            hideModelTooltip();
+        }
+    });
+
+    // hide tooltip when mouse leaves the map canvas
+    const canvas = map.getCanvas && map.getCanvas();
+    if (canvas) canvas.addEventListener('mouseleave', hideModelTooltip);
+
+// --- Address / location bar (bottom) ---
+const addressBar = document.createElement('div');
+addressBar.id = 'address-bar';
+addressBar.innerHTML = `
+    <input id="address-input" placeholder="Enter address or lat,lng (e.g. -79.3875,43.6426)" />
+    <button id="address-go" class="btn">Go</button>
+    <button id="address-clear" class="btn secondary">Clear</button>
+`;
+document.body.appendChild(addressBar);
+
+const addressInput = document.getElementById('address-input');
+const addressGo = document.getElementById('address-go');
+const addressClear = document.getElementById('address-clear');
+let addressMarker = null;
+
+function clearAddressMarker() {
+    if (addressMarker) {
+        try { addressMarker.remove(); } catch (e) {}
+        addressMarker = null;
+    }
+}
+
+addressClear.addEventListener('click', () => {
+    clearAddressMarker();
+});
+
+// helper: parse lat,lng input or fallback to geocoding
+function tryParseLatLng(text) {
+    const parts = text.split(',').map(s => s.trim());
+    if (parts.length === 2) {
+        const lng = Number(parts[0]);
+        const lat = Number(parts[1]);
+        if (!Number.isNaN(lat) && !Number.isNaN(lng)) return [lng, lat];
+    }
+    return null;
+}
+
+async function forwardGeocode(query) {
+    try {
+        const token = mapboxgl.accessToken;
+        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&limit=1`;
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const j = await res.json();
+        if (j && j.features && j.features.length) {
+            const f = j.features[0];
+            return [f.center[0], f.center[1]];
+        }
+    } catch (e) { console.warn('Geocode failed', e); }
+    return null;
+}
+
+addressGo.addEventListener('click', async () => {
+    const txt = (addressInput.value || '').trim();
+    if (!txt) return;
+    // try parse coords first
+    let coords = tryParseLatLng(txt);
+    if (!coords) coords = await forwardGeocode(txt);
+    if (!coords) return alert('Location not found');
+    // fly to location
+    map.flyTo({ center: coords, zoom: 18, essential: true });
+    clearAddressMarker();
+    // add a temporary marker
+    addressMarker = new mapboxgl.Marker({ color: '#ff6a00' }).setLngLat(coords).addTo(map);
+});
+
+// --- Image placement + persistence using IndexedDB ---
+// Add hidden file input and wire Add image button
+const addImageBtn = document.getElementById('add-image-btn');
+const fileInput = document.createElement('input');
+fileInput.type = 'file';
+fileInput.accept = 'image/*';
+fileInput.style.display = 'none';
+document.body.appendChild(fileInput);
+
+// IndexedDB helpers
+const DB_NAME = 'map_images_db';
+const DB_STORE = 'images_v1';
+function openDb() {
+    return new Promise((resolve, reject) => {
+        const r = indexedDB.open(DB_NAME, 1);
+        r.onupgradeneeded = () => {
+            const db = r.result;
+            if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE, { keyPath: 'id' });
+        };
+        r.onsuccess = () => resolve(r.result);
+        r.onerror = () => reject(r.error);
+    });
+}
+
+async function saveImageRecord(rec) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readwrite');
+        const store = tx.objectStore(DB_STORE);
+        const req = store.put(rec);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function deleteImageRecord(id) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readwrite');
+        const store = tx.objectStore(DB_STORE);
+        const req = store.delete(id);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function listImageRecords() {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readonly');
+        const store = tx.objectStore(DB_STORE);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+// UI state for placing an image
+let pendingImageDataUrl = null;
+
+addImageBtn.addEventListener('click', () => { fileInput.click(); });
+
+fileInput.addEventListener('change', async (ev) => {
+    const f = ev.target.files && ev.target.files[0];
+    if (!f) return;
+    // read as data URL (suitable for small/medium images)
+    const reader = new FileReader();
+    reader.onload = () => {
+        pendingImageDataUrl = reader.result;
+        alert('Now click on the map to place the image');
+    };
+    reader.readAsDataURL(f);
+    // reset input
+    fileInput.value = '';
+});
+
+// place image on map when user clicks while pendingImageDataUrl set
+map.on('click', async (e) => {
+    if (!pendingImageDataUrl) return;
+    const lngLat = [e.lngLat.lng, e.lngLat.lat];
+    const id = 'img_' + Date.now();
+    // create marker element (thumbnail)
+    const img = document.createElement('img');
+    img.src = pendingImageDataUrl;
+    img.style.width = '120px';
+    img.style.height = '80px';
+    img.style.objectFit = 'cover';
+    img.style.borderRadius = '6px';
+
+    const marker = new mapboxgl.Marker({ element: img }).setLngLat(lngLat).addTo(map);
+
+    // popup with full image and delete button
+    const popupDiv = document.createElement('div');
+    const full = document.createElement('img');
+    full.src = pendingImageDataUrl;
+    full.style.maxWidth = '300px';
+    full.style.display = 'block';
+    full.style.marginBottom = '6px';
+    popupDiv.appendChild(full);
+    const delBtn = document.createElement('button');
+    delBtn.textContent = 'Remove image';
+    delBtn.className = 'btn secondary';
+    popupDiv.appendChild(delBtn);
+
+    const popup = new mapboxgl.Popup().setDOMContent(popupDiv).setMaxWidth('320px');
+    marker.setPopup(popup);
+
+    // save to IndexedDB
+    const rec = { id, dataUrl: pendingImageDataUrl, lng: lngLat[0], lat: lngLat[1], created: Date.now() };
+    try { await saveImageRecord(rec); } catch (e) { console.warn('Failed saving image to IndexedDB', e); }
+
+    // wire delete
+    delBtn.addEventListener('click', async () => {
+        try { await deleteImageRecord(id); marker.remove(); } catch (e) { console.warn(e); }
+    });
+
+    // clear pending
+    pendingImageDataUrl = null;
+});
+
+// load saved images on startup
+(async function restoreImages() {
+    try {
+        const rows = await listImageRecords();
+        for (const r of rows) {
+            try {
+                const img = document.createElement('img');
+                img.src = r.dataUrl;
+                img.style.width = '120px'; img.style.height = '80px'; img.style.objectFit = 'cover'; img.style.borderRadius = '6px';
+                const marker = new mapboxgl.Marker({ element: img }).setLngLat([r.lng, r.lat]).addTo(map);
+                const popupDiv = document.createElement('div');
+                const full = document.createElement('img'); full.src = r.dataUrl; full.style.maxWidth = '300px'; full.style.display = 'block'; full.style.marginBottom = '6px';
+                popupDiv.appendChild(full);
+                const delBtn = document.createElement('button'); delBtn.textContent = 'Remove image'; delBtn.className = 'btn secondary'; popupDiv.appendChild(delBtn);
+                const popup = new mapboxgl.Popup().setDOMContent(popupDiv).setMaxWidth('320px');
+                marker.setPopup(popup);
+                delBtn.addEventListener('click', async () => { try { await deleteImageRecord(r.id); marker.remove(); } catch (e) { console.warn(e); } });
+            } catch (e) { console.warn('Failed restoring image', e); }
+        }
+    } catch (e) { console.warn('Failed listing image records', e); }
+})();
+</script>
+
+</body>
+</html>
