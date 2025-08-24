@@ -163,6 +163,32 @@
     // - Avoid running expensive thumbnail rendering on mobile; use SVG fallback.
     // - Make the custom three.js layer tolerate renderer creation failures.
 
+    // Mobile safety limits
+    const MAX_MOBILE_MODELS = 6; // prevent adding more than this on mobile
+    const LOAD_CONCURRENCY = isMobile ? 1 : 3; // limit concurrent GLTF loads on mobile
+    let loaderQueue = [];
+    let activeLoads = 0;
+
+    function enqueueLoad(loader, url, onLoad, onProgress, onError) {
+        loaderQueue.push({ loader, url, onLoad, onProgress, onError });
+        processQueue();
+    }
+    function processQueue() {
+        if (!loaderQueue.length) return;
+        if (activeLoads >= LOAD_CONCURRENCY) return;
+        const item = loaderQueue.shift();
+        activeLoads++;
+        try {
+            item.loader.load(item.url, (gltf) => {
+                try { item.onLoad(gltf); } catch (e) { console.warn('onLoad handler error', e); }
+                activeLoads--; processQueue();
+            }, item.onProgress, (err) => { try { item.onError(err); } catch (e) {} activeLoads--; processQueue(); });
+        } catch (e) {
+            try { item.onError(e); } catch (ee) {}
+            activeLoads--; processQueue();
+        }
+    }
+
 
     // UI: reference existing markup buttons
     const addBtn = document.getElementById('add-model-btn');
@@ -243,6 +269,9 @@
     // Add police car model requested by user (idempotent)
     addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/3dmodels/main/cop_sedan_90_-_low_poly_model.glb', 'Police car');
 
+    // Add truck model requested by user (idempotent)
+    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/truck.glb', 'truck');
+
     // thumbnail cache key
     const THUMB_KEY = 'model_thumbs_v1';
     let thumbCache = {};
@@ -261,6 +290,11 @@
 
     // generate thumbnail: load model with GLTFLoader into an offscreen renderer and capture
     async function generateThumbnail(url, id) {
+    // On mobile devices skip expensive thumbnail generation and return a
+    // lightweight SVG fallback. This avoids creating extra WebGL contexts
+    // which can exhaust GPU/webgl resources on phones.
+    if (isMobile) return fallbackThumb(id || url.split('/').pop() || 'Model');
+
     // already cached
     if (thumbCache[url]) return thumbCache[url];
         return new Promise((resolve) => {
@@ -972,37 +1006,37 @@
                 renderSidebar();
                 // load new gltf and attach to scene when ready
                 try {
-                    this.loader.load(
-                        url,
-                        (gltf) => {
-                            // convert materials to MeshBasicMaterial for uniform lighting
-                            gltf.scene.traverse(function (child) {
-                                if (child.isMesh) {
-                                    try {
-                                        const oldMat = child.material;
-                                        const params = {};
-                                        if (oldMat.map) params.map = oldMat.map;
-                                        if (oldMat.color) params.color = oldMat.color.clone();
-                                        if (oldMat.opacity !== undefined) {
-                                            params.opacity = oldMat.opacity;
-                                            params.transparent = oldMat.transparent;
-                                        }
-                                        child.material = new THREE.MeshBasicMaterial(params);
-                                    } catch (e) {
-                                        console.warn('Failed to convert material to MeshBasicMaterial', e);
+                // Queue the load to avoid too many concurrent requests on mobile
+                enqueueLoad(this.loader, url,
+                    (gltf) => {
+                        // convert materials to MeshBasicMaterial for uniform lighting
+                        gltf.scene.traverse(function (child) {
+                            if (child.isMesh) {
+                                try {
+                                    const oldMat = child.material;
+                                    const params = {};
+                                    if (oldMat.map) params.map = oldMat.map;
+                                    if (oldMat.color) params.color = oldMat.color.clone();
+                                    if (oldMat.opacity !== undefined) {
+                                        params.opacity = oldMat.opacity;
+                                        params.transparent = oldMat.transparent;
                                     }
+                                    child.material = new THREE.MeshBasicMaterial(params);
+                                } catch (e) {
+                                    console.warn('Failed to convert material to MeshBasicMaterial', e);
                                 }
-                            });
-                            entry.object = gltf.scene;
-                            this.scene.add(gltf.scene);
+                            }
+                        });
+                        entry.object = gltf.scene;
+                        this.scene.add(gltf.scene);
                         renderSidebar();
-                        },
-                        undefined,
-                        (err) => {
-                            console.error('Error loading GLTF:', err);
-                            alert('Failed to load model. See console for details.');
-                        }
-                    );
+                    },
+                    undefined,
+                    (err) => {
+                        console.error('Error loading GLTF:', err);
+                        alert('Failed to load model. See console for details.');
+                    }
+                );
                 } catch (e) {
                     console.error('Loader error', e);
                 }
@@ -1150,9 +1184,11 @@
             scale: modelAsMercatorCoordinate.meterInMercatorCoordinateUnits()
         };
 
-        // load the model into the three.js scene
-        const rawUrl = githubBlobToRaw(modelUrl);
-        if (modelLayerRef && modelLayerRef.loadModel) {
+    // load the model into the three.js scene
+    // enforce mobile model limit
+    if (isMobile && placedModels.length >= MAX_MOBILE_MODELS) { alert('Model limit reached on mobile. Remove a model before adding more.'); return; }
+    const rawUrl = githubBlobToRaw(modelUrl);
+    if (modelLayerRef && modelLayerRef.loadModel) {
             const id = modelLayerRef.loadModel(encodeURI(rawUrl), transform, lngLat.concat([0]));
             selectedModelId = id;
 
