@@ -1043,10 +1043,19 @@
                                             }
                                             if (drawSucceeded) {
                                                 const newTex = new THREE.Texture(canvas);
-                                                // keep wrapping/filtering reasonable for mobile
-                                                newTex.needsUpdate = true;
+                                                // preserve common properties from original texture when available
+                                                try {
+                                                    newTex.flipY = (mapTex && typeof mapTex.flipY !== 'undefined') ? mapTex.flipY : false;
+                                                    if (mapTex && mapTex.encoding) newTex.encoding = mapTex.encoding;
+                                                    newTex.wrapS = (mapTex && mapTex.wrapS) ? mapTex.wrapS : THREE.ClampToEdgeWrapping;
+                                                    newTex.wrapT = (mapTex && mapTex.wrapT) ? mapTex.wrapT : THREE.ClampToEdgeWrapping;
+                                                } catch (e) { /* ignore */ }
+                                                // For NPOT/downsized images, disable mipmaps and use linear filtering to avoid black textures
                                                 newTex.generateMipmaps = false;
-                                                child.material = new THREE.MeshBasicMaterial({ map: newTex, color: (oldMat.color || new THREE.Color(0xffffff)) });
+                                                newTex.minFilter = THREE.LinearFilter;
+                                                newTex.magFilter = THREE.LinearFilter;
+                                                newTex.needsUpdate = true;
+                                                child.material = new THREE.MeshBasicMaterial({ map: newTex, color: (oldMat && oldMat.color) ? (oldMat.color.clone ? oldMat.color.clone() : oldMat.color) : new THREE.Color(0xffffff) });
                                                 return;
                                             } else {
                                                 // fallback: if we can't downscale due to CORS, prefer the original texture
