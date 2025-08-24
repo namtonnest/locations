@@ -709,14 +709,45 @@
                     const id = j && j.id;
                     if (!id) throw new Error('Invalid response from backend');
                     const url = location.origin + location.pathname + '?state_id=' + encodeURIComponent(id);
-                    await navigator.clipboard.writeText(url);
-                    alert('Short share URL copied to clipboard');
+                    // Try Web Share API first (native share sheet on mobile), then clipboard, then prompt fallback
+                    try {
+                        if (navigator.share) {
+                            await navigator.share({ title: 'Shared location', text: 'Open this location', url });
+                            return;
+                        }
+                    } catch (e) {
+                        // ignore and try clipboard fallback
+                        console.warn('navigator.share failed', e);
+                    }
+                    try {
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            await navigator.clipboard.writeText(url);
+                            alert('Short share URL copied to clipboard');
+                            return;
+                        }
+                    } catch (e) {
+                        console.warn('clipboard write failed', e);
+                    }
+                    // Final fallback: show the URL in a prompt so the user can copy manually
+                    try { window.prompt('Copy this URL', url); } catch (e) { alert(url); }
                 } else {
                     // fallback: embed long state in URL (legacy behavior)
                     const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
                     const url = location.origin + location.pathname + '?state=' + encodeURIComponent(b64);
-                    await navigator.clipboard.writeText(url);
-                    alert('Share URL copied to clipboard');
+                    try {
+                        if (navigator.share) {
+                            await navigator.share({ title: 'Shared location', text: 'Open this location', url });
+                            return;
+                        }
+                    } catch (e) { console.warn('navigator.share failed', e); }
+                    try {
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            await navigator.clipboard.writeText(url);
+                            alert('Share URL copied to clipboard');
+                            return;
+                        }
+                    } catch (e) { console.warn('clipboard write failed', e); }
+                    try { window.prompt('Copy this URL', url); } catch (e) { alert(url); }
                 }
             } catch (e) { alert('Failed to create share URL: ' + (e && e.message)); }
         })();
