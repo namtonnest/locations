@@ -627,7 +627,7 @@
                 <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
                     <button id="animateBtn" type="button" class="btn secondary" style="padding:6px 10px">Toggle animate</button>
                     <label style="font-size:13px;display:flex;align-items:center;gap:6px">Speed:
-                        <input id="spinSpeed" type="number" value="0.5" step="0.005" style="width:86px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
+                        <input id="spinSpeed" type="number" value="0.2" step="0.005" style="width:86px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
                     </label>
                 </div>
         `;
@@ -772,7 +772,7 @@
             if (!selectedModelId) return alert('Select a model first');
             const entry = placedModels.find(p => p.id === selectedModelId);
             if (!entry) return;
-            const v = Number(spinSpeedInput.value) || 0.5;
+            const v = Number(spinSpeedInput.value) || 0.2;
             entry.spinSpeed = v;
             renderSidebar();
             if (map) map.triggerRepaint();
@@ -884,7 +884,7 @@
             meterScale: p.meterScale,
             geo: p.geo ? { lng: p.geo.lng, lat: p.geo.lat, alt: p.geo.alt } : null,
             animated: !!p.animated,
-            spinSpeed: (p.spinSpeed || 0.5),
+            spinSpeed: (p.spinSpeed || 0.2),
             originalGeoLat: p.originalGeoLat,
             originalGeoLng: p.originalGeoLng
         }));
@@ -1112,7 +1112,7 @@
         // sync spinSpeed input
         try {
             const spinInput = document.getElementById('spinSpeed');
-            if (spinInput) spinInput.value = (entry.spinSpeed !== undefined) ? entry.spinSpeed : 0.5;
+            if (spinInput) spinInput.value = (entry.spinSpeed !== undefined) ? entry.spinSpeed : 0.2;
         } catch (e) {}
         renderSidebar();
         if (map) map.triggerRepaint();
@@ -1187,7 +1187,7 @@
             meterScale: transform.scale,
     object: null,
     animated: !!(transform && transform.animated),
-    spinSpeed: (transform && transform.spinSpeed) ? transform.spinSpeed : 0.5,
+    spinSpeed: (transform && transform.spinSpeed) ? transform.spinSpeed : 0.2,
         // persist the original URL so serializePlacedModels can save it
         url: url,
         geo: geo ? { lng: geo[0], lat: geo[1], alt: geo[2] || 0 } : null,
@@ -1275,7 +1275,7 @@
 
                 // if entry is animated, apply a Y-axis spin using its spinSpeed
                 if (entry.animated) {
-                    const speed = (entry.spinSpeed !== undefined) ? entry.spinSpeed : 0.5;
+                    const speed = (entry.spinSpeed !== undefined) ? entry.spinSpeed : 0.2;
                     entry.transform.rotateY = (entry.transform.rotateY || 0) + speed;
                 }
 
