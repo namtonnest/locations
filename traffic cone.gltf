@@ -1,0 +1,499 @@
+{
+  "accessors": [
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 175,
+      "max": [
+        0.7344823479652405,
+        -1.6736152172088623,
+        0.6787638664245605
+      ],
+      "min": [
+        -0.7344824075698853,
+        -21.571735382080078,
+        -0.753371000289917
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 2100,
+      "componentType": 5126,
+      "count": 175,
+      "max": [
+        0.9749284386634827,
+        1.4896092181970744e-07,
+        1.0
+      ],
+      "min": [
+        -0.9749278426170349,
+        -1.0,
+        -0.900970995426178
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 175,
+      "max": [
+        0.9262756705284119,
+        0.43080902099609375
+      ],
+      "min": [
+        0.5737242102622986,
+        0.08709666132926941
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 1400,
+      "componentType": 5126,
+      "count": 175,
+      "max": [
+        0.36032965779304504,
+        0.9930572509765625
+      ],
+      "min": [
+        0.006942093372344971,
+        0.006942033767700195
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 0,
+      "componentType": 5125,
+      "count": 183,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 4200,
+      "componentType": 5126,
+      "count": 166,
+      "max": [
+        1.0833925008773804,
+        -0.1296466588973999,
+        1.001205325126648
+      ],
+      "min": [
+        -1.0833925008773804,
+        -1.6736152172088623,
+        -1.1112539768218994
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 6192,
+      "componentType": 5126,
+      "count": 166,
+      "max": [
+        0.9749280214309692,
+        1.0,
+        1.0
+      ],
+      "min": [
+        -0.9749280214309692,
+        -1.0,
+        -0.9009688496589661
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 2800,
+      "componentType": 5126,
+      "count": 166,
+      "max": [
+        1.0,
+        1.0
+      ],
+      "min": [
+        2.9802322387695313e-08,
+        0.0337674617767334
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 4128,
+      "componentType": 5126,
+      "count": 166,
+      "max": [
+        0.8147121667861938,
+        0.9883108735084534
+      ],
+      "min": [
+        0.13376688957214355,
+        0.011689186096191406
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 732,
+      "componentType": 5125,
+      "count": 183,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 8184,
+      "componentType": 5126,
+      "count": 42,
+      "max": [
+        0.5776541233062744,
+        -6.5628485679626465,
+        0.5338327884674072
+      ],
+      "min": [
+        -0.5776541829109192,
+        -11.452082633972168,
+        -0.5925096273422241
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 8688,
+      "componentType": 5126,
+      "count": 42,
+      "max": [
+        0.9744999408721924,
+        -0.02962987869977951,
+        0.9995610117912292
+      ],
+      "min": [
+        -0.9744999408721924,
+        -0.029629915952682495,
+        -0.9005733132362366
+      ],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 5456,
+      "componentType": 5126,
+      "count": 42,
+      "max": [
+        0.9262756109237671,
+        0.43080902099609375
+      ],
+      "min": [
+        0.5737242102622986,
+        0.08709666132926941
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 1,
+      "byteOffset": 5792,
+      "componentType": 5126,
+      "count": 42,
+      "max": [
+        0.21559911966323853,
+        0.7465877532958984
+      ],
+      "min": [
+        0.02273714542388916,
+        0.25337255001068115
+      ],
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 0,
+      "byteOffset": 1464,
+      "componentType": 5125,
+      "count": 42,
+      "type": "SCALAR"
+    }
+  ],
+  "asset": {
+    "extras": {
+      "author": "Khayne (https://sketchfab.com/Khayne.Gleave1)",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "source": "https://sketchfab.com/3d-models/low-poly-traffic-cone-539fc1ea2fd34b5a8fa15f6c01b6cd71",
+      "title": "Low Poly Traffic Cone"
+    },
+    "generator": "Sketchfab-14.41.0",
+    "version": "2.0"
+  },
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 1632,
+      "name": "floatBufferViews",
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 6128,
+      "byteOffset": 1632,
+      "byteStride": 8,
+      "name": "floatBufferViews",
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 9192,
+      "byteOffset": 7760,
+      "byteStride": 12,
+      "name": "floatBufferViews",
+      "target": 34962
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 16952,
+      "uri": "scene.bin"
+    }
+  ],
+  "materials": [
+    {
+      "doubleSided": true,
+      "name": "Material.004",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.8,
+          0.114152,
+          0.000249866,
+          1.0
+        ],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.5
+      }
+    },
+    {
+      "doubleSided": true,
+      "name": "Material.003",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.5
+      }
+    },
+    {
+      "doubleSided": true,
+      "name": "Material.002",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.8,
+          0.8,
+          0.8,
+          1.0
+        ],
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.5
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Object_0",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 0,
+            "TEXCOORD_0": 2,
+            "TEXCOORD_1": 3
+          },
+          "indices": 4,
+          "material": 0,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "Object_1",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 6,
+            "POSITION": 5,
+            "TEXCOORD_0": 7,
+            "TEXCOORD_1": 8
+          },
+          "indices": 9,
+          "material": 1,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "Object_2",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 11,
+            "POSITION": 10,
+            "TEXCOORD_0": 12,
+            "TEXCOORD_1": 13
+          },
+          "indices": 14,
+          "material": 2,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "children": [
+        1
+      ],
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.220446049250313e-16,
+        -1.0,
+        0.0,
+        0.0,
+        1.0,
+        2.220446049250313e-16,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "Sketchfab_model"
+    },
+    {
+      "children": [
+        2
+      ],
+      "name": "root"
+    },
+    {
+      "children": [
+        3,
+        5,
+        7
+      ],
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.220446049250313e-16,
+        1.0,
+        0.0,
+        0.0,
+        -1.0,
+        2.220446049250313e-16,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "GLTF_SceneRootNode"
+    },
+    {
+      "children": [
+        4
+      ],
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        -0.0,
+        -0.11926102638244629,
+        -0.0,
+        -0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "Traffic Cone_0"
+    },
+    {
+      "mesh": 0,
+      "name": "Object_4"
+    },
+    {
+      "children": [
+        6
+      ],
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        -0.0,
+        -0.11926102638244629,
+        -0.0,
+        -0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "Traffic Cone.001_1"
+    },
+    {
+      "mesh": 1,
+      "name": "Object_6"
+    },
+    {
+      "children": [
+        8
+      ],
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        -0.0,
+        -0.11926102638244629,
+        -0.0,
+        -0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "Traffic Cone.002_2"
+    },
+    {
+      "mesh": 2,
+      "name": "Object_8"
+    }
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Sketchfab_Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ]
+}
