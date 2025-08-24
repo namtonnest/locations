@@ -963,11 +963,18 @@
             // some mobile browsers or low-resource environments. Wrap in try/catch
             // and gracefully disable the 3D layer when unavailable.
             try {
+                // On mobile, disable antialias and lower pixel ratio to reduce memory and GPU pressure
+                const shouldAntialias = !isMobile;
                 this.renderer = new THREE.WebGLRenderer({
                     canvas: map.getCanvas(),
                     context: gl,
-                    antialias: true
+                    antialias: shouldAntialias
                 });
+                // reduce pixel ratio on mobile (1.0) vs desktop (allow DPR up to 2)
+                const pr = Math.min(window.devicePixelRatio || 1, isMobile ? 1 : 2);
+                try { this.renderer.setPixelRatio(pr); } catch (e) { /* ignore */ }
+                // ensure size matches the canvas but do not set 'updateStyle' to true to avoid layout thrash
+                try { this.renderer.setSize(map.getCanvas().width, map.getCanvas().height, false); } catch (e) { /* ignore */ }
                 this.renderer.autoClear = false;
             } catch (err) {
                 console.warn('Three.js renderer creation failed; disabling 3D layer', err);
@@ -1006,22 +1013,44 @@
                 // Queue the load to avoid too many concurrent requests on mobile
                 enqueueLoad(this.loader, url,
                     (gltf) => {
-                        // convert materials to MeshBasicMaterial for uniform lighting
+                        // Mobile-aware material/texture simplification to reduce GPU & memory pressure.
                         gltf.scene.traverse(function (child) {
-                            if (child.isMesh) {
-                                try {
-                                    const oldMat = child.material;
-                                    const params = {};
-                                    if (oldMat.map) params.map = oldMat.map;
-                                    if (oldMat.color) params.color = oldMat.color.clone();
-                                    if (oldMat.opacity !== undefined) {
-                                        params.opacity = oldMat.opacity;
-                                        params.transparent = oldMat.transparent;
+                            if (!child.isMesh) return;
+                            try {
+                                const oldMat = child.material;
+                                // If on mobile and there's a texture, attempt to downscale it to a reasonable max size.
+                                if (isMobile && oldMat && oldMat.map && oldMat.map.image) {
+                                    try {
+                                        const mapTex = oldMat.map;
+                                        const img = mapTex.image;
+                                        const MAX_DIM = 512; // max width/height for mobile textures
+                                        const w = img.width || img.naturalWidth || MAX_DIM;
+                                        const h = img.height || img.naturalHeight || MAX_DIM;
+                                        const scale = Math.min(1, MAX_DIM / Math.max(w, h));
+                                        if (scale < 1) {
+                                            const canvas = document.createElement('canvas');
+                                            canvas.width = Math.max(1, Math.floor(w * scale));
+                                            canvas.height = Math.max(1, Math.floor(h * scale));
+                                            const ctx = canvas.getContext('2d');
+                                            try { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); } catch (e) { /* ignore draw errors */ }
+                                            const newTex = new THREE.Texture(canvas);
+                                            newTex.needsUpdate = true;
+                                            child.material = new THREE.MeshBasicMaterial({ map: newTex, color: (oldMat.color || new THREE.Color(0xffffff)) });
+                                            return;
+                                        }
+                                    } catch (e) {
+                                        console.warn('Texture downscale failed', e);
                                     }
-                                    child.material = new THREE.MeshBasicMaterial(params);
-                                } catch (e) {
-                                    console.warn('Failed to convert material to MeshBasicMaterial', e);
                                 }
+                                // default: use a basic material with existing map (if present) to avoid expensive lighting
+                                const params = {};
+                                if (oldMat && oldMat.map) params.map = oldMat.map;
+                                if (oldMat && oldMat.color) params.color = oldMat.color.clone ? oldMat.color.clone() : oldMat.color;
+                                if (oldMat && oldMat.opacity !== undefined) { params.opacity = oldMat.opacity; params.transparent = oldMat.transparent; }
+                                child.material = new THREE.MeshBasicMaterial(params);
+                            } catch (e) {
+                                console.warn('Failed to convert material to MeshBasicMaterial', e);
+                                try { child.material = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffffff) }); } catch (ee) { /* ignore */ }
                             }
                         });
                         entry.object = gltf.scene;
