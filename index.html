@@ -280,8 +280,16 @@
     // Add police car model requested by user (idempotent)
     addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/3dmodels/main/cop_sedan_90_-_low_poly_model.glb', 'Police car');
 
-    // Add truck model requested by user (idempotent)
+    // Add truck model requested by user (idempotent) and set a default scale
     addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/truck.glb', 'truck');
+    // attach default scale to truck entry if present
+    (function attachTruckScale(){
+        try {
+            const t = modelLibrary.find(i => i.url && i.url.includes('truck.glb'));
+            if (t) t.defaultScale = 0.6;
+            saveLibrary(modelLibrary);
+        } catch (e) {}
+    })();
 
     // Add a 3D Text helper entry so users can add custom 3D text from the library
     addTextModelToLibrary('3D Text');
@@ -400,6 +408,8 @@
                     return;
                 }
                 modelUrl = item.url;
+                // if this library item defines a defaultScale, apply it for the next placement
+                modelScaleOverride = item.defaultScale || 1;
                 // open placement mode for convenience
                 placingModel = true; addBtn.setAttribute('aria-pressed', 'true'); addBtn.textContent = 'Cancel';
                 note.style.display = 'block';
@@ -442,6 +452,8 @@
 
     let placingModel = false;
     let modelUrl = defaultModelUrl;
+    // multiplier to apply to computed mercator scale when placing a model
+    let modelScaleOverride = 1;
     // state for placing 3D text: { text: '...' } when awaiting a click
     let placingText = null;
 
@@ -1283,14 +1295,15 @@
         );
 
         // build a transform for the new model
-        const transform = {
+            const transform = {
             translateX: modelAsMercatorCoordinate.x,
             translateY: modelAsMercatorCoordinate.y,
             translateZ: modelAsMercatorCoordinate.z,
             rotateX: Math.PI / 2,
             rotateY: 0,
             rotateZ: 0,
-            scale: modelAsMercatorCoordinate.meterInMercatorCoordinateUnits()
+            // apply any per-model override (e.g., truck defaultScale)
+            scale: modelAsMercatorCoordinate.meterInMercatorCoordinateUnits() * (modelScaleOverride || 1)
         };
 
     // load the model into the three.js scene
