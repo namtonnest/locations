@@ -282,11 +282,13 @@
 
     // Add truck model requested by user (idempotent) and set a default scale
     addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/truck.glb', 'truck');
-    // attach default scale to truck entry if present
-    (function attachTruckScale(){
+    // Ensure default scales for some models (truck, jeep)
+    (function attachDefaultScales(){
         try {
-            const t = modelLibrary.find(i => i.url && i.url.includes('truck.glb'));
-            if (t) t.defaultScale = 0.6;
+            const truck = modelLibrary.find(i => i.url && i.url.includes('truck.glb'));
+            if (truck) truck.defaultScale = 0.6;
+            const jeep = modelLibrary.find(i => i.id === 'jeep' || (i.url && i.url.includes('jeep.glb')));
+            if (jeep) jeep.defaultScale = 0.6;
             saveLibrary(modelLibrary);
         } catch (e) {}
     })();
