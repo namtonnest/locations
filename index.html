@@ -290,19 +290,20 @@
 
     // generate thumbnail: load model with GLTFLoader into an offscreen renderer and capture
     async function generateThumbnail(url, id) {
-    // On mobile devices skip expensive thumbnail generation and return a
-    // lightweight SVG fallback. This avoids creating extra WebGL contexts
-    // which can exhaust GPU/webgl resources on phones.
-    if (isMobile) return fallbackThumb(id || url.split('/').pop() || 'Model');
+    // Attempt to generate thumbnails on mobile too; use smaller canvas to
+    // reduce memory and GPU pressure. If WebGL or loading fails, we'll
+    // gracefully fall back to an SVG image (see try/catch below).
 
     // already cached
     if (thumbCache[url]) return thumbCache[url];
         return new Promise((resolve) => {
             try {
                 const loader = new THREE.GLTFLoader();
-                // offscreen canvas
+                // offscreen canvas - smaller on mobile to reduce resource use
                 const canvas = document.createElement('canvas');
-                canvas.width = 240; canvas.height = 160;
+                const canvasWidth = isMobile ? 180 : 240;
+                const canvasHeight = isMobile ? 120 : 160;
+                canvas.width = canvasWidth; canvas.height = canvasHeight;
                 let renderer;
                 try {
                     renderer = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true });
