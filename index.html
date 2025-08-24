@@ -1032,11 +1032,27 @@
                                             canvas.width = Math.max(1, Math.floor(w * scale));
                                             canvas.height = Math.max(1, Math.floor(h * scale));
                                             const ctx = canvas.getContext('2d');
-                                            try { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); } catch (e) { /* ignore draw errors */ }
-                                            const newTex = new THREE.Texture(canvas);
-                                            newTex.needsUpdate = true;
-                                            child.material = new THREE.MeshBasicMaterial({ map: newTex, color: (oldMat.color || new THREE.Color(0xffffff)) });
-                                            return;
+                                            let drawSucceeded = false;
+                                            try {
+                                                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                                drawSucceeded = true;
+                                            } catch (e) {
+                                                // drawImage can fail for cross-origin images without CORS headers
+                                                console.warn('drawImage failed while downscaling texture (likely CORS):', e);
+                                                drawSucceeded = false;
+                                            }
+                                            if (drawSucceeded) {
+                                                const newTex = new THREE.Texture(canvas);
+                                                // keep wrapping/filtering reasonable for mobile
+                                                newTex.needsUpdate = true;
+                                                newTex.generateMipmaps = false;
+                                                child.material = new THREE.MeshBasicMaterial({ map: newTex, color: (oldMat.color || new THREE.Color(0xffffff)) });
+                                                return;
+                                            } else {
+                                                // fallback: if we can't downscale due to CORS, prefer the original texture
+                                                // if that's not usable, we will fall back to a plain color below
+                                                console.warn('Skipping downscale; using original texture or color fallback');
+                                            }
                                         }
                                     } catch (e) {
                                         console.warn('Texture downscale failed', e);
