@@ -9,8 +9,8 @@
 <style>
     :root{
         --bg: #0f1724;
-        --card: #ffffff;
-        --muted: #6b7280;
+    --card: #ffffff;
+    --muted: #6b7280;
         --accent: #06b6d4;
         --ui-text: #ff6a00; /* primary orange for UI text on white backgrounds */
         --glass: rgba(255,255,255,0.06);
@@ -66,6 +66,9 @@
     .lib-item button{background:transparent;border:none;color:var(--ui-text);cursor:pointer;font-weight:600}
     #add-model-url{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(2,6,23,0.06);margin-top:8px}
     .lib-item img.thumb{width:120px;height:80px;object-fit:cover;border-radius:6px;border:1px solid rgba(2,6,23,0.04);margin-right:8px}
+
+    /* ensure thumbnails have a white background for better contrast */
+    .lib-item img.thumb { background: #ffffff; }
 
     /* Model controls */
     #model-controls{position:absolute; right:18px; top:12px; z-index:12; background:rgba(255,255,255,0.98); padding:12px; border-radius:12px; box-shadow:var(--shadow); min-width:220px; pointer-events:auto}
@@ -282,6 +285,8 @@
 
     // Add truck model requested by user (idempotent) and set a default scale
     addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/truck.glb', 'truck');
+    // Add restrooms model requested by user (idempotent)
+    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/restroom_model.glb', 'Restrooms');
     // Ensure default scales for some models (truck, jeep)
     (function attachDefaultScales(){
         try {
@@ -291,6 +296,8 @@
             if (jeep) jeep.defaultScale = 0.5;
             const police = modelLibrary.find(i => (i.name && i.name.toLowerCase().includes('police')) || (i.url && i.url.includes('cop_sedan')));
             if (police) police.defaultScale = 0.55;
+            const restrooms = modelLibrary.find(i => i.url && i.url.includes('restroom_model.glb'));
+            if (restrooms) restrooms.defaultScale = 3;
             saveLibrary(modelLibrary);
         } catch (e) {}
     })();
@@ -310,7 +317,7 @@
 
     // fallback svg data url
     function fallbackThumb(name) {
-        const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='240' height='160'><rect width='100%' height='100%' fill='#f3f4f6'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#ff6a00' font-family='Arial' font-size='18'>${name}</text></svg>`;
+        const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='240' height='160'><rect width='100%' height='100%' fill='#ffffff'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#ff6a00' font-family='Arial' font-size='18'>${name}</text></svg>`;
         return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
     }
 
@@ -332,7 +339,8 @@
                 canvas.width = canvasWidth; canvas.height = canvasHeight;
                 let renderer;
                 try {
-                    renderer = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true });
+                    // Request an opaque canvas so the rendered thumbnail has a white background
+                    renderer = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true, alpha: false });
                 } catch (err) {
                     // If renderer creation fails (common on some mobile browsers),
                     // bail out and return the SVG fallback.
@@ -341,6 +349,10 @@
                     return;
                 }
                 renderer.setSize(canvas.width, canvas.height);
+                // draw with a white clear color so thumbnails have white background
+                try { if (renderer.setClearColor) renderer.setClearColor(0xffffff, 1); } catch (e) {}
+                // paint 2D canvas white as an additional safety (some browsers composite differently)
+                try { const ctx2d = canvas.getContext('2d'); if (ctx2d) { ctx2d.fillStyle = '#ffffff'; ctx2d.fillRect(0,0,canvas.width,canvas.height); } } catch(e) {}
                 const scene = new THREE.Scene();
                 const camera = new THREE.PerspectiveCamera(45, canvas.width / canvas.height, 0.1, 1000);
                 const light = new THREE.DirectionalLight(0xffffff, 1);
@@ -358,10 +370,31 @@
                     camera.position.set(0, maxDim * 0.7, maxDim * 1.8);
                     camera.lookAt(new THREE.Vector3(0,0,0));
                     renderer.render(scene, camera);
+                    // Composite onto a white 2D canvas to avoid transparent/black backgrounds
+                    try {
+                        const out = document.createElement('canvas');
+                        out.width = canvas.width; out.height = canvas.height;
+                        const outCtx = out.getContext('2d');
+                        if (outCtx) {
+                            outCtx.fillStyle = '#ffffff';
+                            outCtx.fillRect(0, 0, out.width, out.height);
+                            outCtx.drawImage(canvas, 0, 0);
+                            const dataUrl = out.toDataURL('image/png');
+                            thumbCache[url] = dataUrl;
+                            saveThumbCache();
+                            // cleanup
+                            renderer.dispose();
+                            try { scene.remove(obj); } catch (e) {}
+                            resolve(dataUrl);
+                            return;
+                        }
+                    } catch (err) {
+                        console.warn('Composite canvas failed, falling back to raw canvas', err);
+                    }
+                    // fallback if composite failed
                     const dataUrl = canvas.toDataURL('image/png');
                     thumbCache[url] = dataUrl;
                     saveThumbCache();
-                    // cleanup
                     renderer.dispose();
                     try { scene.remove(obj); } catch (e) {}
                     resolve(dataUrl);
@@ -566,6 +599,11 @@
         controls.id = 'model-controls';
         controls.innerHTML = `
                 <div style="font-weight:600;margin-bottom:6px;">Model controls</div>
+                <label style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">Animate models:
+                    <input id="animateModelsToggle" type="checkbox" style="margin-left:8px">
+                    <span style="font-size:12px;color:var(--muted);margin-left:6px">Speed (deg/s):</span>
+                    <input id="animateSpeed" type="number" value="30" step="1" style="width:72px;margin-left:6px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
+                </label>
                 <label style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">Rotate (deg):
                     <button id="rot-dec" type="button" class="btn secondary" style="padding:4px 8px;min-width:36px">◀</button>
                     <input id="rot" type="number" value="0" step="1" style="width:88px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
@@ -663,10 +701,15 @@
     const altStepInput = document.getElementById('altStep');
     const altUpBtn = document.getElementById('altUp');
     const altDownBtn = document.getElementById('altDown');
+    const animateToggle = document.getElementById('animateModelsToggle');
+    const animateSpeedInput = document.getElementById('animateSpeed');
 
     // disabled until a model is placed
     function setControlsDisabled(disabled) {
-        [rot, rotInc, rotDec, rotStepInput, scaleInput, nudgeStep, nudgeN, nudgeS, nudgeE, nudgeW, resetModelBtn, removeModelBtn, altitudeInput, altStepInput, altUpBtn, altDownBtn].forEach(el => { if (el) el.disabled = disabled; });
+        const elems = [rot, rotInc, rotDec, rotStepInput, scaleInput, nudgeStep, nudgeN, nudgeS, nudgeE, nudgeW, resetModelBtn, removeModelBtn, altitudeInput, altStepInput, altUpBtn, altDownBtn, animateToggle, animateSpeedInput];
+        elems.forEach(el => {
+            try { if (el) el.disabled = disabled; } catch (e) { /* ignore */ }
+        });
     }
     setControlsDisabled(true);
 
@@ -1120,25 +1163,54 @@
                 enqueueLoad(this.loader, url,
                     (gltf) => {
                         // convert materials to MeshBasicMaterial for uniform lighting
+                        // If this is the restroom model, force an orange color for visibility
+                        const isRestroom = (url && url.includes('restroom_model.glb')) || (preferredName && String(preferredName).toLowerCase().includes('restroom'));
                         gltf.scene.traverse(function (child) {
                             if (child.isMesh) {
                                 try {
-                                    const oldMat = child.material;
+                                    const oldMat = child.material || {};
                                     const params = {};
-                                    if (oldMat.map) params.map = oldMat.map;
-                                    if (oldMat.color) params.color = oldMat.color.clone();
+                                    // for non-restroom models, preserve texture maps where available
+                                    if (!isRestroom && oldMat.map) params.map = oldMat.map;
+                                    // set color: force orange for restroom, otherwise preserve existing color if present
+                                    if (isRestroom) {
+                                        params.color = new THREE.Color(0xff6a00);
+                                    } else if (oldMat.color) {
+                                        params.color = oldMat.color.clone();
+                                    }
                                     if (oldMat.opacity !== undefined) {
                                         params.opacity = oldMat.opacity;
                                         params.transparent = oldMat.transparent;
                                     }
                                     child.material = new THREE.MeshBasicMaterial(params);
+                                    if (isRestroom) {
+                                        // ensure any previous texture references don't interfere
+                                        try { child.material.map = null; } catch (e) {}
+                                        child.material.needsUpdate = true;
+                                    }
                                 } catch (e) {
                                     console.warn('Failed to convert material to MeshBasicMaterial', e);
                                 }
                             }
                         });
-                        entry.object = gltf.scene;
-                        this.scene.add(gltf.scene);
+                        // center the loaded model so rotations occur around its geometric center
+                        try {
+                            // compute bounding box of the loaded scene
+                            const box = new THREE.Box3().setFromObject(gltf.scene);
+                            const center = box.getCenter(new THREE.Vector3());
+                            // shift the model so its center is at the scene origin
+                            gltf.scene.position.x -= center.x;
+                            gltf.scene.position.y -= center.y;
+                            gltf.scene.position.z -= center.z;
+                        } catch (e) {
+                            // if bounding box fails, continue without centering
+                            console.warn('Failed to center model', e);
+                        }
+                        // wrap the model in a group so entry.object references a single root we can toggle visibility on
+                        const wrapper = new THREE.Group();
+                        wrapper.add(gltf.scene);
+                        entry.object = wrapper;
+                        this.scene.add(wrapper);
                         renderSidebar();
                     },
                     undefined,
@@ -1159,6 +1231,18 @@
 
             if (!placedModels.length) return;
 
+            // animation support: rotate models on Y when enabled
+            if (typeof this._lastFrameTime === 'undefined') this._lastFrameTime = performance.now();
+            const now = performance.now();
+            const dt = (now - this._lastFrameTime) / 1000; // seconds
+            this._lastFrameTime = now;
+
+            const animateToggle = document.getElementById('animateModelsToggle');
+            const animateSpeedInput = document.getElementById('animateSpeed');
+            const animateEnabled = animateToggle && animateToggle.checked;
+            const animateSpeedDeg = animateSpeedInput ? Number(animateSpeedInput.value || 0) : 0;
+            const animateSpeedRad = (animateSpeedDeg * Math.PI / 180);
+
             const m = new THREE.Matrix4().fromArray(matrix);
 
             // render each placed model separately
@@ -1170,6 +1254,12 @@
                     new THREE.Vector3(1, 0, 0),
                     entry.transform.rotateX
                 );
+                // apply animated Y rotation if enabled
+                if (animateEnabled && animateSpeedRad) {
+                    entry.transform.rotateY = (entry.transform.rotateY || 0) + animateSpeedRad * dt;
+                    // keep within reasonable bounds
+                    if (entry.transform.rotateY > Math.PI * 2) entry.transform.rotateY -= Math.PI * 2;
+                }
                 const rotationY = new THREE.Matrix4().makeRotationAxis(
                     new THREE.Vector3(0, 1, 0),
                     entry.transform.rotateY
