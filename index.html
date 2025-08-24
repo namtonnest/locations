@@ -92,8 +92,8 @@
             <div style="display:flex;align-items:center;gap:8px">
                 <div class="brand">Location</div>
                 <div style="display:flex;gap:8px;align-items:center">
-                    <button id="open-models-btn" class="btn secondary">Models</button>
-                    <button id="open-library-btn" class="btn secondary">Library</button>
+                    <button id="open-library-btn" class="btn secondary">Models</button>
+                    <button id="open-models-btn" class="btn secondary">Info</button>
                     <button id="share-btn" class="btn secondary">Share</button>
                 </div>
             </div>
@@ -790,7 +790,7 @@
     modelsBtn.addEventListener('click', () => {
         const wasHidden = sidebar.classList.contains('hidden');
         sidebar.classList.toggle('hidden');
-        modelsBtn.textContent = wasHidden ? 'Close' : 'Models';
+        modelsBtn.textContent = wasHidden ? 'Close' : 'Info';
         if (wasHidden) renderSidebar();
     });
 
