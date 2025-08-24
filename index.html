@@ -261,11 +261,6 @@
 
     // generate thumbnail: load model with GLTFLoader into an offscreen renderer and capture
     async function generateThumbnail(url, id) {
-    // On mobile devices skip expensive thumbnail generation and return a
-    // lightweight SVG fallback. This avoids creating extra WebGL contexts
-    // which can exhaust GPU/webgl resources on phones.
-    if (isMobile) return fallbackThumb(id || url.split('/').pop() || 'Model');
-
     // already cached
     if (thumbCache[url]) return thumbCache[url];
         return new Promise((resolve) => {
