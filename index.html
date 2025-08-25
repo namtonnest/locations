@@ -24,7 +24,25 @@
     .topbar{
         position: absolute; left: 16px; right: 16px; top: 12px; z-index: 6; display:flex; justify-content:space-between; gap:12px;
         pointer-events: auto;
+        padding-right: 72px; /* reserve space for the absolute hamburger on the right */
     }
+    .controls-right{display:flex;gap:8px;align-items:center}
+    /* style menu (hamburger) */
+    /* place hamburger flush against the top-right margin */
+    #style-hamburger{
+        position: absolute;
+        top: 12px; /* match topbar offset */
+        right: 16px; /* match topbar side margin */
+        z-index: 14;
+        font-size:18px;
+        padding:8px 10px;
+        margin: 0;
+    }
+    /* ensure the menu drops down below the button */
+    .style-menu{position: absolute; right: 16px; top: 56px; background: rgba(255,255,255,0.98); padding:8px; border-radius:8px; box-shadow:var(--shadow); z-index:13; min-width:160px}
+    .style-menu.hidden{display:none}
+    .style-menu button{display:block;width:100%;text-align:left;padding:8px;border:none;background:transparent;cursor:pointer;border-radius:6px}
+    .style-menu button:hover{background:rgba(15,23,36,0.04)}
     .controls-left{display:flex; gap:8px; align-items:center}
     .topbar .btn{background: linear-gradient(180deg, #ffffff, #f8fafc); border: 1px solid rgba(2,6,23,0.06); padding:8px 12px; border-radius:10px; cursor:pointer; color:#0f1724; font-weight:600; box-shadow: var(--shadow); transition: transform .08s ease, box-shadow .08s ease}
     .topbar .btn:hover{transform: translateY(-1px);}
@@ -122,6 +140,14 @@
     <div style="display:flex;align-items:center;gap:8px">
         <!-- placeholder for future search / account -->
     </div>
+    <div class="controls-right">
+        <button id="style-hamburger" class="btn secondary">☰</button>
+    </div>
+</div>
+
+<!-- Style menu container (hidden by default) -->
+<div id="style-menu" class="style-menu hidden" aria-hidden="true">
+    <!-- populated by JS -->
 </div>
 
 <div id="map-note">Click on the map to place the model, or click the button again to cancel.</div>
@@ -140,8 +166,9 @@
     mapboxgl.accessToken = "pk.eyJ1IjoicHVycGhhY3RzIiwiYSI6ImNsdzY1bzVvNzFwb3IyamxyOG1vY3oyM2gifQ.2LikTeWKwlWsAcEneBXW0Q";
     const map = new mapboxgl.Map({
         container: 'map',
-        // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
-        style: 'mapbox://styles/mapbox/standard',
+    // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
+    // Default to Mapbox Streets for broader compatibility with layer names
+    style: 'mapbox://styles/mapbox/streets-v11',
         config: {
             basemap: {
                 theme: 'monochrome'
@@ -647,6 +674,39 @@
     controlsToggle.style.top = '';
     controlsToggle.style.marginTop = '6px';
     leftColumn.appendChild(controlsToggle);
+
+    // style menu (hamburger) population and wiring
+    try {
+        const styles = [
+            { id: 'streets', url: 'mapbox://styles/mapbox/streets-v11', label: 'Streets' },
+            { id: 'light', url: 'mapbox://styles/mapbox/light-v10', label: 'Light' },
+            { id: 'outdoors', url: 'mapbox://styles/mapbox/outdoors-v11', label: 'Outdoors' },
+            { id: 'satellite', url: 'mapbox://styles/mapbox/satellite-streets-v11', label: 'Satellite' }
+        ];
+        const menu = document.getElementById('style-menu');
+        styles.forEach(s => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = s.label;
+            btn.dataset.styleUrl = s.url;
+            btn.addEventListener('click', () => {
+                try { map.setStyle(s.url); } catch (e) { console.warn('Failed to set style', e); }
+                // hide menu after selection
+                menu.classList.add('hidden');
+            });
+            menu.appendChild(btn);
+        });
+
+        const ham = document.getElementById('style-hamburger');
+        if (ham) {
+            ham.addEventListener('click', () => {
+                const menu = document.getElementById('style-menu');
+                if (!menu) return;
+                const isHidden = menu.classList.contains('hidden');
+                if (isHidden) menu.classList.remove('hidden'); else menu.classList.add('hidden');
+            });
+        }
+    } catch (e) { console.warn('Style menu init failed', e); }
 
         // wire toggle behavior
         controlsToggle.addEventListener('click', () => {
@@ -1332,8 +1392,52 @@
     };
 
     // add the custom layer at startup so the three.js scene is ready
+    // Provide a helper to hide any fill-extrusion / building layers. Some styles add these layers
+    // asynchronously, so we run this on style.load and again on style/data events.
+    function hideBuildings() {
+        try {
+            const style = map.getStyle();
+            if (style && style.layers && Array.isArray(style.layers)) {
+                style.layers.forEach(l => {
+                    try {
+                        const id = l && l.id;
+                        const type = l && l.type;
+                        const lname = String(id || '').toLowerCase();
+                        if (type === 'fill-extrusion' || lname.includes('building') || lname.includes('extrusion')) {
+                            try { map.setLayoutProperty(id, 'visibility', 'none'); } catch (e) {}
+                            try { map.setPaintProperty(id, 'fill-extrusion-opacity', 0); } catch (e) {}
+                            try { map.setPaintProperty(id, 'fill-extrusion-color', '#000000'); } catch (e) {}
+                        }
+                    } catch (e) { /* ignore per-layer */ }
+                });
+            }
+        } catch (e) { /* ignore style introspection errors */ }
+    }
+
+    // helper to ensure our custom layer exists exactly once
+    function ensureCustomLayerPresent() {
+        try {
+            const existing = map.getStyle && map.getStyle().layers && map.getStyle().layers.find(l => l.id === customLayer.id);
+            if (!existing) {
+                try { map.addLayer(customLayer); } catch (e) { console.warn('Failed to add customLayer', e); }
+            }
+        } catch (e) { console.warn('ensureCustomLayerPresent error', e); }
+    }
+
     map.on('style.load', () => {
-        map.addLayer(customLayer);
+        // run hideBuildings immediately and a couple times after load to catch dynamic additions
+        hideBuildings();
+        setTimeout(hideBuildings, 300);
+        setTimeout(hideBuildings, 1200);
+        // ensure our custom three.js layer is present after the new style is applied
+        ensureCustomLayerPresent();
+        // also (re)attach style/data listeners which may add layers after style.load
+        try { map.off && map.off('styledata', hideBuildings); } catch (e) {}
+        try { map.off && map.off('sourcedata', hideBuildings); } catch (e) {}
+        try { map.off && map.off('data', hideBuildings); } catch (e) {}
+        try { map.on('styledata', hideBuildings); } catch (e) {}
+        try { map.on('sourcedata', hideBuildings); } catch (e) {}
+        try { map.on('data', hideBuildings); } catch (e) {}
     });
 
     // convert the GitHub blob URL to a raw.githubusercontent.com URL
