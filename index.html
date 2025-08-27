@@ -100,6 +100,15 @@
         /* hide controls by default on mobile; a toggle button will open them */
         #model-controls{display:none}
         #controls-toggle-btn{display:block}
+        /* ensure the style/hamburger button is flush to the viewport corner on mobile */
+        #style-hamburger {
+            position: fixed !important;
+            top: 8px !important;
+            right: 8px !important;
+            margin: 0 !important;
+            transform: none !important; /* opt out of parent scaling */
+            z-index: 60;
+        }
     }
 
     /* Additional mobile compacting: slightly scale down UI and reduce paddings/font-sizes
