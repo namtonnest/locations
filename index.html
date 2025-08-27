@@ -115,10 +115,23 @@
        so more controls fit on small screens without changing layout logic. */
     @media (max-width: 640px) {
         :root { --ui-scale: 0.88; }
-        /* Apply a subtle visual scale to primary overlay containers */
-        .topbar, #library, #model-controls, #sidebar, #draw-panel, #address-bar, .controls, .controls-left, .controls-right {
+        /* Apply a subtle visual scale to primary overlay containers except panels that we pin to viewport */
+        .topbar, #model-controls, #sidebar, #draw-panel, #address-bar, .controls, .controls-left, .controls-right {
             transform: scale(var(--ui-scale));
             transform-origin: top left;
+        }
+        /* Keep library panel pinned to viewport center and opt out of scaling so it stays visible */
+        #library {
+            position: fixed !important;
+            left: 50% !important;
+            top: 72px !important;
+            transform: translateX(-50%) !important;
+            transform-origin: top center !important;
+            width: min(92%, 340px) !important;
+            min-width: 0 !important;
+            padding: 8px !important;
+            z-index: 72;
+            background: rgba(255,255,255,0.98);
         }
         /* Tighten button padding and reduce font sizes slightly */
         .topbar .btn, .btn {
@@ -126,7 +139,6 @@
             font-size: 13px;
         }
         /* Make panels slightly narrower and reduce internal padding */
-        #library { min-width: 300px; padding: 8px; }
         #draw-panel { width: 180px !important; padding: 8px !important; font-size: 13px; }
         #draw-panel input, #draw-panel button, #model-controls input, #model-controls button, #sidebar .model-row { font-size: 13px; }
         /* Nudge address bar sizing to fit better */
