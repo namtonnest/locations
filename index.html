@@ -94,7 +94,18 @@
     #model-controls input[type=number]{width:86px; padding:6px; margin-left:8px; border-radius:6px; border:1px solid rgba(2,6,23,0.06)}
 
     @media(max-width:640px){
-        #sidebar{width:100%; height:260px; bottom:auto;}
+        /* place the info/sidebar near the bottom so it isn't covered by top overlays */
+        #sidebar{
+            position: fixed !important;
+            left: 8px !important;
+            right: 8px !important;
+            bottom: 12px !important;
+            top: auto !important;
+            width: auto !important;
+            height: 260px;
+            transform: none !important; /* opt out of parent scaling */
+            z-index: 71;
+        }
         .topbar{left:8px; right:8px}
         #model-controls{right:8px; left:8px; top:auto; bottom:12px}
         /* hide controls by default on mobile; a toggle button will open them */
