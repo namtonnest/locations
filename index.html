@@ -32,11 +32,17 @@
     #style-hamburger{
         position: absolute;
         top: 12px; /* match topbar offset */
-        right: 16px; /* match topbar side margin */
-        z-index: 14;
-        font-size:18px;
-        padding:8px 10px;
-        margin: 0;
+    right: 12px; /* slightly inset on desktop */
+    z-index: 14;
+    font-size: 14px; /* slightly smaller */
+    padding: 6px 8px;
+    margin: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
     }
     /* ensure the menu drops down below the button */
     .style-menu{position: absolute; right: 16px; top: 56px; background: rgba(255,255,255,0.98); padding:8px; border-radius:8px; box-shadow:var(--shadow); z-index:13; min-width:160px}
@@ -115,10 +121,18 @@
         #style-hamburger {
             position: fixed !important;
             top: 8px !important;
-            right: 8px !important;
+            right: 0 !important; /* flush to the viewport right edge */
             margin: 0 !important;
             transform: none !important; /* opt out of parent scaling */
             z-index: 60;
+            font-size: 14px !important;
+            padding: 6px !important;
+            width: 36px !important;
+            height: 36px !important;
+            border-radius: 6px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
         }
     }
 
