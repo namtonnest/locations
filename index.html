@@ -102,6 +102,30 @@
         #controls-toggle-btn{display:block}
     }
 
+    /* Additional mobile compacting: slightly scale down UI and reduce paddings/font-sizes
+       so more controls fit on small screens without changing layout logic. */
+    @media (max-width: 640px) {
+        :root { --ui-scale: 0.88; }
+        /* Apply a subtle visual scale to primary overlay containers */
+        .topbar, #library, #model-controls, #sidebar, #draw-panel, #address-bar, .controls, .controls-left, .controls-right {
+            transform: scale(var(--ui-scale));
+            transform-origin: top left;
+        }
+        /* Tighten button padding and reduce font sizes slightly */
+        .topbar .btn, .btn {
+            padding: 6px 8px;
+            font-size: 13px;
+        }
+        /* Make panels slightly narrower and reduce internal padding */
+        #library { min-width: 300px; padding: 8px; }
+        #draw-panel { width: 180px !important; padding: 8px !important; font-size: 13px; }
+        #draw-panel input, #draw-panel button, #model-controls input, #model-controls button, #sidebar .model-row { font-size: 13px; }
+        /* Nudge address bar sizing to fit better */
+        #address-bar { min-width: 260px; padding: 6px; font-size: 13px; bottom: 10px; }
+        /* Slightly smaller thumbnails */
+        .lib-item img.thumb { width: 100px; height: 68px; }
+    }
+
     /* Controls toggle (default hidden on desktop) - positioned below the topbar */
     #controls-toggle-btn{position:absolute; right:18px; top:56px; z-index:7; display:none;}
 
@@ -516,6 +540,10 @@
 
     let placingModel = false;
     let modelUrl = defaultModelUrl;
+    // drawing state for user-drawn features
+    let drawing = false;
+    let currentDraw = null; // Feature being drawn (LineString)
+    let drawnFeatures = []; // array of GeoJSON Features
     // multiplier to apply to computed mercator scale when placing a model
     let modelScaleOverride = 1;
     // state for placing 3D text: { text: '...' } when awaiting a click
@@ -745,6 +773,282 @@
         window.addEventListener('resize', refreshDesktopControlsVisibility);
         refreshDesktopControlsVisibility();
 
+    // --- Simple drawing tools (polyline) ---
+    const DRAW_KEY = 'map_drawn_v1';
+    function saveDraws() {
+    // Intentionally no-op: drawings are not persisted locally by default.
+    // Drawings will be included in the shared server state when the user clicks Share.
+    return;
+    }
+    function loadDraws() {
+    // Local loading disabled: start with no drawings. Shared drawings will be restored
+    // via restoreSavedState(parsed) when loading a shared state from the server.
+    return [];
+    }
+    // compact draw launcher + panel (saves space)
+    const drawLauncher = document.createElement('button');
+    drawLauncher.id = 'draw-launcher';
+    drawLauncher.className = 'btn';
+    drawLauncher.textContent = 'Draw';
+    // place the launcher inside the same controls column as the Controls toggle
+    // so it visually stacks under the Controls button and shares the same CSS
+    try {
+        // leftColumn is defined earlier where the controls toggle is appended
+        if (typeof leftColumn !== 'undefined' && leftColumn) {
+            drawLauncher.style.position = 'static';
+            drawLauncher.style.marginTop = '6px';
+            leftColumn.appendChild(drawLauncher);
+        } else {
+            // fallback: append to body
+            drawLauncher.style.position = 'absolute';
+            drawLauncher.style.left = '12px';
+            drawLauncher.style.top = '120px';
+            drawLauncher.style.zIndex = '50';
+            document.body.appendChild(drawLauncher);
+        }
+    } catch (e) { document.body.appendChild(drawLauncher); }
+
+    // hidden panel with draw controls and color palette
+    const drawPanel = document.createElement('div');
+    drawPanel.id = 'draw-panel';
+    // panel will be positioned dynamically beneath the controls column when opened
+    drawPanel.style.position = 'absolute';
+    drawPanel.style.zIndex = '60';
+    drawPanel.style.width = '220px';
+    drawPanel.style.padding = '10px';
+    drawPanel.style.background = '#fff';
+    drawPanel.style.border = '1px solid rgba(0,0,0,0.08)';
+    drawPanel.style.borderRadius = '8px';
+    drawPanel.style.boxShadow = '0 6px 18px rgba(14,20,36,0.12)';
+    drawPanel.style.display = 'none';
+    drawPanel.innerHTML = `
+        <div style="font-weight:600;margin-bottom:8px">Draw tools</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button id="draw-toggle" class="btn">Draw</button>
+            <button id="draw-finish" class="btn secondary">Finish</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button id="draw-clear" class="btn secondary">Clear</button>
+            <button id="draw-save" class="btn">Save</button>
+        </div>
+        <div style="margin-top:6px;font-size:13px;font-weight:600">Color</div>
+        <div id="draw-colors" style="display:flex;gap:8px;margin-top:6px"></div>
+        <div style="margin-top:10px;font-size:13px;font-weight:600">Label</div>
+        <div style="display:flex;gap:8px;margin-top:6px;align-items:center">
+            <input id="draw-label-input" placeholder="Label text" style="flex:1;padding:6px;border-radius:6px;border:1px solid rgba(0,0,0,0.08)" />
+            <button id="draw-place-label" class="btn">Place</button>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+            <label style="font-size:13px;min-width:44px">Size</label>
+            <input id="draw-text-size" type="number" min="8" max="48" value="12" style="width:70px;padding:6px;border-radius:6px;border:1px solid rgba(0,0,0,0.08)" />
+            <input id="draw-text-size-range" type="range" min="8" max="48" value="12" style="flex:1" />
+        </div>
+    `;
+    document.body.appendChild(drawPanel);
+
+    const drawToggle = drawPanel.querySelector('#draw-toggle');
+    const drawFinish = drawPanel.querySelector('#draw-finish');
+    const drawClear = drawPanel.querySelector('#draw-clear');
+    const drawSave = drawPanel.querySelector('#draw-save');
+    const drawColors = drawPanel.querySelector('#draw-colors');
+    const drawLabelInput = drawPanel.querySelector('#draw-label-input');
+    const drawPlaceLabelBtn = drawPanel.querySelector('#draw-place-label');
+    const drawTextSizeInput = drawPanel.querySelector('#draw-text-size');
+    const drawTextSizeRange = drawPanel.querySelector('#draw-text-size-range');
+    let selectedTextSize = Number((drawTextSizeInput && drawTextSizeInput.value) || 12);
+
+    // available colors
+    const PALETTE = ['#ff6a00','#1f8ef1','#16a34a','#ef4444','#8b5cf6','#f59e0b'];
+    let selectedDrawColor = PALETTE[0];
+    // render palette
+    PALETTE.forEach(c => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.style.width = '28px'; b.style.height = '28px'; b.style.borderRadius = '6px'; b.style.border = '2px solid transparent';
+        b.style.background = c;
+        b.title = c;
+        if (c === selectedDrawColor) b.style.borderColor = '#111827';
+        b.addEventListener('click', () => {
+            selectedDrawColor = c;
+            // highlight
+            drawColors.querySelectorAll('button').forEach(x => x.style.borderColor = 'transparent');
+            b.style.borderColor = '#111827';
+        });
+        drawColors.appendChild(b);
+    });
+
+    function ensureDrawSourceAndLayers() {
+        try {
+            // ensure style is loaded first; if not, wait for the next style.load event
+            try {
+                if (typeof map.isStyleLoaded === 'function' && !map.isStyleLoaded()) {
+                    map.once('style.load', ensureDrawSourceAndLayers);
+                    return;
+                }
+            } catch (e) { /* ignore */ }
+
+            const hasSource = map.getSource && map.getSource('draw-source');
+            if (!hasSource) {
+                map.addSource('draw-source', { type: 'geojson', data: { type: 'FeatureCollection', features: drawnFeatures } });
+            } else {
+                map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
+            }
+            if (!map.getLayer('draw-lines')) {
+                map.addLayer({ id: 'draw-lines', type: 'line', source: 'draw-source', paint: { 'line-color': ['coalesce', ['get', 'color'], '#ff6a00'], 'line-width': 4 } });
+            }
+            if (!map.getLayer('draw-points')) {
+                map.addLayer({ id: 'draw-points', type: 'circle', source: 'draw-source', paint: { 'circle-radius': 6, 'circle-color': ['coalesce', ['get', 'color'], '#ff6a00'] }, filter: ['==', '$type', 'Point'] });
+            }
+            if (!map.getLayer('draw-labels')) {
+                // symbol layer to render point labels (use properties.text and properties.color)
+                map.addLayer({
+                    id: 'draw-labels',
+                    type: 'symbol',
+                    source: 'draw-source',
+                    layout: {
+                        'text-field': ['coalesce', ['get', 'text'], ''],
+                        // prefer per-feature size (properties.size), fallback to the currently selectedTextSize
+                        'text-size': ['coalesce', ['get', 'size'], Number(selectedTextSize) || 12],
+                        'text-offset': [0, -1.2],
+                        'text-anchor': 'bottom'
+                    },
+                    paint: {
+                        // use a larger white halo so the text appears to have a background box
+                        'text-color': ['coalesce', ['get', 'color'], '#ff6a00'],
+                        'text-halo-color': '#ffffff',
+                        'text-halo-width': 6,
+                        'text-halo-blur': 0.75
+                    },
+                    filter: ['all', ['==', '$type', 'Point'], ['has', 'text']]
+                });
+            }
+        } catch (e) { console.warn('ensureDrawSourceAndLayers error', e); }
+    }
+
+    function refreshDrawSource() {
+        try {
+            ensureDrawSourceAndLayers();
+            if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
+        } catch (e) {}
+    }
+
+    // wire toolbar buttons
+    // launcher toggles the panel
+    drawLauncher.addEventListener('click', () => {
+        // compute left/top so the panel appears beneath the controls column / draw button
+        try {
+            const parent = (typeof leftColumn !== 'undefined' && leftColumn) ? leftColumn : drawLauncher.parentElement || document.body;
+            const rect = parent.getBoundingClientRect();
+            // position the panel left aligned with the parent and just below it
+            drawPanel.style.left = Math.max(8, rect.left + window.scrollX) + 'px';
+            drawPanel.style.top = Math.max(8, rect.bottom + window.scrollY + 6) + 'px';
+            // ensure panel width fits within viewport
+            const maxW = Math.min(320, window.innerWidth - 24);
+            drawPanel.style.width = Math.min(220, maxW) + 'px';
+        } catch (e) {}
+        const showing = drawPanel.style.display === 'block';
+        drawPanel.style.display = showing ? 'none' : 'block';
+    });
+
+    drawToggle.addEventListener('click', () => {
+        drawing = !drawing;
+        drawToggle.textContent = drawing ? 'Drawing...' : 'Draw';
+        if (drawing) {
+            currentDraw = { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: { color: selectedDrawColor } };
+            // disable map interactions while drawing so clicks place points
+            try { if (map.dragPan) map.dragPan.disable(); } catch (e) {}
+            try { if (map.scrollZoom) map.scrollZoom.disable(); } catch (e) {}
+            try { if (map.doubleClickZoom) map.doubleClickZoom.disable(); } catch (e) {}
+            try { if (map.touchZoomRotate) map.touchZoomRotate.disable(); } catch (e) {}
+            try { if (map.boxZoom) map.boxZoom.disable(); } catch (e) {}
+            try { const c = map.getCanvas && map.getCanvas(); if (c) c.style.cursor = 'crosshair'; } catch (e) {}
+        } else {
+            currentDraw = null;
+            // re-enable interactions
+            try { if (map.dragPan) map.dragPan.enable(); } catch (e) {}
+            try { if (map.scrollZoom) map.scrollZoom.enable(); } catch (e) {}
+            try { if (map.doubleClickZoom) map.doubleClickZoom.enable(); } catch (e) {}
+            try { if (map.touchZoomRotate) map.touchZoomRotate.enable(); } catch (e) {}
+            try { if (map.boxZoom) map.boxZoom.enable(); } catch (e) {}
+            try { const c = map.getCanvas && map.getCanvas(); if (c) c.style.cursor = ''; } catch (e) {}
+        }
+        ensureDrawSourceAndLayers();
+    });
+    // labeling state: when true, the next map click will place a point feature with properties.text
+    let placingLabel = false;
+    drawPlaceLabelBtn.addEventListener('click', () => {
+        const txt = (drawLabelInput && drawLabelInput.value || '').trim();
+        if (!txt) { alert('Enter label text first'); return; }
+        placingLabel = !placingLabel;
+        drawPlaceLabelBtn.textContent = placingLabel ? 'Cancel' : 'Place';
+        // when entering label mode, ensure overlays are not blocking the map
+        setOverlayBlocking(!placingLabel);
+    });
+
+    // text size controls: sync number and range inputs and apply to existing layer if present
+    function applyTextSizeToLayer(size) {
+        try {
+            if (map && map.getLayer && map.getLayer('draw-labels')) {
+                // use an expression so per-feature `properties.size` is honored, falling back to the provided size
+                const expr = ['coalesce', ['get', 'size'], Number(size) || 12];
+                map.setLayoutProperty('draw-labels', 'text-size', expr);
+            }
+        } catch (e) { /* ignore */ }
+    }
+    if (drawTextSizeInput) drawTextSizeInput.addEventListener('input', (e) => {
+        selectedTextSize = Number(e.target.value) || 12;
+        if (drawTextSizeRange) drawTextSizeRange.value = selectedTextSize;
+        applyTextSizeToLayer(selectedTextSize);
+    });
+    if (drawTextSizeRange) drawTextSizeRange.addEventListener('input', (e) => {
+        selectedTextSize = Number(e.target.value) || 12;
+        if (drawTextSizeInput) drawTextSizeInput.value = selectedTextSize;
+        applyTextSizeToLayer(selectedTextSize);
+    });
+    drawFinish.addEventListener('click', () => {
+        if (!currentDraw || !currentDraw.geometry || !currentDraw.geometry.coordinates.length) return;
+        // ensure color property on finished feature
+        currentDraw.properties = currentDraw.properties || {};
+        currentDraw.properties.color = currentDraw.properties.color || selectedDrawColor;
+        drawnFeatures.push(currentDraw);
+        currentDraw = null;
+        drawing = false;
+        drawToggle.textContent = 'Draw';
+        // re-enable interactions
+        try { if (map.dragPan) map.dragPan.enable(); } catch (e) {}
+        try { if (map.scrollZoom) map.scrollZoom.enable(); } catch (e) {}
+        try { if (map.doubleClickZoom) map.doubleClickZoom.enable(); } catch (e) {}
+        try { if (map.touchZoomRotate) map.touchZoomRotate.enable(); } catch (e) {}
+        try { if (map.boxZoom) map.boxZoom.enable(); } catch (e) {}
+        try { const c = map.getCanvas && map.getCanvas(); if (c) c.style.cursor = ''; } catch (e) {}
+        refreshDrawSource();
+        saveDraws();
+    });
+    drawClear.addEventListener('click', () => {
+        drawnFeatures = [];
+        currentDraw = null;
+        drawing = false;
+        drawToggle.textContent = 'Draw';
+        // re-enable interactions
+        try { if (map.dragPan) map.dragPan.enable(); } catch (e) {}
+        try { if (map.scrollZoom) map.scrollZoom.enable(); } catch (e) {}
+        try { if (map.doubleClickZoom) map.doubleClickZoom.enable(); } catch (e) {}
+        try { if (map.touchZoomRotate) map.touchZoomRotate.enable(); } catch (e) {}
+        try { if (map.boxZoom) map.boxZoom.enable(); } catch (e) {}
+        try { const c = map.getCanvas && map.getCanvas(); if (c) c.style.cursor = ''; } catch (e) {}
+        refreshDrawSource();
+        saveDraws();
+    });
+    drawSave.addEventListener('click', () => {
+        saveDraws();
+        alert('Drawn features saved locally');
+    });
+
+    // restore saved draws on init
+    drawnFeatures = loadDraws();
+    // ensure layers present now and after style changes
+    ensureDrawSourceAndLayers();
+    map.on('style.load', () => { try { ensureDrawSourceAndLayers(); } catch (e) {} });
     // control elements
     const rot = document.getElementById('rot');
     const rotInc = document.getElementById('rot-inc');
@@ -967,6 +1271,15 @@
                     const geo = m.geo ? [m.geo.lng, m.geo.lat, m.geo.alt || 0] : null;
                     if (modelLayerRef && modelLayerRef.loadModel) modelLayerRef.loadModel(encodeURI(url), transform, geo, m.id, m.name);
                 });
+            // restore drawn features if present in shared state
+            try {
+                if (parsed.draws && Array.isArray(parsed.draws)) {
+                    drawnFeatures = parsed.draws.slice();
+                    try { ensureDrawSourceAndLayers(); } catch (e) {}
+                    try { if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures }); } catch (e) {}
+                }
+            } catch (e) { console.warn('Failed to restore draws from shared state', e); }
+            try { applyTextSizeToLayer && applyTextSizeToLayer(selectedTextSize); } catch (e) {}
             renderSidebar();
         } catch (e) { console.warn('Failed to restore parsed state', e); }
     }
@@ -975,7 +1288,7 @@
         (async () => {
             try {
                 const data = serializePlacedModels();
-                const payload = { mapCenter: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), models: data };
+                const payload = { mapCenter: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), models: data, draws: drawnFeatures };
                 if (BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
                     // POST to backend which returns { id: '8char' }
                     const res = await fetch(BACKEND_STATE_ENDPOINT, {
@@ -1615,7 +1928,7 @@
 const addressBar = document.createElement('div');
 addressBar.id = 'address-bar';
 addressBar.innerHTML = `
-    <input id="address-input" placeholder="Enter address or lat,lng (e.g. -79.3875,43.6426)" />
+    <input id="address-input" placeholder="Enter address or lng,lat (e.g. -79.3875,43.6426)" />
     <button id="address-go" class="btn">Go</button>
     <button id="address-clear" class="btn secondary">Clear</button>
 `;
@@ -1637,8 +1950,194 @@ addressClear.addEventListener('click', () => {
     clearAddressMarker();
 });
 
-// helper: parse lat,lng input or fallback to geocoding
-function tryParseLatLng(text) {
+// --- Address suggestions and POI search ---
+// small, editable local POI directory (can be extended or loaded from a remote source)
+const localPOIs = [
+    { id: 'poi_airport', name: 'Pearson International Airport', coords: [-79.611, 43.677], desc: 'Airport' },
+    { id: 'poi_cn_tower', name: 'CN Tower', coords: [-79.3875, 43.6426], desc: 'Landmark' },
+    { id: 'poi_union', name: 'Union Station', coords: [-79.3792, 43.6452], desc: 'Transit' },
+    { id: 'poi_scotia', name: 'Scotiabank Arena', coords: [-79.3789, 43.6435], desc: 'Sports/Events' },
+    { id: 'poi_rogers', name: 'Rogers Centre', coords: [-79.3906, 43.6416], desc: 'Stadium' }
+];
+
+// Create a suggestions container attached to the address bar
+const suggestions = document.createElement('div');
+suggestions.id = 'address-suggestions';
+suggestions.className = 'hidden';
+suggestions.style.boxSizing = 'border-box';
+suggestions.style.width = '100%';
+suggestions.style.maxHeight = '220px';
+suggestions.style.overflowY = 'auto';
+suggestions.style.background = '#ffffff';
+suggestions.style.border = '1px solid rgba(0,0,0,0.08)';
+suggestions.style.borderRadius = '6px';
+suggestions.style.marginTop = '6px';
+suggestions.style.padding = '6px 0';
+suggestions.style.zIndex = '40';
+addressBar.appendChild(suggestions);
+
+let suggestionItems = [];
+let suggestionSelected = -1; // index for keyboard nav
+
+// small helper to render suggestion list
+function renderSuggestions(items) {
+    suggestionItems = items || [];
+    suggestionSelected = -1;
+    suggestions.innerHTML = '';
+    if (!items || !items.length) {
+        suggestions.classList.add('hidden');
+        return;
+    }
+    suggestions.classList.remove('hidden');
+    items.forEach((it, idx) => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'suggestion-row';
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '8px';
+        row.style.width = '100%';
+        row.style.border = 'none';
+        row.style.background = 'transparent';
+        row.style.padding = '8px 12px';
+        row.style.textAlign = 'left';
+        row.style.cursor = 'pointer';
+        row.onmouseover = () => { highlightSuggestion(idx); };
+        row.onmouseout = () => { highlightSuggestion(-1); };
+        row.onclick = () => { selectSuggestion(it); };
+
+        const title = document.createElement('div');
+        title.textContent = it.title || it.name || '';
+        title.style.fontSize = '14px';
+        title.style.color = '#0f1724';
+        const sub = document.createElement('div');
+        sub.textContent = it.subtitle || (it.desc || (it.source === 'mapbox' && it.place_name) || '');
+        sub.style.fontSize = '12px';
+        sub.style.color = '#6b7280';
+        const col = document.createElement('div');
+        col.style.display = 'flex';
+        col.style.flexDirection = 'column';
+        col.appendChild(title);
+        col.appendChild(sub);
+        row.appendChild(col);
+
+        suggestions.appendChild(row);
+    });
+}
+
+function highlightSuggestion(idx) {
+    const rows = suggestions.querySelectorAll('.suggestion-row');
+    rows.forEach((r, i) => {
+        r.style.background = (i === idx) ? 'rgba(15,23,36,0.06)' : 'transparent';
+    });
+    suggestionSelected = idx;
+}
+
+function selectSuggestion(item) {
+    try { suggestions.classList.add('hidden'); } catch (e) {}
+    if (!item) return;
+    // item may be local POI: { name, coords } or Mapbox feature: { center: [lng,lat], place_name }
+    let coords = null;
+    if (item.coords) coords = item.coords;
+    else if (item.center) coords = item.center;
+    else if (item.lng !== undefined && item.lat !== undefined) coords = [item.lng, item.lat];
+    else if (item.geometry && item.geometry.coordinates) coords = item.geometry.coordinates;
+    if (coords) {
+        addressInput.value = item.name || item.place_name || `${coords[0].toFixed(6)},${coords[1].toFixed(6)}`;
+        map.flyTo({ center: coords, zoom: 18, essential: true });
+        clearAddressMarker();
+        addressMarker = new mapboxgl.Marker({ color: '#ff6a00' }).setLngLat(coords).addTo(map);
+    } else {
+        // fallback to filling input
+        addressInput.value = item.title || item.name || '';
+    }
+}
+
+// Mapbox forward-suggest (returns array of features)
+async function geocodeSuggest(query) {
+    try {
+        const token = mapboxgl.accessToken;
+        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&autocomplete=true&limit=6`;
+        const res = await fetch(url);
+        if (!res.ok) return [];
+        const j = await res.json();
+        if (j && j.features) return j.features.map(f => ({ source: 'mapbox', place_name: f.place_name, center: f.center, geometry: f.geometry }));
+    } catch (e) { console.warn('Suggest failed', e); }
+    return [];
+}
+
+// debounce the suggestion lookup to avoid spamming the API
+const debouncedSuggest = debounce(async (txt) => {
+    if (!txt || txt.length < 2) {
+        renderSuggestions([]);
+        return;
+    }
+    const q = txt.trim();
+    // local matches first
+    const local = localPOIs.filter(p => p.name.toLowerCase().includes(q.toLowerCase())).map(p => ({ title: p.name, coords: p.coords, subtitle: p.desc, source: 'local' }));
+    // remote suggestions
+    let remote = [];
+    try { remote = await geocodeSuggest(q); } catch (e) { remote = []; }
+    // merge, avoid duplicates by place_name/coords
+    const merged = [];
+    const seen = new Set();
+    local.concat(remote).forEach(it => {
+        const key = (it.place_name || it.title || (it.coords || '').join(','));
+        if (!seen.has(key)) { seen.add(key); merged.push(it); }
+    });
+    renderSuggestions(merged);
+}, 220);
+
+// wire input events for suggestions
+addressInput.addEventListener('input', (e) => {
+    debouncedSuggest(addressInput.value || '');
+});
+
+addressInput.addEventListener('keydown', (e) => {
+    const rows = suggestions.querySelectorAll('.suggestion-row');
+    if (!rows || rows.length === 0) return;
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const next = (suggestionSelected + 1) < rows.length ? suggestionSelected + 1 : 0;
+        highlightSuggestion(next);
+        rows[next].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prev = (suggestionSelected - 1) >= 0 ? suggestionSelected - 1 : (rows.length - 1);
+        highlightSuggestion(prev);
+        rows[prev].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (suggestionSelected >= 0 && suggestionSelected < suggestionItems.length) {
+            selectSuggestion(suggestionItems[suggestionSelected]);
+        } else if (suggestionItems.length === 1) {
+            selectSuggestion(suggestionItems[0]);
+        } else {
+            // fallback to existing flow: try parse or geocode first result
+            const txt = (addressInput.value || '').trim();
+            (async () => {
+                let coords = tryParseLngLat(txt);
+                if (!coords) {
+                    const remote = await forwardGeocode(txt);
+                    coords = remote;
+                }
+                if (coords) {
+                    map.flyTo({ center: coords, zoom: 18, essential: true });
+                    clearAddressMarker();
+                    addressMarker = new mapboxgl.Marker({ color: '#ff6a00' }).setLngLat(coords).addTo(map);
+                } else {
+                    alert('Location not found');
+                }
+            })();
+        }
+    } else if (e.key === 'Escape') {
+        suggestions.classList.add('hidden');
+    }
+});
+
+
+// helper: parse lng,lat input (lng first) or fallback to geocoding
+function tryParseLngLat(text) {
     const parts = text.split(',').map(s => s.trim());
     if (parts.length === 2) {
         const lng = Number(parts[0]);
@@ -1666,8 +2165,8 @@ async function forwardGeocode(query) {
 addressGo.addEventListener('click', async () => {
     const txt = (addressInput.value || '').trim();
     if (!txt) return;
-    // try parse coords first
-    let coords = tryParseLatLng(txt);
+    // try parse coords first (expect lng,lat)
+    let coords = tryParseLngLat(txt);
     if (!coords) coords = await forwardGeocode(txt);
     if (!coords) return alert('Location not found');
     // fly to location
@@ -1818,6 +2317,40 @@ map.on('click', async (e) => {
         }
     } catch (e) { console.warn('Failed listing image records', e); }
 })();
+
+// capture map clicks for drawing (separate listener so we can short-circuit drawing behavior)
+map.on('click', (e) => {
+    // label placement takes priority if active
+    if (placingLabel) {
+    const coords = [e.lngLat.lng, e.lngLat.lat];
+    const txt = (drawLabelInput && drawLabelInput.value) ? drawLabelInput.value.trim() : '';
+    const feat = { type: 'Feature', geometry: { type: 'Point', coordinates: coords }, properties: { text: txt, color: selectedDrawColor, size: selectedTextSize } };
+        drawnFeatures.push(feat);
+        placingLabel = false;
+        if (drawPlaceLabelBtn) drawPlaceLabelBtn.textContent = 'Place';
+        // restore overlays
+        setOverlayBlocking(true);
+        try { saveDraws(); refreshDrawSource(); } catch (e) { console.warn('Failed to save label', e); }
+        return;
+    }
+    if (!drawing) return;
+    // add point to current draw (lng,lat)
+    const coords = [e.lngLat.lng, e.lngLat.lat];
+    if (!currentDraw) {
+        currentDraw = { type: 'Feature', geometry: { type: 'LineString', coordinates: [coords] }, properties: { color: selectedDrawColor } };
+    } else {
+        currentDraw.geometry.coordinates.push(coords);
+    }
+    // update preview in drawnFeatures (not persisted until finish)
+    // create a shallow preview: combine drawnFeatures + currentDraw
+    try {
+        const preview = drawnFeatures.concat(currentDraw ? [currentDraw] : []);
+        ensureDrawSourceAndLayers();
+        if (map.getSource && map.getSource('draw-source')) {
+            map.getSource('draw-source').setData({ type: 'FeatureCollection', features: preview });
+        }
+    } catch (e) { console.warn('drawing click failed', e); }
+});
 </script>
 
 </body>
