@@ -34,15 +34,15 @@
         top: 12px; /* match topbar offset */
     right: 12px; /* slightly inset on desktop */
     z-index: 14;
-    font-size: 12px; /* smaller */
-    padding: 4px;
+    font-size: 14px; /* slightly smaller */
+    padding: 6px 8px;
     margin: 0;
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
+    border-radius: 8px;
     }
     /* ensure the menu drops down below the button */
     .style-menu{position: absolute; right: 16px; top: 56px; background: rgba(255,255,255,0.98); padding:8px; border-radius:8px; box-shadow:var(--shadow); z-index:13; min-width:160px}
@@ -94,6 +94,23 @@
     /* ensure thumbnails have a white background for better contrast */
     .lib-item img.thumb { background: #ffffff; }
 
+    /* POI window: styled like the model library so it's visible and scrollable */
+    #poi-window {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        top: 120px;
+        z-index: 70;
+        background: rgba(255,255,255,0.98);
+        padding: 12px;
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+        min-width: 320px;
+        max-height: 360px;
+        overflow: auto;
+        display: none;
+    }
+
     /* Model controls */
     #model-controls{position:absolute; right:18px; top:12px; z-index:12; background:rgba(255,255,255,0.98); padding:12px; border-radius:12px; box-shadow:var(--shadow); min-width:220px; pointer-events:auto}
     #model-controls label{display:block; font-size:13px; color:var(--ui-text)}
@@ -125,10 +142,10 @@
             margin: 0 !important;
             transform: none !important; /* opt out of parent scaling */
             z-index: 60;
-            font-size: 12px !important;
-            padding: 4px !important;
-            width: 28px !important;
-            height: 28px !important;
+            font-size: 14px !important;
+            padding: 6px !important;
+            width: 36px !important;
+            height: 36px !important;
             border-radius: 6px !important;
             display: flex !important;
             align-items: center !important;
@@ -197,6 +214,7 @@
                 <div style="display:flex;gap:8px;align-items:center">
                     <button id="open-library-btn" class="btn secondary">Models</button>
                     <button id="open-models-btn" class="btn secondary">Info</button>
+                    <button id="open-pois-btn" class="btn secondary">POIs</button>
                     <button id="share-btn" class="btn secondary">Share</button>
                 </div>
             </div>
@@ -230,6 +248,14 @@
     <div style="display:flex;gap:8px;margin-top:8px">
         <button id="add-model-to-lib" class="btn">Add</button>
         <button id="close-library" class="btn secondary">Close</button>
+    </div>
+</div>
+<!-- POI window -->
+<div id="poi-window" aria-hidden="true" style="display:none;">
+    <h4>Points of interest</h4>
+    <div id="poi-list"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="close-poi-window" class="btn secondary">Close</button>
     </div>
 </div>
 <script>
@@ -329,6 +355,10 @@
     const addModelUrlInput = document.getElementById('add-model-url');
     const addModelToLibBtn = document.getElementById('add-model-to-lib');
     const closeLibraryBtn = document.getElementById('close-library');
+    const openPoisBtn = document.getElementById('open-pois-btn');
+    const poiWindow = document.getElementById('poi-window');
+    const poiList = document.getElementById('poi-list');
+    const closePoiWindowBtn = document.getElementById('close-poi-window');
 
     // model library persistence key
     const LIB_KEY = 'model_library_v1';
@@ -572,6 +602,40 @@
     });
 
     closeLibraryBtn.addEventListener('click', () => { libraryPanel.style.display = 'none'; });
+
+    // POI window wiring
+    if (openPoisBtn) {
+        openPoisBtn.addEventListener('click', () => {
+            const showing = poiWindow.style.display === 'block';
+            poiWindow.style.display = showing ? 'none' : 'block';
+            if (!showing) renderPoiWindow();
+        });
+    }
+    if (closePoiWindowBtn) closePoiWindowBtn.addEventListener('click', () => { poiWindow.style.display = 'none'; });
+
+    function renderPoiWindow() {
+        try {
+            poiList.innerHTML = '';
+            if (!pois || !pois.length) { poiList.textContent = 'No POIs added'; return; }
+            pois.forEach((p) => {
+                const row = document.createElement('div');
+                row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems = 'center'; row.style.padding = '8px'; row.style.borderBottom = '1px solid rgba(0,0,0,0.04)';
+                const left = document.createElement('div');
+                left.style.display = 'flex'; left.style.flexDirection = 'column';
+                const title = document.createElement('div'); title.textContent = p.name || p.id; title.style.fontWeight = '600';
+                const sub = document.createElement('div'); sub.textContent = `${p.coordinates[0].toFixed(6)}, ${p.coordinates[1].toFixed(6)}`; sub.style.fontSize = '12px'; sub.style.color = '#6b7280';
+                left.appendChild(title); left.appendChild(sub);
+                const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px';
+                const flyBtn = document.createElement('button'); flyBtn.textContent = 'Fly'; flyBtn.className = 'btn';
+                flyBtn.addEventListener('click', () => { map.flyTo({ center: p.coordinates, zoom: 18, essential: true }); poiWindow.style.display = 'none'; });
+                const remBtn = document.createElement('button'); remBtn.textContent = 'Remove'; remBtn.className = 'btn secondary';
+                remBtn.addEventListener('click', () => { pois = pois.filter(x => x.id !== p.id); try { refreshPoiSource(); renderPoiWindow(); } catch (e) {} });
+                actions.appendChild(flyBtn); actions.appendChild(remBtn);
+                row.appendChild(left); row.appendChild(actions);
+                poiList.appendChild(row);
+            });
+        } catch (e) { console.warn('renderPoiWindow failed', e); }
+    }
 
     addModelToLibBtn.addEventListener('click', () => {
         const url = (addModelUrlInput.value || '').trim();
@@ -889,6 +953,11 @@
             <input id="draw-text-size" type="number" min="8" max="48" value="12" style="width:70px;padding:6px;border-radius:6px;border:1px solid rgba(0,0,0,0.08)" />
             <input id="draw-text-size-range" type="range" min="8" max="48" value="12" style="flex:1" />
         </div>
+        <div style="margin-top:10px;font-size:13px;font-weight:600">Point of interest (POI)</div>
+        <div style="display:flex;gap:8px;margin-top:6px;align-items:center">
+            <input id="draw-poi-name" placeholder="POI name" style="flex:1;padding:6px;border-radius:6px;border:1px solid rgba(0,0,0,0.08)" />
+            <button id="draw-place-poi" class="btn">Place POI</button>
+        </div>
     `;
     document.body.appendChild(drawPanel);
 
@@ -902,6 +971,9 @@
     const drawTextSizeInput = drawPanel.querySelector('#draw-text-size');
     const drawTextSizeRange = drawPanel.querySelector('#draw-text-size-range');
     let selectedTextSize = Number((drawTextSizeInput && drawTextSizeInput.value) || 12);
+
+    const drawPoiInput = drawPanel.querySelector('#draw-poi-name');
+    const drawPlacePoiBtn = drawPanel.querySelector('#draw-place-poi');
 
     // available colors
     const PALETTE = ['#ff6a00','#1f8ef1','#16a34a','#ef4444','#8b5cf6','#f59e0b'];
@@ -1022,6 +1094,9 @@
     });
     // labeling state: when true, the next map click will place a point feature with properties.text
     let placingLabel = false;
+    // POIs managed via the draw UI
+    let placingPOI = false; // (defined earlier too) keep idempotent
+    let pois = []; // array of { id, name, coordinates }
     drawPlaceLabelBtn.addEventListener('click', () => {
         const txt = (drawLabelInput && drawLabelInput.value || '').trim();
         if (!txt) { alert('Enter label text first'); return; }
@@ -1030,6 +1105,17 @@
         // when entering label mode, ensure overlays are not blocking the map
         setOverlayBlocking(!placingLabel);
     });
+    // render POIs into the draw source as Point features with properties.poi = true
+    function refreshPoiSource() {
+        try {
+            // ensure draw source exists
+            ensureDrawSourceAndLayers();
+            const poiFeatures = pois.map(p => ({ type: 'Feature', geometry: { type: 'Point', coordinates: p.coordinates }, properties: { poi: true, name: p.name } }));
+            // merge existing drawnFeatures (lines/labels) with POIs when updating the draw-source
+            const all = drawnFeatures.concat(poiFeatures);
+            if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: all });
+        } catch (e) { console.warn('refreshPoiSource failed', e); }
+    }
 
     // text size controls: sync number and range inputs and apply to existing layer if present
     function applyTextSizeToLayer(size) {
@@ -1050,6 +1136,14 @@
         selectedTextSize = Number(e.target.value) || 12;
         if (drawTextSizeInput) drawTextSizeInput.value = selectedTextSize;
         applyTextSizeToLayer(selectedTextSize);
+    });
+    if (drawPlacePoiBtn) drawPlacePoiBtn.addEventListener('click', () => {
+        const name = (drawPoiInput && drawPoiInput.value || '').trim();
+        if (!name) { alert('Enter POI name'); return; }
+        placingPOI = !placingPOI;
+        drawPlacePoiBtn.textContent = placingPOI ? 'Cancel' : 'Place POI';
+        // when entering POI placement mode, ensure overlays are not blocking the map
+        setOverlayBlocking(!placingPOI);
     });
     drawFinish.addEventListener('click', () => {
         if (!currentDraw || !currentDraw.geometry || !currentDraw.geometry.coordinates.length) return;
@@ -2366,6 +2460,18 @@ map.on('click', async (e) => {
 
 // capture map clicks for drawing (separate listener so we can short-circuit drawing behavior)
 map.on('click', (e) => {
+    // POI placement takes highest priority when active
+    if (placingPOI) {
+        const name = (drawPoiInput && drawPoiInput.value) ? drawPoiInput.value.trim() : '';
+        const coords = [e.lngLat.lng, e.lngLat.lat];
+        const id = 'poi_' + Date.now();
+        pois.push({ id, name: name || ('POI ' + (pois.length + 1)), coordinates: coords });
+        placingPOI = false;
+        if (drawPlacePoiBtn) drawPlacePoiBtn.textContent = 'Place POI';
+        setOverlayBlocking(true);
+        try { refreshPoiSource(); renderSidebar(); } catch (err) { console.warn('Failed to save poi', err); }
+        return;
+    }
     // label placement takes priority if active
     if (placingLabel) {
     const coords = [e.lngLat.lng, e.lngLat.lat];
