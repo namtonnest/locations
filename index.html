@@ -611,7 +611,10 @@
             if (!showing) renderPoiWindow();
         });
     }
-    if (closePoiWindowBtn) closePoiWindowBtn.addEventListener('click', () => { poiWindow.style.display = 'none'; });
+        if (closePoiWindowBtn) closePoiWindowBtn.addEventListener('click', () => { 
+            poiWindow.style.display = 'none'; 
+            refreshPoiSource(); 
+        });
 
     function renderPoiWindow() {
         try {
@@ -626,11 +629,41 @@
                 const sub = document.createElement('div'); sub.textContent = `${p.coordinates[0].toFixed(6)}, ${p.coordinates[1].toFixed(6)}`; sub.style.fontSize = '12px'; sub.style.color = '#6b7280';
                 left.appendChild(title); left.appendChild(sub);
                 const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px';
-                const flyBtn = document.createElement('button'); flyBtn.textContent = 'Fly'; flyBtn.className = 'btn';
-                flyBtn.addEventListener('click', () => { map.flyTo({ center: p.coordinates, zoom: 18, essential: true }); poiWindow.style.display = 'none'; });
-                const remBtn = document.createElement('button'); remBtn.textContent = 'Remove'; remBtn.className = 'btn secondary';
-                remBtn.addEventListener('click', () => { pois = pois.filter(x => x.id !== p.id); try { refreshPoiSource(); renderPoiWindow(); } catch (e) {} });
-                actions.appendChild(flyBtn); actions.appendChild(remBtn);
+                    const flyBtn = document.createElement('button');
+                    flyBtn.textContent = 'Fly';
+                    flyBtn.className = 'btn';
+                    flyBtn.addEventListener('click', () => {
+                        map.flyTo({ center: p.coordinates, zoom: 18, essential: true });
+                        poiWindow.style.display = 'none';
+                    });
+                    const copyBtn = document.createElement('button');
+                    copyBtn.textContent = 'Copy';
+                    copyBtn.className = 'btn';
+                    copyBtn.addEventListener('click', async () => {
+                        try {
+                            const text = p.name || '';
+                            if (navigator.clipboard && navigator.clipboard.writeText) {
+                                await navigator.clipboard.writeText(text);
+                                copyBtn.textContent = 'Copied';
+                                setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1200);
+                            } else {
+                                try { window.prompt('Copy this text', text); } catch (e) {}
+                            }
+                        } catch (e) {
+                            try { window.prompt('Copy this text', p.name || ''); } catch (ee) {}
+                        }
+                    });
+                    const remBtn = document.createElement('button');
+                    remBtn.textContent = 'Remove';
+                    remBtn.className = 'btn secondary';
+                    remBtn.addEventListener('click', () => {
+                        pois = pois.filter(x => x.id !== p.id);
+                        try {
+                            refreshPoiSource();
+                            renderPoiWindow();
+                        } catch (e) {}
+                    });
+                actions.appendChild(flyBtn); actions.appendChild(copyBtn); actions.appendChild(remBtn);
                 row.appendChild(left); row.appendChild(actions);
                 poiList.appendChild(row);
             });
@@ -1110,7 +1143,13 @@
         try {
             // ensure draw source exists
             ensureDrawSourceAndLayers();
-            const poiFeatures = pois.map(p => ({ type: 'Feature', geometry: { type: 'Point', coordinates: p.coordinates }, properties: { poi: true, name: p.name } }));
+            // include text property so the draw-labels symbol layer will render the POI name
+            const poiFeatures = pois.map(p => ({
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: p.coordinates },
+                // include a per-feature size so POI labels appear larger than default
+                properties: { poi: true, name: p.name, text: p.name, color: '#ff6a00', size: 18 }
+            }));
             // merge existing drawnFeatures (lines/labels) with POIs when updating the draw-source
             const all = drawnFeatures.concat(poiFeatures);
             if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: all });
