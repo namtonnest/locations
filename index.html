@@ -94,23 +94,6 @@
     /* ensure thumbnails have a white background for better contrast */
     .lib-item img.thumb { background: #ffffff; }
 
-    /* POI window: styled like the model library so it's visible and scrollable */
-    #poi-window {
-        position: absolute;
-        left: 50%;
-        transform: translateX(-50%);
-        top: 120px;
-        z-index: 70;
-        background: rgba(255,255,255,0.98);
-        padding: 12px;
-        border-radius: 12px;
-        box-shadow: var(--shadow);
-        min-width: 320px;
-        max-height: 360px;
-        overflow: auto;
-        display: none;
-    }
-
     /* Model controls */
     #model-controls{position:absolute; right:18px; top:12px; z-index:12; background:rgba(255,255,255,0.98); padding:12px; border-radius:12px; box-shadow:var(--shadow); min-width:220px; pointer-events:auto}
     #model-controls label{display:block; font-size:13px; color:var(--ui-text)}
@@ -138,7 +121,7 @@
         #style-hamburger {
             position: fixed !important;
             top: 8px !important;
-            right: -100px !important; /* move 100px further to the right (off-edge) */
+            right: 0 !important; /* flush to the viewport right edge */
             margin: 0 !important;
             transform: none !important; /* opt out of parent scaling */
             z-index: 60;
@@ -214,7 +197,6 @@
                 <div style="display:flex;gap:8px;align-items:center">
                     <button id="open-library-btn" class="btn secondary">Models</button>
                     <button id="open-models-btn" class="btn secondary">Info</button>
-                    <button id="open-pois-btn" class="btn secondary">POIs</button>
                     <button id="share-btn" class="btn secondary">Share</button>
                 </div>
             </div>
@@ -248,14 +230,6 @@
     <div style="display:flex;gap:8px;margin-top:8px">
         <button id="add-model-to-lib" class="btn">Add</button>
         <button id="close-library" class="btn secondary">Close</button>
-    </div>
-</div>
-<!-- POI window -->
-<div id="poi-window" aria-hidden="true" style="display:none;">
-    <h4>Points of interest</h4>
-    <div id="poi-list"></div>
-    <div style="display:flex;gap:8px;margin-top:8px">
-        <button id="close-poi-window" class="btn secondary">Close</button>
     </div>
 </div>
 <script>
@@ -355,10 +329,6 @@
     const addModelUrlInput = document.getElementById('add-model-url');
     const addModelToLibBtn = document.getElementById('add-model-to-lib');
     const closeLibraryBtn = document.getElementById('close-library');
-    const openPoisBtn = document.getElementById('open-pois-btn');
-    const poiWindow = document.getElementById('poi-window');
-    const poiList = document.getElementById('poi-list');
-    const closePoiWindowBtn = document.getElementById('close-poi-window');
 
     // model library persistence key
     const LIB_KEY = 'model_library_v1';
@@ -603,73 +573,6 @@
 
     closeLibraryBtn.addEventListener('click', () => { libraryPanel.style.display = 'none'; });
 
-    // POI window wiring
-    if (openPoisBtn) {
-        openPoisBtn.addEventListener('click', () => {
-            const showing = poiWindow.style.display === 'block';
-            poiWindow.style.display = showing ? 'none' : 'block';
-            if (!showing) renderPoiWindow();
-        });
-    }
-        if (closePoiWindowBtn) closePoiWindowBtn.addEventListener('click', () => { 
-            poiWindow.style.display = 'none'; 
-            refreshPoiSource(); 
-        });
-
-    function renderPoiWindow() {
-        try {
-            poiList.innerHTML = '';
-            if (!pois || !pois.length) { poiList.textContent = 'No POIs added'; return; }
-            pois.forEach((p) => {
-                const row = document.createElement('div');
-                row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems = 'center'; row.style.padding = '8px'; row.style.borderBottom = '1px solid rgba(0,0,0,0.04)';
-                const left = document.createElement('div');
-                left.style.display = 'flex'; left.style.flexDirection = 'column';
-                const title = document.createElement('div'); title.textContent = p.name || p.id; title.style.fontWeight = '600';
-                const sub = document.createElement('div'); sub.textContent = `${p.coordinates[0].toFixed(6)}, ${p.coordinates[1].toFixed(6)}`; sub.style.fontSize = '12px'; sub.style.color = '#6b7280';
-                left.appendChild(title); left.appendChild(sub);
-                const actions = document.createElement('div'); actions.style.display = 'flex'; actions.style.gap = '8px';
-                    const flyBtn = document.createElement('button');
-                    flyBtn.textContent = 'Fly';
-                    flyBtn.className = 'btn';
-                    flyBtn.addEventListener('click', () => {
-                        map.flyTo({ center: p.coordinates, zoom: 18, essential: true });
-                        poiWindow.style.display = 'none';
-                    });
-                    const copyBtn = document.createElement('button');
-                    copyBtn.textContent = 'Copy';
-                    copyBtn.className = 'btn';
-                    copyBtn.addEventListener('click', async () => {
-                        try {
-                            const text = p.name || '';
-                            if (navigator.clipboard && navigator.clipboard.writeText) {
-                                await navigator.clipboard.writeText(text);
-                                copyBtn.textContent = 'Copied';
-                                setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1200);
-                            } else {
-                                try { window.prompt('Copy this text', text); } catch (e) {}
-                            }
-                        } catch (e) {
-                            try { window.prompt('Copy this text', p.name || ''); } catch (ee) {}
-                        }
-                    });
-                    const remBtn = document.createElement('button');
-                    remBtn.textContent = 'Remove';
-                    remBtn.className = 'btn secondary';
-                    remBtn.addEventListener('click', () => {
-                        pois = pois.filter(x => x.id !== p.id);
-                        try {
-                            refreshPoiSource();
-                            renderPoiWindow();
-                        } catch (e) {}
-                    });
-                actions.appendChild(flyBtn); actions.appendChild(copyBtn); actions.appendChild(remBtn);
-                row.appendChild(left); row.appendChild(actions);
-                poiList.appendChild(row);
-            });
-        } catch (e) { console.warn('renderPoiWindow failed', e); }
-    }
-
     addModelToLibBtn.addEventListener('click', () => {
         const url = (addModelUrlInput.value || '').trim();
         if (!url) return alert('Paste a GLB URL');
@@ -733,7 +636,8 @@
                         rotateZ: 0,
                         scale: mcScale * (opt.size || 1)
                     };
-                    const entry = { id, name: text, transform: Object.assign({}, transform), original: Object.assign({}, transform), meterScale: mcScale, object: mesh, url: null, geo: { lng: lngLat[0], lat: lngLat[1], alt: 0 } };
+                    // mark this entry as a 3D text model so it can be serialized/restored
+                    const entry = { id, name: text, text: text, type: '3dtext', transform: Object.assign({}, transform), original: Object.assign({}, transform), meterScale: mcScale, object: mesh, url: null, geo: { lng: lngLat[0], lat: lngLat[1], alt: 0 } };
                     // keep the mesh at origin; the layer render will position it via transform
                     mesh.position.set(0, 0, 0);
                     mesh.scale.set(1, 1, 1);
@@ -986,11 +890,6 @@
             <input id="draw-text-size" type="number" min="8" max="48" value="12" style="width:70px;padding:6px;border-radius:6px;border:1px solid rgba(0,0,0,0.08)" />
             <input id="draw-text-size-range" type="range" min="8" max="48" value="12" style="flex:1" />
         </div>
-        <div style="margin-top:10px;font-size:13px;font-weight:600">Point of interest (POI)</div>
-        <div style="display:flex;gap:8px;margin-top:6px;align-items:center">
-            <input id="draw-poi-name" placeholder="POI name" style="flex:1;padding:6px;border-radius:6px;border:1px solid rgba(0,0,0,0.08)" />
-            <button id="draw-place-poi" class="btn">Place POI</button>
-        </div>
     `;
     document.body.appendChild(drawPanel);
 
@@ -1004,9 +903,6 @@
     const drawTextSizeInput = drawPanel.querySelector('#draw-text-size');
     const drawTextSizeRange = drawPanel.querySelector('#draw-text-size-range');
     let selectedTextSize = Number((drawTextSizeInput && drawTextSizeInput.value) || 12);
-
-    const drawPoiInput = drawPanel.querySelector('#draw-poi-name');
-    const drawPlacePoiBtn = drawPanel.querySelector('#draw-place-poi');
 
     // available colors
     const PALETTE = ['#ff6a00','#1f8ef1','#16a34a','#ef4444','#8b5cf6','#f59e0b'];
@@ -1127,9 +1023,6 @@
     });
     // labeling state: when true, the next map click will place a point feature with properties.text
     let placingLabel = false;
-    // POIs managed via the draw UI
-    let placingPOI = false; // (defined earlier too) keep idempotent
-    let pois = []; // array of { id, name, coordinates }
     drawPlaceLabelBtn.addEventListener('click', () => {
         const txt = (drawLabelInput && drawLabelInput.value || '').trim();
         if (!txt) { alert('Enter label text first'); return; }
@@ -1138,23 +1031,6 @@
         // when entering label mode, ensure overlays are not blocking the map
         setOverlayBlocking(!placingLabel);
     });
-    // render POIs into the draw source as Point features with properties.poi = true
-    function refreshPoiSource() {
-        try {
-            // ensure draw source exists
-            ensureDrawSourceAndLayers();
-            // include text property so the draw-labels symbol layer will render the POI name
-            const poiFeatures = pois.map(p => ({
-                type: 'Feature',
-                geometry: { type: 'Point', coordinates: p.coordinates },
-                // include a per-feature size so POI labels appear larger than default
-                properties: { poi: true, name: p.name, text: p.name, color: '#ff6a00', size: 18 }
-            }));
-            // merge existing drawnFeatures (lines/labels) with POIs when updating the draw-source
-            const all = drawnFeatures.concat(poiFeatures);
-            if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: all });
-        } catch (e) { console.warn('refreshPoiSource failed', e); }
-    }
 
     // text size controls: sync number and range inputs and apply to existing layer if present
     function applyTextSizeToLayer(size) {
@@ -1175,14 +1051,6 @@
         selectedTextSize = Number(e.target.value) || 12;
         if (drawTextSizeInput) drawTextSizeInput.value = selectedTextSize;
         applyTextSizeToLayer(selectedTextSize);
-    });
-    if (drawPlacePoiBtn) drawPlacePoiBtn.addEventListener('click', () => {
-        const name = (drawPoiInput && drawPoiInput.value || '').trim();
-        if (!name) { alert('Enter POI name'); return; }
-        placingPOI = !placingPOI;
-        drawPlacePoiBtn.textContent = placingPOI ? 'Cancel' : 'Place POI';
-        // when entering POI placement mode, ensure overlays are not blocking the map
-        setOverlayBlocking(!placingPOI);
     });
     drawFinish.addEventListener('click', () => {
         if (!currentDraw || !currentDraw.geometry || !currentDraw.geometry.coordinates.length) return;
@@ -1418,19 +1286,38 @@
 
     // --- Serialize placed models ---
     function serializePlacedModels() {
-        return placedModels.map(p => ({
-            id: p.id,
-            url: p.url || defaultModelUrl,
-            name: p.name,
-            transform: Object.assign({}, p.transform),
-            original: Object.assign({}, p.original),
-            meterScale: p.meterScale,
-            geo: p.geo ? { lng: p.geo.lng, lat: p.geo.lat, alt: p.geo.alt } : null,
-            animated: !!p.animated,
-            spinSpeed: (p.spinSpeed || 0.2),
-            originalGeoLat: p.originalGeoLat,
-            originalGeoLng: p.originalGeoLng
-        }));
+        return placedModels.map(p => {
+            // For 3D text entries, serialize the text and type instead of url
+            if (p.type === '3dtext') {
+                return {
+                    id: p.id,
+                    type: '3dtext',
+                    text: p.text || p.name,
+                    name: p.name,
+                    transform: Object.assign({}, p.transform),
+                    original: Object.assign({}, p.original),
+                    meterScale: p.meterScale,
+                    geo: p.geo ? { lng: p.geo.lng, lat: p.geo.lat, alt: p.geo.alt } : null,
+                    animated: !!p.animated,
+                    spinSpeed: (p.spinSpeed || 0.2),
+                    originalGeoLat: p.originalGeoLat,
+                    originalGeoLng: p.originalGeoLng
+                };
+            }
+            return {
+                id: p.id,
+                url: p.url || defaultModelUrl,
+                name: p.name,
+                transform: Object.assign({}, p.transform),
+                original: Object.assign({}, p.original),
+                meterScale: p.meterScale,
+                geo: p.geo ? { lng: p.geo.lng, lat: p.geo.lat, alt: p.geo.alt } : null,
+                animated: !!p.animated,
+                spinSpeed: (p.spinSpeed || 0.2),
+                originalGeoLat: p.originalGeoLat,
+                originalGeoLng: p.originalGeoLng
+            };
+        });
     }
     // helper to restore parsed state object (used by URL restore)
     function restoreSavedState(parsed) {
@@ -1443,12 +1330,34 @@
             placedModels.slice().forEach(p => removeModel(p.id));
             // restore saved models
                 (parsed.models || []).forEach(m => {
-                    const url = (m.url && m.url.length) ? m.url : defaultModelUrl;
-                    const transform = Object.assign({}, m.transform);
-                    // include animated flag in transform so loadModel can pick it up
-                    if (m.animated) transform.animated = true;
-                    const geo = m.geo ? [m.geo.lng, m.geo.lat, m.geo.alt || 0] : null;
-                    if (modelLayerRef && modelLayerRef.loadModel) modelLayerRef.loadModel(encodeURI(url), transform, geo, m.id, m.name);
+                    // prepare a normalized item for restore
+                    const item = Object.assign({}, m);
+                    // If the custom layer is ready, restore immediately; otherwise queue it
+                    if (item.type === '3dtext') {
+                        if (modelLayerRef && modelLayerRef.load3DText) {
+                            try {
+                                const transform = Object.assign({}, item.transform);
+                                if (item.animated) transform.animated = true;
+                                const geo = item.geo ? [item.geo.lng, item.geo.lat, item.geo.alt || 0] : null;
+                                modelLayerRef.load3DText(item.text || item.name || 'Text', transform, geo, item.id, item.name);
+                            } catch (e) { console.warn('Failed to restore 3dtext immediately', e); }
+                        } else {
+                            _restoreQueue.push(item);
+                        }
+                        return;
+                    }
+                    // regular model entry
+                    if (modelLayerRef && modelLayerRef.loadModel) {
+                        try {
+                            const url = (item.url && item.url.length) ? item.url : defaultModelUrl;
+                            const transform = Object.assign({}, item.transform);
+                            if (item.animated) transform.animated = true;
+                            const geo = item.geo ? [item.geo.lng, item.geo.lat, item.geo.alt || 0] : null;
+                            modelLayerRef.loadModel(encodeURI(url), transform, geo, item.id, item.name);
+                        } catch (e) { console.warn('Failed to restore model immediately', e); }
+                    } else {
+                        _restoreQueue.push(item);
+                    }
                 });
             // restore drawn features if present in shared state
             try {
@@ -1688,6 +1597,23 @@
 
     // variables used by the custom three.js layer
     let modelLayerRef = null; // set in onAdd
+    // queue for restoring models when the custom layer isn't ready yet
+    const _restoreQueue = [];
+
+    function processRestoreQueue() {
+        if (!modelLayerRef) return;
+        while (_restoreQueue.length) {
+            const item = _restoreQueue.shift();
+            try {
+                if (item.type === '3dtext' && modelLayerRef.load3DText) {
+                    modelLayerRef.load3DText(item.text || item.name || 'Text', Object.assign({}, item.transform), item.geo ? [item.geo.lng, item.geo.lat, item.geo.alt || 0] : null, item.id, item.name);
+                } else if (modelLayerRef.loadModel) {
+                    const url = (item.url && item.url.length) ? item.url : defaultModelUrl;
+                    modelLayerRef.loadModel(encodeURI(url), Object.assign({}, item.transform), item.geo ? [item.geo.lng, item.geo.lat, item.geo.alt || 0] : null, item.id, item.name);
+                }
+            } catch (e) { console.warn('processRestoreQueue item failed', e); }
+        }
+    }
 
     // create the custom layer (empty scene initially)
     const customLayer = {
@@ -1724,6 +1650,45 @@
 
             // expose ref so outer code can call loadModel
             modelLayerRef = this;
+            // process any queued restore items now that the layer is ready
+            try { processRestoreQueue(); } catch (e) { console.warn('processRestoreQueue failed on onAdd', e); }
+
+            // helper to create a 3D text entry (used when restoring serialized state)
+            this.load3DText = (text, transform, geo, preferredId, preferredName) => {
+                try {
+                    const loader = new THREE.FontLoader();
+                    const id = preferredId || ('text_' + Date.now());
+                    loader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', (font) => {
+                        const geom = new THREE.TextGeometry(text, { font, size: 1, height: 0.3, curveSegments: 8 });
+                        geom.computeBoundingBox();
+                        geom.center();
+                        const mat = new THREE.MeshBasicMaterial({ color: 0xff6a00 });
+                        const mesh = new THREE.Mesh(geom, mat);
+                        mesh.position.set(0,0,0);
+                        mesh.scale.set(1,1,1);
+                        const entry = {
+                            id,
+                            name: preferredName || text,
+                            text: text,
+                            type: '3dtext',
+                            transform: Object.assign({}, transform),
+                            original: Object.assign({}, transform),
+                            meterScale: transform.scale,
+                            object: mesh,
+                            animated: !!transform.animated,
+                            spinSpeed: transform.spinSpeed || 0.2,
+                            url: null,
+                            geo: geo ? { lng: geo[0], lat: geo[1], alt: geo[2] || 0 } : null,
+                            originalGeoLat: geo ? geo[1] : null,
+                            originalGeoLng: geo ? geo[0] : null
+                        };
+                        placedModels.push(entry);
+                        this.scene.add(mesh);
+                        renderSidebar();
+                    }, undefined, (err) => { console.warn('Font load failed for load3DText', err); });
+                    return id;
+                } catch (e) { console.warn('load3DText failed', e); }
+            };
 
             // helper to load a GLTF into the scene without clearing previous models
             // accepts (url, transform) and returns an id for the placed model
@@ -2499,18 +2464,6 @@ map.on('click', async (e) => {
 
 // capture map clicks for drawing (separate listener so we can short-circuit drawing behavior)
 map.on('click', (e) => {
-    // POI placement takes highest priority when active
-    if (placingPOI) {
-        const name = (drawPoiInput && drawPoiInput.value) ? drawPoiInput.value.trim() : '';
-        const coords = [e.lngLat.lng, e.lngLat.lat];
-        const id = 'poi_' + Date.now();
-        pois.push({ id, name: name || ('POI ' + (pois.length + 1)), coordinates: coords });
-        placingPOI = false;
-        if (drawPlacePoiBtn) drawPlacePoiBtn.textContent = 'Place POI';
-        setOverlayBlocking(true);
-        try { refreshPoiSource(); renderSidebar(); } catch (err) { console.warn('Failed to save poi', err); }
-        return;
-    }
     // label placement takes priority if active
     if (placingLabel) {
     const coords = [e.lngLat.lng, e.lngLat.lat];
