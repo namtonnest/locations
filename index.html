@@ -941,10 +941,19 @@
                 map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
             }
             if (!map.getLayer('draw-lines')) {
-                map.addLayer({ id: 'draw-lines', type: 'line', source: 'draw-source', paint: { 'line-color': ['coalesce', ['get', 'color'], '#ff6a00'], 'line-width': 4 } });
+                // only render LineString features with the line layer
+                map.addLayer({ id: 'draw-lines', type: 'line', source: 'draw-source', paint: { 'line-color': ['coalesce', ['get', 'color'], '#ff6a00'], 'line-width': 4 }, filter: ['==', '$type', 'LineString'] });
             }
             if (!map.getLayer('draw-points')) {
                 map.addLayer({ id: 'draw-points', type: 'circle', source: 'draw-source', paint: { 'circle-radius': 6, 'circle-color': ['coalesce', ['get', 'color'], '#ff6a00'] }, filter: ['==', '$type', 'Point'] });
+            }
+            // polygon fills (interiors)
+            if (!map.getLayer('draw-fills')) {
+                map.addLayer({ id: 'draw-fills', type: 'fill', source: 'draw-source', paint: { 'fill-color': ['coalesce', ['get', 'color'], '#ff6a00'], 'fill-opacity': 0.18 }, filter: ['==', '$type', 'Polygon'] });
+            }
+            // polygon outlines
+            if (!map.getLayer('draw-polygon-outlines')) {
+                map.addLayer({ id: 'draw-polygon-outlines', type: 'line', source: 'draw-source', paint: { 'line-color': ['coalesce', ['get', 'color'], '#ff6a00'], 'line-width': 2 }, filter: ['==', '$type', 'Polygon'] });
             }
             if (!map.getLayer('draw-labels')) {
                 // symbol layer to render point labels (use properties.text and properties.color)
@@ -997,11 +1006,20 @@
         drawPanel.style.display = showing ? 'none' : 'block';
     });
 
-    drawToggle.addEventListener('click', () => {
+    // toggle between drawing mode and polygon mode by holding Alt (or use click to toggle polygon mode)
+    let polygonMode = false; // false = LineString, true = Polygon
+    drawToggle.addEventListener('click', (ev) => {
+        // Shift+click toggles polygon mode
+        if (ev && ev.shiftKey) {
+            polygonMode = !polygonMode;
+            drawToggle.textContent = polygonMode ? 'Polygon' : 'Draw';
+            return;
+        }
+        // short click toggles drawing; Shift+click toggles polygon mode
         drawing = !drawing;
-        drawToggle.textContent = drawing ? 'Drawing...' : 'Draw';
+        drawToggle.textContent = drawing ? (polygonMode ? 'Drawing polygon...' : 'Drawing...') : (polygonMode ? 'Polygon' : 'Draw');
         if (drawing) {
-            currentDraw = { type: 'Feature', geometry: { type: 'LineString', coordinates: [] }, properties: { color: selectedDrawColor } };
+            currentDraw = { type: 'Feature', geometry: { type: polygonMode ? 'Polygon' : 'LineString', coordinates: polygonMode ? [[]] : [] }, properties: { color: selectedDrawColor } };
             // disable map interactions while drawing so clicks place points
             try { if (map.dragPan) map.dragPan.disable(); } catch (e) {}
             try { if (map.scrollZoom) map.scrollZoom.disable(); } catch (e) {}
@@ -1009,7 +1027,7 @@
             try { if (map.touchZoomRotate) map.touchZoomRotate.disable(); } catch (e) {}
             try { if (map.boxZoom) map.boxZoom.disable(); } catch (e) {}
             try { const c = map.getCanvas && map.getCanvas(); if (c) c.style.cursor = 'crosshair'; } catch (e) {}
-        } else {
+    } else {
             currentDraw = null;
             // re-enable interactions
             try { if (map.dragPan) map.dragPan.enable(); } catch (e) {}
@@ -1019,7 +1037,7 @@
             try { if (map.boxZoom) map.boxZoom.enable(); } catch (e) {}
             try { const c = map.getCanvas && map.getCanvas(); if (c) c.style.cursor = ''; } catch (e) {}
         }
-        ensureDrawSourceAndLayers();
+    ensureDrawSourceAndLayers();
     });
     // labeling state: when true, the next map click will place a point feature with properties.text
     let placingLabel = false;
@@ -1053,7 +1071,23 @@
         applyTextSizeToLayer(selectedTextSize);
     });
     drawFinish.addEventListener('click', () => {
-        if (!currentDraw || !currentDraw.geometry || !currentDraw.geometry.coordinates.length) return;
+        if (!currentDraw || !currentDraw.geometry) return;
+        // for Polygon mode, ensure ring is closed and coordinates exist
+        if (currentDraw.geometry.type === 'Polygon') {
+            const rings = currentDraw.geometry.coordinates;
+            if (!rings || !rings.length || !rings[0].length) return;
+            const ring = rings[0];
+            // close the ring
+            if (ring.length >= 3) {
+                const first = ring[0];
+                const last = ring[ring.length - 1];
+                if (first[0] !== last[0] || first[1] !== last[1]) ring.push(first.slice());
+            } else {
+                return; // not enough points for polygon
+            }
+        } else {
+            if (!currentDraw.geometry.coordinates || !currentDraw.geometry.coordinates.length) return;
+        }
         // ensure color property on finished feature
         currentDraw.properties = currentDraw.properties || {};
         currentDraw.properties.color = currentDraw.properties.color || selectedDrawColor;
@@ -1363,12 +1397,44 @@
             try {
                 if (parsed.draws && Array.isArray(parsed.draws)) {
                     drawnFeatures = parsed.draws.slice();
-                    try { ensureDrawSourceAndLayers(); } catch (e) {}
-                    try { if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures }); } catch (e) {}
+                    // Ensure the draw source and layers exist; if style isn't loaded yet, wait for it
+                    try {
+                        const applyDraws = () => {
+                            try { ensureDrawSourceAndLayers(); } catch (e) { console.warn('ensureDrawSourceAndLayers failed', e); }
+                            try {
+                                if (map.getSource && map.getSource('draw-source')) {
+                                    map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
+                                }
+                            } catch (e) { console.warn('Failed to set draw-source data', e); }
+                            try { console.debug && console.debug('applyDraws: drawnFeatures count', drawnFeatures && drawnFeatures.length, 'layers:', !!map.getLayer && !!map.getLayer('draw-labels'), !!map.getLayer && !!map.getLayer('draw-lines')); } catch (e) {}
+                            try { refreshDrawSource(); } catch (e) {}
+                            try { if (map && map.triggerRepaint) map.triggerRepaint(); } catch (e) {}
+                        };
+                        if (typeof map.isStyleLoaded === 'function' && !map.isStyleLoaded()) {
+                            console.debug && console.debug('restoreSavedState: style not loaded, waiting for style.load to apply draws');
+                            map.once('style.load', applyDraws);
+                        } else {
+                            console.debug && console.debug('restoreSavedState: applying draws immediately');
+                            applyDraws();
+                        }
+                    } catch (e) { console.warn('Failed to apply drawnFeatures after restore', e); }
                 }
             } catch (e) { console.warn('Failed to restore draws from shared state', e); }
             try { applyTextSizeToLayer && applyTextSizeToLayer(selectedTextSize); } catch (e) {}
             renderSidebar();
+            // Extra safety: schedule a delayed re-apply of drawn features to mitigate any timing races
+            try {
+                setTimeout(() => {
+                    try {
+                        if (parsed && parsed.draws && Array.isArray(parsed.draws)) {
+                            try { ensureDrawSourceAndLayers(); } catch (e) {}
+                            try { if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: parsed.draws }); } catch (e) {}
+                            try { refreshDrawSource(); } catch (e) {}
+                            try { if (map && map.triggerRepaint) map.triggerRepaint(); } catch (e) {}
+                        }
+                    } catch (e) { /* ignore */ }
+                }, 350);
+            } catch (e) {}
         } catch (e) { console.warn('Failed to restore parsed state', e); }
     }
 
@@ -1379,12 +1445,14 @@
                 const payload = { mapCenter: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), models: data, draws: drawnFeatures };
                 if (BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
                     // POST to backend which returns { id: '8char' }
+                    try { console.debug('Sharing payload', { models: data, draws: drawnFeatures && drawnFeatures.length }); } catch (e) {}
                     const res = await fetch(BACKEND_STATE_ENDPOINT, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ state: payload })
                     });
                     if (!res.ok) throw new Error('Backend save failed: ' + res.status);
                     const j = await res.json();
+                    try { console.debug('Backend save response', j); } catch (e) {}
                     const id = j && j.id;
                     if (!id) throw new Error('Invalid response from backend');
                     const url = location.origin + location.pathname + '?state_id=' + encodeURIComponent(id);
@@ -1445,6 +1513,7 @@
                         const res = await fetch(BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id));
                         if (!res.ok) { console.warn('Failed to load state id', id); return; }
                         const j = await res.json();
+                        try { console.debug('Loaded saved state from backend', j); } catch (e) {}
                         if (j && j.state) restoreSavedState(j.state);
                     } catch (e) { console.warn('Failed to load state from backend', e); }
                 }, 500);
@@ -1605,12 +1674,20 @@
         while (_restoreQueue.length) {
             const item = _restoreQueue.shift();
             try {
+                console.debug && console.debug('processRestoreQueue: restoring item', item && (item.id || item.name || item.type));
                 if (item.type === '3dtext' && modelLayerRef.load3DText) {
                     modelLayerRef.load3DText(item.text || item.name || 'Text', Object.assign({}, item.transform), item.geo ? [item.geo.lng, item.geo.lat, item.geo.alt || 0] : null, item.id, item.name);
                 } else if (modelLayerRef.loadModel) {
                     const url = (item.url && item.url.length) ? item.url : defaultModelUrl;
                     modelLayerRef.loadModel(encodeURI(url), Object.assign({}, item.transform), item.geo ? [item.geo.lng, item.geo.lat, item.geo.alt || 0] : null, item.id, item.name);
                 }
+                // After requesting load, also ensure drawn features are applied so symbols/lines appear
+                try {
+                    ensureDrawSourceAndLayers();
+                    if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
+                    try { refreshDrawSource(); } catch (e) {}
+                    try { if (map && map.triggerRepaint) map.triggerRepaint(); } catch (e) {}
+                } catch (e) { console.warn('Failed to re-apply draws during restore queue', e); }
             } catch (e) { console.warn('processRestoreQueue item failed', e); }
         }
     }
@@ -1684,7 +1761,8 @@
                         };
                         placedModels.push(entry);
                         this.scene.add(mesh);
-                        renderSidebar();
+                        try { renderSidebar(); } catch (e) {}
+                        try { if (this.map && this.map.triggerRepaint) this.map.triggerRepaint(); } catch (e) {}
                     }, undefined, (err) => { console.warn('Font load failed for load3DText', err); });
                     return id;
                 } catch (e) { console.warn('load3DText failed', e); }
@@ -1763,7 +1841,8 @@
                         }
                         entry.object = gltf.scene;
                         this.scene.add(gltf.scene);
-                        renderSidebar();
+                        try { renderSidebar(); } catch (e) {}
+                        try { if (this.map && this.map.triggerRepaint) this.map.triggerRepaint(); } catch (e) {}
                     },
                     undefined,
                     (err) => {
@@ -2481,9 +2560,24 @@ map.on('click', (e) => {
     // add point to current draw (lng,lat)
     const coords = [e.lngLat.lng, e.lngLat.lat];
     if (!currentDraw) {
+        // default to LineString if not explicitly set
         currentDraw = { type: 'Feature', geometry: { type: 'LineString', coordinates: [coords] }, properties: { color: selectedDrawColor } };
     } else {
-        currentDraw.geometry.coordinates.push(coords);
+        try {
+            const g = currentDraw.geometry;
+            if (g && g.type === 'Polygon') {
+                // ensure ring exists
+                if (!Array.isArray(g.coordinates) || !Array.isArray(g.coordinates[0])) g.coordinates = [[]];
+                g.coordinates[0].push(coords);
+            } else if (g && g.type === 'LineString') {
+                if (!Array.isArray(g.coordinates)) g.coordinates = [];
+                g.coordinates.push(coords);
+            } else {
+                // fallback
+                if (!Array.isArray(currentDraw.geometry.coordinates)) currentDraw.geometry.coordinates = [];
+                currentDraw.geometry.coordinates.push(coords);
+            }
+        } catch (e) { console.warn('Failed to append draw point', e); }
     }
     // update preview in drawnFeatures (not persisted until finish)
     // create a shallow preview: combine drawnFeatures + currentDraw
