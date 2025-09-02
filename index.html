@@ -988,6 +988,21 @@
         } catch (e) {}
     }
 
+    // Force a quick visibility toggle on draw layers to nudge Mapbox to re-render them.
+    function nudgeDrawLayers() {
+        try {
+            const ids = ['draw-labels','draw-fills','draw-lines','draw-polygon-outlines','draw-points'];
+            ids.forEach(id => {
+                try {
+                    if (map && map.getLayer && map.getLayer(id)) {
+                        try { map.setLayoutProperty(id, 'visibility', 'none'); } catch (e) {}
+                        setTimeout(() => { try { map.setLayoutProperty(id, 'visibility', 'visible'); } catch (e) {} }, 80);
+                    }
+                } catch (e) {}
+            });
+        } catch (e) { }
+    }
+
     // wire toolbar buttons
     // launcher toggles the panel
     drawLauncher.addEventListener('click', () => {
@@ -1409,6 +1424,7 @@
                             try { console.debug && console.debug('applyDraws: drawnFeatures count', drawnFeatures && drawnFeatures.length, 'layers:', !!map.getLayer && !!map.getLayer('draw-labels'), !!map.getLayer && !!map.getLayer('draw-lines')); } catch (e) {}
                             try { refreshDrawSource(); } catch (e) {}
                             try { if (map && map.triggerRepaint) map.triggerRepaint(); } catch (e) {}
+                            try { nudgeDrawLayers(); } catch (e) {}
                         };
                         if (typeof map.isStyleLoaded === 'function' && !map.isStyleLoaded()) {
                             console.debug && console.debug('restoreSavedState: style not loaded, waiting for style.load to apply draws');
@@ -1687,6 +1703,7 @@
                     if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
                     try { refreshDrawSource(); } catch (e) {}
                     try { if (map && map.triggerRepaint) map.triggerRepaint(); } catch (e) {}
+                    try { nudgeDrawLayers(); } catch (e) {}
                 } catch (e) { console.warn('Failed to re-apply draws during restore queue', e); }
             } catch (e) { console.warn('processRestoreQueue item failed', e); }
         }
@@ -1763,6 +1780,7 @@
                         this.scene.add(mesh);
                         try { renderSidebar(); } catch (e) {}
                         try { if (this.map && this.map.triggerRepaint) this.map.triggerRepaint(); } catch (e) {}
+                        try { nudgeDrawLayers(); } catch (e) {}
                     }, undefined, (err) => { console.warn('Font load failed for load3DText', err); });
                     return id;
                 } catch (e) { console.warn('load3DText failed', e); }
@@ -1843,6 +1861,7 @@
                         this.scene.add(gltf.scene);
                         try { renderSidebar(); } catch (e) {}
                         try { if (this.map && this.map.triggerRepaint) this.map.triggerRepaint(); } catch (e) {}
+                        try { nudgeDrawLayers(); } catch (e) {}
                     },
                     undefined,
                     (err) => {
