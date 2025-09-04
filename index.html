@@ -1461,7 +1461,7 @@
                 const payload = { mapCenter: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), models: data, draws: drawnFeatures };
                 if (BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
                     // POST to backend which returns { id: '8char' }
-                    try { console.debug('Sharing payload', { models: data, draws: drawnFeatures && drawnFeatures.length }); } catch (e) {}
+                    try { console.debug('Sharing payload FULL', payload); } catch (e) {}
                     const res = await fetch(BACKEND_STATE_ENDPOINT, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ state: payload })
