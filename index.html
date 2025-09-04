@@ -1,3 +1,64 @@
+    // Debug UI: fetch and display saved state from backend by share id
+    function showBackendStateViewer() {
+        const container = document.createElement('div');
+        container.style.position = 'fixed';
+        container.style.bottom = '16px';
+        container.style.right = '16px';
+        container.style.background = 'white';
+        container.style.border = '1px solid #ccc';
+        container.style.padding = '12px';
+        container.style.zIndex = '9999';
+        container.style.fontSize = '13px';
+        container.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+        container.innerHTML = '<b>Backend State Viewer</b><br><input id="stateIdInput" placeholder="Share ID" style="width:120px;margin-right:8px;"><button id="fetchStateBtn">Fetch</button><br><pre id="stateJson" style="max-width:400px;max-height:200px;overflow:auto;background:#f6f6f6;margin-top:8px;"></pre>';
+        document.body.appendChild(container);
+        container.querySelector('#fetchStateBtn').onclick = async () => {
+            const id = container.querySelector('#stateIdInput').value.trim();
+            if (!id) return;
+            const url = BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id);
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('Failed to fetch: ' + res.status);
+                const j = await res.json();
+                container.querySelector('#stateJson').textContent = JSON.stringify(j, null, 2);
+            } catch (e) {
+                container.querySelector('#stateJson').textContent = 'Error: ' + e;
+            }
+        };
+    }
+    // Add the debug button to the page
+    window.addEventListener('DOMContentLoaded', () => {
+        const btn = document.createElement('button');
+        btn.textContent = 'Show Backend State Viewer';
+        btn.style.position = 'fixed';
+        btn.style.bottom = '16px';
+        btn.style.right = '180px';
+        btn.style.zIndex = '9999';
+        btn.style.background = '#f59e0b';
+        btn.style.color = 'white';
+        btn.style.border = 'none';
+        btn.style.borderRadius = '6px';
+        btn.style.padding = '8px 12px';
+        btn.style.fontSize = '13px';
+        btn.onclick = showBackendStateViewer;
+        document.body.appendChild(btn);
+    });
+    // Repeatedly nudge and re-apply draw layers to guarantee visibility after restore
+    function forceDrawVisibility(attempts = 3, delay = 200) {
+        let count = 0;
+        function tryNudge() {
+            try {
+                ensureDrawSourceAndLayers();
+                if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
+                refreshDrawSource();
+                if (map && map.triggerRepaint) map.triggerRepaint();
+                nudgeDrawLayers();
+            } catch (e) {}
+            count++;
+            if (count < attempts) setTimeout(tryNudge, delay);
+        }
+        tryNudge();
+    }
 <!DOCTYPE html>
 <html>
 <head>
@@ -1438,19 +1499,8 @@
             } catch (e) { console.warn('Failed to restore draws from shared state', e); }
             try { applyTextSizeToLayer && applyTextSizeToLayer(selectedTextSize); } catch (e) {}
             renderSidebar();
-            // Extra safety: schedule a delayed re-apply of drawn features to mitigate any timing races
-            try {
-                setTimeout(() => {
-                    try {
-                        if (parsed && parsed.draws && Array.isArray(parsed.draws)) {
-                            try { ensureDrawSourceAndLayers(); } catch (e) {}
-                            try { if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: parsed.draws }); } catch (e) {}
-                            try { refreshDrawSource(); } catch (e) {}
-                            try { if (map && map.triggerRepaint) map.triggerRepaint(); } catch (e) {}
-                        }
-                    } catch (e) { /* ignore */ }
-                }, 350);
-            } catch (e) {}
+            // Extra safety: repeatedly nudge and re-apply draw layers after restore
+            try { forceDrawVisibility(3, 220); } catch (e) {}
         } catch (e) { console.warn('Failed to restore parsed state', e); }
     }
 
