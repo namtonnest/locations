@@ -939,6 +939,7 @@
             <button id="draw-clear" class="btn secondary">Clear</button>
             <button id="draw-save" class="btn">Save</button>
         </div>
+        <button id="draw-refresh" class="btn" style="background:#f59e0b;color:white;border-radius:6px;padding:6px 12px;font-size:13px;margin-bottom:6px;width:100%">Refresh Draw Models</button>
         <div style="margin-top:6px;font-size:13px;font-weight:600">Color</div>
         <div id="draw-colors" style="display:flex;gap:8px;margin-top:6px"></div>
         <div style="margin-top:10px;font-size:13px;font-weight:600">Label</div>
@@ -963,6 +964,16 @@
     const drawPlaceLabelBtn = drawPanel.querySelector('#draw-place-label');
     const drawTextSizeInput = drawPanel.querySelector('#draw-text-size');
     const drawTextSizeRange = drawPanel.querySelector('#draw-text-size-range');
+    const drawRefreshBtn = drawPanel.querySelector('#draw-refresh');
+    if (drawRefreshBtn) drawRefreshBtn.addEventListener('click', () => {
+        try {
+            ensureDrawSourceAndLayers();
+            if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
+            refreshDrawSource();
+            if (map && map.triggerRepaint) map.triggerRepaint();
+            nudgeDrawLayers();
+        } catch (e) { alert('Failed to refresh draw models: ' + e); }
+    });
     let selectedTextSize = Number((drawTextSizeInput && drawTextSizeInput.value) || 12);
 
     // available colors
