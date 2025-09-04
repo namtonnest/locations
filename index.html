@@ -1484,28 +1484,26 @@
             try {
                 if (parsed.draws && Array.isArray(parsed.draws)) {
                     drawnFeatures = parsed.draws.slice();
-                    // Ensure the draw source and layers exist; if style isn't loaded yet, wait for it
-                    try {
-                        const applyDraws = () => {
-                            try { ensureDrawSourceAndLayers(); } catch (e) { console.warn('ensureDrawSourceAndLayers failed', e); }
-                            try {
-                                if (map.getSource && map.getSource('draw-source')) {
-                                    map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
-                                }
-                            } catch (e) { console.warn('Failed to set draw-source data', e); }
-                            try { console.debug && console.debug('applyDraws: drawnFeatures count', drawnFeatures && drawnFeatures.length, 'layers:', !!map.getLayer && !!map.getLayer('draw-labels'), !!map.getLayer && !!map.getLayer('draw-lines')); } catch (e) {}
-                            try { refreshDrawSource(); } catch (e) {}
-                            try { if (map && map.triggerRepaint) map.triggerRepaint(); } catch (e) {}
-                            try { nudgeDrawLayers(); } catch (e) {}
-                        };
-                        if (typeof map.isStyleLoaded === 'function' && !map.isStyleLoaded()) {
-                            console.debug && console.debug('restoreSavedState: style not loaded, waiting for style.load to apply draws');
-                            map.once('style.load', applyDraws);
-                        } else {
-                            console.debug && console.debug('restoreSavedState: applying draws immediately');
-                            applyDraws();
-                        }
-                    } catch (e) { console.warn('Failed to apply drawnFeatures after restore', e); }
+                    // Always apply draw features immediately, regardless of draw tool state
+                    const applyDraws = () => {
+                        try { ensureDrawSourceAndLayers(); } catch (e) { console.warn('ensureDrawSourceAndLayers failed', e); }
+                        try {
+                            if (map.getSource && map.getSource('draw-source')) {
+                                map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
+                            }
+                        } catch (e) { console.warn('Failed to set draw-source data', e); }
+                        try { console.debug && console.debug('applyDraws: drawnFeatures count', drawnFeatures && drawnFeatures.length, 'layers:', !!map.getLayer && !!map.getLayer('draw-labels'), !!map.getLayer && !!map.getLayer('draw-lines')); } catch (e) {}
+                        try { refreshDrawSource(); } catch (e) {}
+                        try { if (map && map.triggerRepaint) map.triggerRepaint(); } catch (e) {}
+                        try { nudgeDrawLayers(); } catch (e) {}
+                    };
+                    if (typeof map.isStyleLoaded === 'function' && !map.isStyleLoaded()) {
+                        console.debug && console.debug('restoreSavedState: style not loaded, waiting for style.load to apply draws');
+                        map.once('style.load', applyDraws);
+                    } else {
+                        console.debug && console.debug('restoreSavedState: applying draws immediately');
+                        applyDraws();
+                    }
                 }
             } catch (e) { console.warn('Failed to restore draws from shared state', e); }
             try { applyTextSizeToLayer && applyTextSizeToLayer(selectedTextSize); } catch (e) {}
