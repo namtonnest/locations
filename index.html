@@ -1500,7 +1500,7 @@
             try { applyTextSizeToLayer && applyTextSizeToLayer(selectedTextSize); } catch (e) {}
             renderSidebar();
             // Extra safety: repeatedly nudge and re-apply draw layers after restore
-            try { forceDrawVisibility(3, 220); } catch (e) {}
+            try { forceDrawVisibility(6, 300); } catch (e) {}
         } catch (e) { console.warn('Failed to restore parsed state', e); }
     }
 
@@ -1796,6 +1796,10 @@
             modelLayerRef = this;
             // process any queued restore items now that the layer is ready
             try { processRestoreQueue(); } catch (e) { console.warn('processRestoreQueue failed on onAdd', e); }
+            // After custom layer is ready, force draw visibility again
+            setTimeout(() => {
+                try { console.debug('Custom layer ready, forcing draw visibility'); forceDrawVisibility(6, 300); } catch (e) {}
+            }, 400);
 
             // helper to create a 3D text entry (used when restoring serialized state)
             this.load3DText = (text, transform, geo, preferredId, preferredName) => {
