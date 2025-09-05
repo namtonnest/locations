@@ -1556,7 +1556,7 @@
                     try {
                         if (navigator.share) {
                             // Use URL-only share to avoid attaching thumbnails which can interfere with UI on some devices
-                            await navigator.share({ title: 'Shared location', text: 'Open this location', url });
+                            await navigator.share({ url });
                             return;
                         }
                     } catch (e) {
@@ -1580,7 +1580,7 @@
                     const url = location.origin + location.pathname + '?state=' + encodeURIComponent(b64);
                     try {
                         if (navigator.share) {
-                            await navigator.share({ title: 'Shared location', text: 'Open this location', url });
+                            await navigator.share({ url });
                             return;
                         }
                     } catch (e) { console.warn('navigator.share failed', e); }
