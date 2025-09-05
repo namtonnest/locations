@@ -43,16 +43,18 @@
         btn.onclick = showBackendStateViewer;
         document.body.appendChild(btn);
     });
-        // Prevent text selection when mousing down on buttons (capture phase) while preserving click events
-        document.addEventListener('mousedown', (e) => {
+        // Prevent starting a text selection on controls by intercepting the native `selectstart` event
+        // Use selectstart instead of mousedown.preventDefault to avoid interfering with the browser's
+        // native drag behavior (which could produce a draggable ghost image on some desktops).
+        document.addEventListener('selectstart', (e) => {
             try {
                 const t = e.target;
                 if (!t) return;
-                if (t.tagName === 'BUTTON' || t.classList && t.classList.contains('btn') || t.id === 'style-hamburger') {
-                    // avoid starting a text selection on controls; allow clicks to proceed
+                if (t.tagName === 'BUTTON' || (t.classList && t.classList.contains('btn')) || t.id === 'style-hamburger') {
+                    // prevent starting a selection from controls but don't block normal mousedown/drag semantics
                     e.preventDefault();
                 }
-            } catch (e) {}
+            } catch (err) { /* ignore */ }
         }, true);
 
         // Make the hamburger explicitly unselectable but still clickable
@@ -66,8 +68,10 @@
                 h.style.webkitTapHighlightColor = 'transparent';
                 // Prevent selectionstart specifically on the hamburger
                 h.addEventListener('selectstart', (ev) => { ev.preventDefault(); });
-                // Prevent drag/selection start on mousedown but allow click to fire
-                h.addEventListener('mousedown', (ev) => { try { ev.preventDefault(); } catch (e) {} }, { passive: false });
+                // Prevent selectionstart originating from the hamburger but don't call preventDefault on mousedown
+                // (which can lead to drag-image/ghost behavior on desktop). Stop propagation so our selectstart
+                // handler is effective while allowing the native click/drag semantics to remain intact.
+                h.addEventListener('mousedown', (ev) => { try { ev.stopPropagation(); } catch (e) {} }, { passive: true });
             } catch (e) { }
         }
         // run once the DOM is ready
