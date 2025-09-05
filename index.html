@@ -836,14 +836,14 @@
         const ham = document.getElementById('style-hamburger');
         if (ham) {
             try {
-                // move the hamburger into the left controls column so it is tucked into the controls UI
-                const target = document.querySelector('.controls-left > div') || document.querySelector('.controls-left') || leftColumn;
-                if (target) {
+                // move the hamburger into the right-side controls panel so it's hidden in the controls window
+                if (controls) {
                     ham.style.position = 'static';
                     ham.style.top = '';
                     ham.style.right = '';
                     ham.style.marginTop = '6px';
-                    target.appendChild(ham);
+                    // prepend so it appears near the top of the controls
+                    controls.insertBefore(ham, controls.firstChild);
                 }
             } catch (e) {}
             ham.addEventListener('click', () => {
@@ -851,8 +851,14 @@
                 if (!menu) return;
                 const isHidden = menu.classList.contains('hidden');
                 if (isHidden) menu.classList.remove('hidden'); else menu.classList.add('hidden');
-                // adjust menu position to appear under the ham when moved
-                try { menu.style.left = ''; menu.style.right = '16px'; menu.style.top = '56px'; } catch (e) {}
+                // position the menu directly under the ham using its bounding rect
+                try {
+                    const r = ham.getBoundingClientRect();
+                    menu.style.position = 'absolute';
+                    menu.style.left = (r.left) + 'px';
+                    menu.style.top = (r.bottom + 6) + 'px';
+                    menu.style.right = '';
+                } catch (e) {}
             });
         }
     } catch (e) { console.warn('Style menu init failed', e); }
