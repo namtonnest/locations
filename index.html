@@ -883,6 +883,8 @@
                         if (map.getSource && map.getSource('session-local')) {
                             map.getSource('session-local').setData({ type: 'FeatureCollection', features: [localFeature] });
                         }
+                        // ensure it's visible and trigger a repaint; retry a couple times if needed
+                        ensureLocalMarker();
                     } catch (e) { console.warn('Failed to set local marker', e); }
 
                     // only post to server if a session is active
@@ -902,6 +904,31 @@
                     }
                 }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 });
             } catch (e) { console.warn('sendLocationNow failed', e); }
+        }
+
+        // Ensure the local marker source/layer exists and force visibility
+        function ensureLocalMarker(attempts = 3, delay = 200) {
+            try {
+                if (!map || !map.getSource) return;
+                if (!map.getSource('session-local') || !map.getLayer('session-local-marker')) {
+                    // try to create the session users layer which also creates session-local
+                    try { ensureSessionUsersLayer(); } catch (e) {}
+                }
+                if (map.getSource('session-local')) {
+                    // small repaint nudges
+                    try { map.triggerRepaint(); } catch (e) {}
+                    // toggle visibility quickly to force paint
+                    try {
+                        const layerId = 'session-local-marker';
+                        const orig = map.getLayoutProperty ? map.getLayoutProperty(layerId, 'visibility') : null;
+                        if (orig == null) orig = 'visible';
+                        map.setLayoutProperty(layerId, 'visibility', 'none');
+                        setTimeout(() => { try { map.setLayoutProperty(layerId, 'visibility', 'visible'); map.triggerRepaint(); } catch (e) {} }, 50);
+                    } catch (e) {}
+                    return;
+                }
+                if (attempts > 0) setTimeout(() => ensureLocalMarker(attempts - 1, delay), delay);
+            } catch (e) { console.warn('ensureLocalMarker failed', e); }
         }
 
         function startSharingLocation(intervalMs = 10000) {
