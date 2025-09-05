@@ -4,22 +4,12 @@
   "description": "Location Locations web app with collaborative session helpers",
   "main": "index.html",
   "scripts": {
-    "start": "echo 'This repo is a static frontend with Vercel serverless APIs'"
-  },
-  "author": "",
-  "license": "MIT"
-}
-{
-  "name": "1more",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
+    "start": "echo 'This repo is a static frontend with Vercel serverless APIs'",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
-  "description": "",
+  "license": "MIT",
   "dependencies": {
     "@upstash/redis": "^1.35.3",
     "nanoid": "^5.1.5"
