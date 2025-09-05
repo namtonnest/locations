@@ -1534,7 +1534,7 @@
                     // Try Web Share API first (native share sheet on mobile), then clipboard, then prompt fallback
                     try {
                         if (navigator.share) {
-                            await navigator.share({ title: 'Shared location', text: 'Open this location', url });
+                            await navigator.share({url });
                             return;
                         }
                     } catch (e) {
