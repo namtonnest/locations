@@ -93,19 +93,17 @@
     #style-hamburger{
         position: absolute;
         top: 12px; /* match topbar offset */
-        right: 12px; /* slightly inset on desktop */
-        z-index: 14;
-        font-size: 14px; /* slightly smaller */
-        /* give extra horizontal space so the full label "Map Styles" fits on one line */
-        padding: 6px 12px;
-        margin: 0;
-        min-width: 96px;
-        height: 36px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-        white-space: nowrap;
+    right: 12px; /* slightly inset on desktop */
+    z-index: 14;
+    font-size: 14px; /* slightly smaller */
+    padding: 6px 8px;
+    margin: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
     }
     /* ensure the menu drops down below the button */
     .style-menu{position: absolute; right: 16px; top: 56px; background: rgba(255,255,255,0.98); padding:8px; border-radius:8px; box-shadow:var(--shadow); z-index:13; min-width:160px}
@@ -274,7 +272,7 @@
         <!-- placeholder for future search / account -->
     </div>
     <div class="controls-right">
-        <button id="style-hamburger" class="btn secondary">Map Styles</button>
+        <button id="style-hamburger" class="btn secondary">☰</button>
     </div>
 </div>
 
@@ -301,7 +299,7 @@
         container: 'map',
     // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
     // Default to Mapbox Streets for broader compatibility with layer names
-    style: 'mapbox://styles/mapbox/light-v10',
+    style: 'mapbox://styles/mapbox/streets-v11',
         config: {
             basemap: {
                 theme: 'monochrome'
@@ -437,8 +435,8 @@
     modelLibrary = modelLibrary.filter(i => i.url !== 'https://raw.githubusercontent.com/namtonnest/LocationLocations/main/car.glb');
     saveLibrary(modelLibrary);
 
-    // Add Sprinter model (idempotent)
-    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/3dmodels/main/mercedes_benz_sprinter_2006.glb', 'Sprinter');
+    // Add traffic cone model requested by user (idempotent)
+    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/3dmodels/main/traffic_cone.glb', 'Traffic cone');
 
     // Add police car model requested by user (idempotent)
     addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/3dmodels/main/cop_sedan_90_-_low_poly_model.glb', 'Police car');
@@ -837,30 +835,11 @@
 
         const ham = document.getElementById('style-hamburger');
         if (ham) {
-            try {
-                // move the hamburger into the right-side controls panel so it's hidden in the controls window
-                if (controls) {
-                    ham.style.position = 'static';
-                    ham.style.top = '';
-                    ham.style.right = '';
-                    ham.style.marginTop = '6px';
-                    // prepend so it appears near the top of the controls
-                    controls.insertBefore(ham, controls.firstChild);
-                }
-            } catch (e) {}
             ham.addEventListener('click', () => {
                 const menu = document.getElementById('style-menu');
                 if (!menu) return;
                 const isHidden = menu.classList.contains('hidden');
                 if (isHidden) menu.classList.remove('hidden'); else menu.classList.add('hidden');
-                // position the menu directly under the ham using its bounding rect
-                try {
-                    const r = ham.getBoundingClientRect();
-                    menu.style.position = 'absolute';
-                    menu.style.left = (r.left) + 'px';
-                    menu.style.top = (r.bottom + 6) + 'px';
-                    menu.style.right = '';
-                } catch (e) {}
             });
         }
     } catch (e) { console.warn('Style menu init failed', e); }
@@ -1552,11 +1531,10 @@
                     const id = j && j.id;
                     if (!id) throw new Error('Invalid response from backend');
                     const url = location.origin + location.pathname + '?state_id=' + encodeURIComponent(id);
-                    // Try Web Share API first (native share sheet on mobile), prefer sharing a thumbnail image when supported
+                    // Try Web Share API first (native share sheet on mobile), then clipboard, then prompt fallback
                     try {
                         if (navigator.share) {
-                            // Use URL-only share to avoid attaching thumbnails which can interfere with UI on some devices
-                            await navigator.share({ url });
+                            await navigator.share({ title: 'Shared location', text: 'Open this location', url });
                             return;
                         }
                     } catch (e) {
@@ -1580,7 +1558,7 @@
                     const url = location.origin + location.pathname + '?state=' + encodeURIComponent(b64);
                     try {
                         if (navigator.share) {
-                            await navigator.share({ url });
+                            await navigator.share({ title: 'Shared location', text: 'Open this location', url });
                             return;
                         }
                     } catch (e) { console.warn('navigator.share failed', e); }
