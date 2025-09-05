@@ -809,7 +809,64 @@
     controlsToggle.style.right = '';
     controlsToggle.style.top = '';
     controlsToggle.style.marginTop = '6px';
-    leftColumn.appendChild(controlsToggle);
+        leftColumn.appendChild(controlsToggle);
+
+        // --- Session UI (create/join/admin) ---
+        const sessionContainer = document.createElement('div');
+        sessionContainer.style.marginTop = '8px';
+        sessionContainer.style.display = 'flex';
+        sessionContainer.style.flexDirection = 'column';
+        sessionContainer.style.gap = '6px';
+        sessionContainer.innerHTML = `
+            <input id="sessionIdInput" placeholder="Session code" style="padding:6px;border-radius:6px;border:1px solid rgba(0,0,0,0.08);width:140px" />
+            <div style="display:flex;gap:6px">
+                <button id="createSessionBtn" class="btn">Create Session</button>
+                <button id="joinSessionBtn" class="btn secondary">Join</button>
+            </div>
+            <button id="adminViewBtn" class="btn" style="background:#ef4444;color:white;">Admin View</button>
+        `;
+        leftColumn.appendChild(sessionContainer);
+
+        const sessionIdInput = sessionContainer.querySelector('#sessionIdInput');
+        const createSessionBtn = sessionContainer.querySelector('#createSessionBtn');
+        const joinSessionBtn = sessionContainer.querySelector('#joinSessionBtn');
+        const adminViewBtn = sessionContainer.querySelector('#adminViewBtn');
+
+        let currentSessionId = null;
+
+        createSessionBtn.addEventListener('click', async () => {
+            try {
+                const res = await fetch('/api/session', { method: 'POST' });
+                const j = await res.json();
+                if (j && j.sessionId) {
+                    currentSessionId = j.sessionId;
+                    sessionIdInput.value = currentSessionId;
+                    alert('Session created: ' + currentSessionId);
+                } else {
+                    alert('Failed to create session');
+                }
+            } catch (e) { alert('Create session failed: ' + e); }
+        });
+
+        joinSessionBtn.addEventListener('click', async () => {
+            const id = (sessionIdInput && sessionIdInput.value || '').trim();
+            if (!id) { alert('Enter a session id to join'); return; }
+            currentSessionId = id;
+            alert('Joined session ' + id);
+        });
+
+        adminViewBtn.addEventListener('click', async () => {
+            const id = (sessionIdInput && sessionIdInput.value || '').trim();
+            if (!id) { alert('Enter a session id to view as admin'); return; }
+            try {
+                const res = await fetch('/api/session/' + encodeURIComponent(id) + '/locations');
+                const j = await res.json();
+                if (j && j.users) {
+                    const names = j.users.map(u => (u.nickname || u.userId) + ': ' + (u.lat || '') + ',' + (u.lng || '')).join('\n');
+                    alert('Users in session:\n' + names);
+                } else alert('No users or failed to fetch');
+            } catch (e) { alert('Failed to fetch session locations: ' + e); }
+        });
 
     // style menu (hamburger) population and wiring
     try {
