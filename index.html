@@ -849,6 +849,23 @@
                 if (!map.getLayer('session-user-markers')) {
                     map.addLayer({ id: 'session-user-markers', type: 'symbol', source: 'session-users', layout: { 'icon-image': 'marker-15', 'text-field': ['coalesce', ['get', 'nickname'], ['get', 'userId']], 'text-offset': [0, 1], 'text-anchor': 'top' }, paint: {} });
                 }
+                // local user marker (drawn immediately on client)
+                if (!map.getSource('session-local')) {
+                    map.addSource('session-local', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+                }
+                if (!map.getLayer('session-local-marker')) {
+                    map.addLayer({
+                        id: 'session-local-marker',
+                        type: 'circle',
+                        source: 'session-local',
+                        paint: {
+                            'circle-radius': 8,
+                            'circle-color': '#1d4ed8',
+                            'circle-stroke-width': 2,
+                            'circle-stroke-color': '#fff'
+                        }
+                    });
+                }
             } catch (e) { console.warn('ensureSessionUsersLayer failed', e); }
         }
 
@@ -857,8 +874,17 @@
                 if (!currentSessionId) return;
                 if (!navigator.geolocation) return;
                 navigator.geolocation.getCurrentPosition(async (pos) => {
-            const nickname = (sessionNickInput && sessionNickInput.value && sessionNickInput.value.trim()) ? sessionNickInput.value.trim() : localUserId;
-            const payload = { userId: localUserId, nickname: nickname, lat: pos.coords.latitude, lng: pos.coords.longitude, timestamp: Date.now() };
+                    const nickname = (sessionNickInput && sessionNickInput.value && sessionNickInput.value.trim()) ? sessionNickInput.value.trim() : localUserId;
+                    const payload = { userId: localUserId, nickname: nickname, lat: pos.coords.latitude, lng: pos.coords.longitude, timestamp: Date.now() };
+                    // immediately update local client-side marker so user sees their location without waiting for poll
+                    try {
+                        ensureSessionUsersLayer();
+                        const localFeature = { type: 'Feature', geometry: { type: 'Point', coordinates: [pos.coords.longitude, pos.coords.latitude] }, properties: { userId: localUserId, nickname } };
+                        if (map.getSource && map.getSource('session-local')) {
+                            map.getSource('session-local').setData({ type: 'FeatureCollection', features: [localFeature] });
+                        }
+                    } catch (e) { console.warn('Failed to set local marker', e); }
+
                     try {
                         await fetch('/api/session/' + encodeURIComponent(currentSessionId) + '/location', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                     } catch (e) { console.warn('Failed to post location', e); }
@@ -944,16 +970,168 @@
             alert('Joined session and sharing started: ' + id);
         });
 
+        // Admin modal: show session users, allow centering on a user, refresh, and close
+        let adminModalElem = null;
+
+        function createAdminModal() {
+            const overlay = document.createElement('div');
+            overlay.id = 'admin-modal-overlay';
+            overlay.style.position = 'fixed';
+            overlay.style.left = '0';
+            overlay.style.top = '0';
+            overlay.style.right = '0';
+            overlay.style.bottom = '0';
+            overlay.style.background = 'rgba(0,0,0,0.4)';
+            overlay.style.display = 'flex';
+            overlay.style.alignItems = 'center';
+            overlay.style.justifyContent = 'center';
+            overlay.style.zIndex = '9999';
+
+            const modal = document.createElement('div');
+            modal.style.width = '380px';
+            modal.style.maxHeight = '70vh';
+            modal.style.overflow = 'auto';
+            modal.style.background = '#fff';
+            modal.style.borderRadius = '8px';
+            modal.style.padding = '12px';
+            modal.style.boxShadow = '0 6px 24px rgba(0,0,0,0.25)';
+
+            const title = document.createElement('div');
+            title.textContent = 'Session Admin — Users';
+            title.style.fontWeight = '700';
+            title.style.marginBottom = '8px';
+
+            const list = document.createElement('div');
+            list.id = 'admin-user-list';
+            list.style.display = 'flex';
+            list.style.flexDirection = 'column';
+            list.style.gap = '8px';
+
+            const footer = document.createElement('div');
+            footer.style.display = 'flex';
+            footer.style.justifyContent = 'space-between';
+            footer.style.marginTop = '12px';
+
+            const refreshBtn = document.createElement('button');
+            refreshBtn.textContent = 'Refresh';
+            refreshBtn.className = 'btn secondary';
+            refreshBtn.addEventListener('click', async () => {
+                if (!currentSessionId) return;
+                try { await populateAdminList(currentSessionId); } catch (e) { console.warn('Admin refresh failed', e); }
+            });
+
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = 'Close';
+            closeBtn.className = 'btn';
+            closeBtn.addEventListener('click', () => { document.body.removeChild(overlay); });
+
+            footer.appendChild(refreshBtn);
+            footer.appendChild(closeBtn);
+
+            modal.appendChild(title);
+            modal.appendChild(list);
+            modal.appendChild(footer);
+            overlay.appendChild(modal);
+
+            return overlay;
+        }
+
+        async function populateAdminList(sessionId) {
+            try {
+                const res = await fetch('/api/session/' + encodeURIComponent(sessionId) + '/locations');
+                const j = await res.json();
+                const list = document.getElementById('admin-user-list');
+                if (!list) return;
+                list.innerHTML = '';
+                if (!j || !j.users || j.users.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.textContent = 'No users in session.';
+                    empty.style.color = 'var(--muted)';
+                    list.appendChild(empty);
+                    return;
+                }
+                j.users.forEach(u => {
+                    const row = document.createElement('div');
+                    row.style.display = 'flex';
+                    row.style.justifyContent = 'space-between';
+                    row.style.alignItems = 'center';
+                    row.style.padding = '6px';
+                    row.style.border = '1px solid rgba(0,0,0,0.06)';
+                    row.style.borderRadius = '6px';
+
+                    const left = document.createElement('div');
+                    left.style.display = 'flex';
+                    left.style.flexDirection = 'column';
+                    const title = document.createElement('div');
+                    title.textContent = u.nickname || u.userId;
+                    title.style.fontWeight = '600';
+                    const sub = document.createElement('div');
+                    sub.textContent = (u.lat && u.lng) ? (u.lat.toFixed ? (u.lat.toFixed(6) + ', ' + u.lng.toFixed(6)) : (u.lat + ', ' + u.lng)) : 'no location';
+                    sub.style.fontSize = '12px';
+                    sub.style.color = 'var(--muted)';
+                    left.appendChild(title);
+                    left.appendChild(sub);
+
+                    const actions = document.createElement('div');
+                    actions.style.display = 'flex';
+                    actions.style.gap = '6px';
+
+                    const centerBtn = document.createElement('button');
+                    centerBtn.className = 'btn secondary';
+                    centerBtn.textContent = 'Center';
+                    centerBtn.addEventListener('click', () => {
+                        try {
+                            if (u.lng == null || u.lat == null) return;
+                            map.flyTo({ center: [u.lng, u.lat], zoom: 16 });
+                        } catch (e) { console.warn('Center failed', e); }
+                    });
+
+                    const followBtn = document.createElement('button');
+                    followBtn.className = 'btn';
+                    followBtn.textContent = 'Follow';
+                    let following = false;
+                    let followInterval = null;
+                    followBtn.addEventListener('click', () => {
+                        if (!following) {
+                            following = true;
+                            followBtn.textContent = 'Unfollow';
+                            // poll this user's location every 3s while following
+                            followInterval = setInterval(async () => {
+                                try {
+                                    const r = await fetch('/api/session/' + encodeURIComponent(sessionId) + '/locations');
+                                    const d = await r.json();
+                                    if (d && d.users) {
+                                        const found = d.users.find(x => x.userId === u.userId);
+                                        if (found && found.lng != null && found.lat != null) {
+                                            map.easeTo({ center: [found.lng, found.lat], zoom: 16 });
+                                        }
+                                    }
+                                } catch (e) { /* ignore */ }
+                            }, 3000);
+                        } else {
+                            following = false;
+                            followBtn.textContent = 'Follow';
+                            if (followInterval) { clearInterval(followInterval); followInterval = null; }
+                        }
+                    });
+
+                    actions.appendChild(centerBtn);
+                    actions.appendChild(followBtn);
+
+                    row.appendChild(left);
+                    row.appendChild(actions);
+                    list.appendChild(row);
+                });
+            } catch (e) { console.warn('populateAdminList failed', e); }
+        }
+
         adminViewBtn.addEventListener('click', async () => {
             const id = (sessionIdInput && sessionIdInput.value || '').trim();
             if (!id) { alert('Enter a session id to view as admin'); return; }
             try {
-                const res = await fetch('/api/session/' + encodeURIComponent(id) + '/locations');
-                const j = await res.json();
-                if (j && j.users) {
-                    const names = j.users.map(u => (u.nickname || u.userId) + ': ' + (u.lat || '') + ',' + (u.lng || '')).join('\n');
-                    alert('Users in session:\n' + names);
-                } else alert('No users or failed to fetch');
+                if (!adminModalElem) { adminModalElem = createAdminModal(); }
+                document.body.appendChild(adminModalElem);
+                await populateAdminList(id);
             } catch (e) { alert('Failed to fetch session locations: ' + e); }
         });
 
