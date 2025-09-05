@@ -819,6 +819,7 @@
         sessionContainer.style.gap = '6px';
         sessionContainer.innerHTML = `
             <input id="sessionIdInput" placeholder="Session code" style="padding:6px;border-radius:6px;border:1px solid rgba(0,0,0,0.08);width:140px" />
+            <input id="sessionNickInput" placeholder="Nickname (optional)" style="padding:6px;border-radius:6px;border:1px solid rgba(0,0,0,0.08);width:140px;margin-top:6px" />
             <div style="display:flex;gap:6px">
                 <button id="createSessionBtn" class="btn">Create Session</button>
                 <button id="joinSessionBtn" class="btn secondary">Join</button>
@@ -827,21 +828,98 @@
         `;
         leftColumn.appendChild(sessionContainer);
 
-        const sessionIdInput = sessionContainer.querySelector('#sessionIdInput');
+    const sessionIdInput = sessionContainer.querySelector('#sessionIdInput');
+    const sessionNickInput = sessionContainer.querySelector('#sessionNickInput');
         const createSessionBtn = sessionContainer.querySelector('#createSessionBtn');
         const joinSessionBtn = sessionContainer.querySelector('#joinSessionBtn');
         const adminViewBtn = sessionContainer.querySelector('#adminViewBtn');
 
         let currentSessionId = null;
+        let sharingInterval = null;
+        let pollingInterval = null;
+        let localUserId = ('u' + Math.floor(Math.random() * 1000000));
+
+        // map source + layer for session users
+        function ensureSessionUsersLayer() {
+            try {
+                if (!map.getSource || !map) return;
+                if (!map.getSource('session-users')) {
+                    map.addSource('session-users', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+                }
+                if (!map.getLayer('session-user-markers')) {
+                    map.addLayer({ id: 'session-user-markers', type: 'symbol', source: 'session-users', layout: { 'icon-image': 'marker-15', 'text-field': ['coalesce', ['get', 'nickname'], ['get', 'userId']], 'text-offset': [0, 1], 'text-anchor': 'top' }, paint: {} });
+                }
+            } catch (e) { console.warn('ensureSessionUsersLayer failed', e); }
+        }
+
+    async function sendLocationNow() {
+            try {
+                if (!currentSessionId) return;
+                if (!navigator.geolocation) return;
+                navigator.geolocation.getCurrentPosition(async (pos) => {
+            const nickname = (sessionNickInput && sessionNickInput.value && sessionNickInput.value.trim()) ? sessionNickInput.value.trim() : localUserId;
+            const payload = { userId: localUserId, nickname: nickname, lat: pos.coords.latitude, lng: pos.coords.longitude, timestamp: Date.now() };
+                    try {
+                        await fetch('/api/session/' + encodeURIComponent(currentSessionId) + '/location', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    } catch (e) { console.warn('Failed to post location', e); }
+                }, (err) => { console.warn('geolocation error', err); });
+            } catch (e) { console.warn('sendLocationNow failed', e); }
+        }
+
+        function startSharingLocation(intervalMs = 10000) {
+            try {
+                if (sharingInterval) clearInterval(sharingInterval);
+                sendLocationNow();
+                sharingInterval = setInterval(sendLocationNow, intervalMs);
+            } catch (e) { console.warn('startSharingLocation failed', e); }
+        }
+
+        function stopSharingLocation() {
+            if (sharingInterval) { clearInterval(sharingInterval); sharingInterval = null; }
+        }
+
+        async function pollSessionUsers() {
+            try {
+                if (!currentSessionId) return;
+                const res = await fetch('/api/session/' + encodeURIComponent(currentSessionId) + '/locations');
+                const j = await res.json();
+                if (!j || !j.users) return;
+                const features = (j.users || []).map(u => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [u.lng || 0, u.lat || 0] }, properties: { userId: u.userId, nickname: u.nickname } }));
+                try { ensureSessionUsersLayer(); if (map.getSource && map.getSource('session-users')) map.getSource('session-users').setData({ type: 'FeatureCollection', features }); } catch (e) {}
+            } catch (e) { console.warn('pollSessionUsers failed', e); }
+        }
+
+        function startPollingSessionUsers(intervalMs = 5000) {
+            try {
+                if (pollingInterval) clearInterval(pollingInterval);
+                pollSessionUsers();
+                pollingInterval = setInterval(pollSessionUsers, intervalMs);
+            } catch (e) { console.warn('startPollingSessionUsers failed', e); }
+        }
+
+        function stopPollingSessionUsers() {
+            if (pollingInterval) { clearInterval(pollingInterval); pollingInterval = null; }
+        }
 
         createSessionBtn.addEventListener('click', async () => {
             try {
+                // stop any previous sharing/polling first
+                stopSharingLocation();
+                stopPollingSessionUsers();
+
                 const res = await fetch('/api/session', { method: 'POST' });
                 const j = await res.json();
                 if (j && j.sessionId) {
                     currentSessionId = j.sessionId;
                     sessionIdInput.value = currentSessionId;
-                    alert('Session created: ' + currentSessionId);
+                    // set local user nickname if provided
+                    if (sessionNickInput && sessionNickInput.value && sessionNickInput.value.trim()) {
+                        localUserId = sessionNickInput.value.trim();
+                    }
+                    ensureSessionUsersLayer();
+                    startSharingLocation();
+                    startPollingSessionUsers();
+                    alert('Session created and sharing started: ' + currentSessionId);
                 } else {
                     alert('Failed to create session');
                 }
@@ -851,8 +929,19 @@
         joinSessionBtn.addEventListener('click', async () => {
             const id = (sessionIdInput && sessionIdInput.value || '').trim();
             if (!id) { alert('Enter a session id to join'); return; }
+            // stop any previous sharing/polling first
+            stopSharingLocation();
+            stopPollingSessionUsers();
+
             currentSessionId = id;
-            alert('Joined session ' + id);
+            // set local user nickname if provided
+            if (sessionNickInput && sessionNickInput.value && sessionNickInput.value.trim()) {
+                localUserId = sessionNickInput.value.trim();
+            }
+            ensureSessionUsersLayer();
+            startSharingLocation();
+            startPollingSessionUsers();
+            alert('Joined session and sharing started: ' + id);
         });
 
         adminViewBtn.addEventListener('click', async () => {
