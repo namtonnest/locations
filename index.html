@@ -49,11 +49,29 @@
                 const t = e.target;
                 if (!t) return;
                 if (t.tagName === 'BUTTON' || t.classList && t.classList.contains('btn') || t.id === 'style-hamburger') {
+                    // avoid starting a text selection on controls; allow clicks to proceed
                     e.preventDefault();
-                    // trigger the click manually if needed on mouseup
                 }
             } catch (e) {}
         }, true);
+
+        // Make the hamburger explicitly unselectable but still clickable
+        function makeHamburgerUnselectable() {
+            try {
+                const h = document.getElementById('style-hamburger');
+                if (!h) return;
+                h.style.userSelect = 'none';
+                h.style.webkitUserSelect = 'none';
+                h.style.MozUserSelect = 'none';
+                h.style.webkitTapHighlightColor = 'transparent';
+                // Prevent selectionstart specifically on the hamburger
+                h.addEventListener('selectstart', (ev) => { ev.preventDefault(); });
+                // Prevent drag/selection start on mousedown but allow click to fire
+                h.addEventListener('mousedown', (ev) => { try { ev.preventDefault(); } catch (e) {} }, { passive: false });
+            } catch (e) { }
+        }
+        // run once the DOM is ready
+        try { makeHamburgerUnselectable(); } catch (e) {}
     // Repeatedly nudge and re-apply draw layers to guarantee visibility after restore
     function forceDrawVisibility(attempts = 3, delay = 200) {
         let count = 0;
