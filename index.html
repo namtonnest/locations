@@ -869,26 +869,38 @@
             } catch (e) { console.warn('ensureSessionUsersLayer failed', e); }
         }
 
-    async function sendLocationNow() {
+        async function sendLocationNow() {
             try {
-                if (!currentSessionId) return;
-                if (!navigator.geolocation) return;
+                if (!navigator.geolocation) {
+                    console.warn('Geolocation not supported by browser');
+                    return;
+                }
                 navigator.geolocation.getCurrentPosition(async (pos) => {
                     const nickname = (sessionNickInput && sessionNickInput.value && sessionNickInput.value.trim()) ? sessionNickInput.value.trim() : localUserId;
-                    const payload = { userId: localUserId, nickname: nickname, lat: pos.coords.latitude, lng: pos.coords.longitude, timestamp: Date.now() };
-                    // immediately update local client-side marker so user sees their location without waiting for poll
+                    const localFeature = { type: 'Feature', geometry: { type: 'Point', coordinates: [pos.coords.longitude, pos.coords.latitude] }, properties: { userId: localUserId, nickname } };
                     try {
                         ensureSessionUsersLayer();
-                        const localFeature = { type: 'Feature', geometry: { type: 'Point', coordinates: [pos.coords.longitude, pos.coords.latitude] }, properties: { userId: localUserId, nickname } };
                         if (map.getSource && map.getSource('session-local')) {
                             map.getSource('session-local').setData({ type: 'FeatureCollection', features: [localFeature] });
                         }
                     } catch (e) { console.warn('Failed to set local marker', e); }
 
-                    try {
-                        await fetch('/api/session/' + encodeURIComponent(currentSessionId) + '/location', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                    } catch (e) { console.warn('Failed to post location', e); }
-                }, (err) => { console.warn('geolocation error', err); });
+                    // only post to server if a session is active
+                    if (currentSessionId) {
+                        const payload = { userId: localUserId, nickname: nickname, lat: pos.coords.latitude, lng: pos.coords.longitude, timestamp: Date.now() };
+                        try {
+                            await fetch('/api/session/' + encodeURIComponent(currentSessionId) + '/location', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                        } catch (e) { console.warn('Failed to post location', e); }
+                    }
+                }, (err) => {
+                    console.warn('geolocation error', err);
+                    if (err && err.code === 1) {
+                        // PERMISSION_DENIED
+                        alert('Location permission denied. Allow location access to see your position on the map.');
+                    } else if (err && err.code === 2) {
+                        alert('Location unavailable.');
+                    }
+                }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 });
             } catch (e) { console.warn('sendLocationNow failed', e); }
         }
 
