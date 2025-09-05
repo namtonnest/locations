@@ -299,7 +299,7 @@
         container: 'map',
     // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
     // Default to Mapbox Streets for broader compatibility with layer names
-    style: 'mapbox://styles/mapbox/streets-v11',
+    style: 'mapbox://styles/mapbox/light-v10',
         config: {
             basemap: {
                 theme: 'monochrome'
@@ -835,11 +835,24 @@
 
         const ham = document.getElementById('style-hamburger');
         if (ham) {
+            try {
+                // move the hamburger into the left controls column so it is tucked into the controls UI
+                const target = document.querySelector('.controls-left > div') || document.querySelector('.controls-left') || leftColumn;
+                if (target) {
+                    ham.style.position = 'static';
+                    ham.style.top = '';
+                    ham.style.right = '';
+                    ham.style.marginTop = '6px';
+                    target.appendChild(ham);
+                }
+            } catch (e) {}
             ham.addEventListener('click', () => {
                 const menu = document.getElementById('style-menu');
                 if (!menu) return;
                 const isHidden = menu.classList.contains('hidden');
                 if (isHidden) menu.classList.remove('hidden'); else menu.classList.add('hidden');
+                // adjust menu position to appear under the ham when moved
+                try { menu.style.left = ''; menu.style.right = '16px'; menu.style.top = '56px'; } catch (e) {}
             });
         }
     } catch (e) { console.warn('Style menu init failed', e); }
