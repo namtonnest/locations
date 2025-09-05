@@ -52,8 +52,7 @@
                 if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
                 refreshDrawSource();
                 if (map && map.triggerRepaint) map.triggerRepaint();
-                    try { if (window.__schedulePublish) window.__schedulePublish(); } catch (e) {}
-                    nudgeDrawLayers();
+                nudgeDrawLayers();
             } catch (e) {}
             count++;
             if (count < attempts) setTimeout(tryNudge, delay);
@@ -448,7 +447,6 @@
     addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/truck.glb', 'truck');
     // Add restrooms model requested by user (idempotent)
     addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/restroom_model.glb', 'Restrooms');
-        try { if (window.__schedulePublish) window.__schedulePublish(); } catch (e) {}
     // Ensure default scales for some models (truck, jeep)
     (function attachDefaultScales(){
         try {
@@ -710,7 +708,6 @@
                     modelLayerRef.scene.add(mesh);
                     renderSidebar();
                     if (map) map.triggerRepaint();
-                    try { if (window.__schedulePublish) window.__schedulePublish(); } catch (e) {}
                     resolve(entry.id);
                 }, undefined, (err) => { console.warn('Font load failed', err); reject(err); });
             } catch (e) { reject(e); }
@@ -1215,7 +1212,6 @@
         try { const c = map.getCanvas && map.getCanvas(); if (c) c.style.cursor = ''; } catch (e) {}
         refreshDrawSource();
         saveDraws();
-    try { if (window.__schedulePublish) window.__schedulePublish(); } catch (e) {}
     });
     drawClear.addEventListener('click', () => {
         drawnFeatures = [];
@@ -1231,7 +1227,6 @@
         try { const c = map.getCanvas && map.getCanvas(); if (c) c.style.cursor = ''; } catch (e) {}
         refreshDrawSource();
         saveDraws();
-    try { if (window.__schedulePublish) window.__schedulePublish(); } catch (e) {}
     });
     drawSave.addEventListener('click', () => {
         saveDraws();
@@ -1284,7 +1279,6 @@
     updateEntryGeo(entry);
     renderSidebar();
     if (map) map.triggerRepaint();
-        try { if (window.__schedulePublish) window.__schedulePublish(); } catch (e) {}
     }
     // debounce helper so rapid input changes (mobile) don't trigger excessive map repaints
     function debounce(fn, wait) {
@@ -1321,7 +1315,6 @@
             entry.animated = !entry.animated;
             renderSidebar();
             if (map) map.triggerRepaint();
-            try { if (window.__schedulePublish) window.__schedulePublish(); } catch (e) {}
         });
     }
 
@@ -1336,7 +1329,6 @@
             entry.spinSpeed = v;
             renderSidebar();
             if (map) map.triggerRepaint();
-            try { if (window.__schedulePublish) window.__schedulePublish(); } catch (e) {}
         });
     }
 
@@ -1385,7 +1377,6 @@
         updateEntryGeo(entry);
         renderSidebar();
         if (map) map.triggerRepaint();
-    try { if (window.__schedulePublish) window.__schedulePublish(); } catch (e) {}
     });
 
     // remove selected model
@@ -1412,7 +1403,6 @@
         if (altitudeInput) altitudeInput.value = Math.round(entry.geo.alt * 100) / 100;
         renderSidebar();
         if (map) map.triggerRepaint();
-    try { if (window.__schedulePublish) window.__schedulePublish(); } catch (e) {}
     }
 
     if (altUpBtn) altUpBtn.addEventListener('click', () => {
@@ -1544,80 +1534,6 @@
         } catch (e) { console.warn('Failed to restore parsed state', e); }
     }
 
-    // --- Session publish / poll helpers (simple collaborative sync via REST) ---
-    async function publishSessionSnapshot(sessionId) {
-        try {
-            if (!sessionId) return;
-            const session = {
-                mapCenter: map.getCenter(),
-                zoom: map.getZoom(),
-                pitch: map.getPitch(),
-                bearing: map.getBearing(),
-                models: serializePlacedModels(),
-                draws: drawnFeatures,
-                updatedAt: Date.now()
-            };
-            const res = await fetch('/api/update-session', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: sessionId, session })
-            });
-            if (res.ok) {
-                window.__lastSessionUpdatedAt = session.updatedAt;
-            } else {
-                console.warn('publishSessionSnapshot failed', res.status);
-            }
-        } catch (e) { console.warn('publishSessionSnapshot error', e); }
-    }
-
-    // Debounced publisher to avoid spamming the server during rapid edits
-    const schedulePublish = debounce(() => {
-        try { if (window.__sessionId) publishSessionSnapshot(window.__sessionId); } catch (e) {}
-    }, 600);
-    // expose a safe global hook so code defined before this point can schedule publishes
-    try { window.__schedulePublish = schedulePublish; } catch (e) {}
-
-    // Apply a session snapshot fetched from the server (only if newer)
-    function applySessionSnapshot(snapshot) {
-        try {
-            if (!snapshot) return;
-            const remoteUpdated = snapshot.updatedAt || 0;
-            if (window.__lastSessionUpdatedAt && remoteUpdated <= window.__lastSessionUpdatedAt) return;
-            // avoid publishing immediately while applying remote state
-            window.__isApplyingRemote = true;
-            try { restoreSavedState(snapshot); } catch (e) { console.warn('applySessionSnapshot restore failed', e); }
-            window.__lastSessionUpdatedAt = remoteUpdated;
-            window.__isApplyingRemote = false;
-        } catch (e) { console.warn('applySessionSnapshot error', e); }
-    }
-
-    // Poll the server for session updates every `intervalMs` milliseconds
-    function startSessionPolling(sessionId, intervalMs = 2500) {
-        try {
-            if (!sessionId) return;
-            window.__sessionId = sessionId;
-            // fetch initial value immediately
-            (async () => {
-                try {
-                    const res = await fetch('/api/get-session?id=' + encodeURIComponent(sessionId));
-                    if (!res.ok) return;
-                    const j = await res.json();
-                    if (j && j.session) applySessionSnapshot(j.session);
-                } catch (e) { console.warn('initial session fetch failed', e); }
-            })();
-            // clear any existing poll
-            if (window.__sessionPollIntervalId) clearInterval(window.__sessionPollIntervalId);
-            window.__sessionPollIntervalId = setInterval(async () => {
-                try {
-                    const res = await fetch('/api/get-session?id=' + encodeURIComponent(sessionId));
-                    if (!res.ok) return;
-                    const j = await res.json();
-                    if (j && j.session) applySessionSnapshot(j.session);
-                } catch (e) { console.warn('session poll failed', e); }
-            }, intervalMs);
-        } catch (e) { console.warn('startSessionPolling error', e); }
-    }
-
     shareBtn.addEventListener('click', () => {
         (async () => {
             try {
@@ -1639,24 +1555,7 @@
                     // Try Web Share API first (native share sheet on mobile), prefer sharing a thumbnail image when supported
                     try {
                         if (navigator.share) {
-                            // attempt to capture a thumbnail from the map canvas
-                            try {
-                                const canvas = map && map.getCanvas && map.getCanvas();
-                                if (canvas && canvas.toBlob && window.File) {
-                                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-                                    if (blob) {
-                                        const file = new File([blob], 'map-thumbnail.png', { type: 'image/png' });
-                                        // only include files if the UA supports sharing files
-                                        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                                            await navigator.share({ title: 'Shared location', text: 'Open this location', url, files: [file] });
-                                            return;
-                                        }
-                                    }
-                                }
-                            } catch (err) {
-                                console.warn('Thumbnail capture/share failed, falling back to URL share', err);
-                            }
-                            // fallback to URL-only share
+                            // Use URL-only share to avoid attaching thumbnails which can interfere with UI on some devices
                             await navigator.share({ title: 'Shared location', text: 'Open this location', url });
                             return;
                         }
@@ -1713,8 +1612,6 @@
                         const j = await res.json();
                         try { console.debug('Loaded saved state from backend', j); } catch (e) {}
                         if (j && j.state) restoreSavedState(j.state);
-                        // If the URL included a state_id, also start polling for live session updates using that id
-                        try { if (id && typeof startSessionPolling === 'function') startSessionPolling(id); } catch (e) {}
                     } catch (e) { console.warn('Failed to load state from backend', e); }
                 }, 500);
                 return;
@@ -1862,7 +1759,6 @@
         }
         renderSidebar();
         if (map) map.triggerRepaint();
-    try { if (window.__schedulePublish) window.__schedulePublish(); } catch (e) {}
     }
 
     // variables used by the custom three.js layer
@@ -1970,7 +1866,6 @@
                         try { renderSidebar(); } catch (e) {}
                         try { if (this.map && this.map.triggerRepaint) this.map.triggerRepaint(); } catch (e) {}
                         try { nudgeDrawLayers(); } catch (e) {}
-                        try { if (window.__schedulePublish) window.__schedulePublish(); } catch (e) {}
                     }, undefined, (err) => { console.warn('Font load failed for load3DText', err); });
                     return id;
                 } catch (e) { console.warn('load3DText failed', e); }
@@ -2052,7 +1947,6 @@
                         try { renderSidebar(); } catch (e) {}
                         try { if (this.map && this.map.triggerRepaint) this.map.triggerRepaint(); } catch (e) {}
                         try { nudgeDrawLayers(); } catch (e) {}
-                        try { if (window.__schedulePublish) window.__schedulePublish(); } catch (e) {}
                     },
                     undefined,
                     (err) => {
@@ -2723,7 +2617,6 @@ map.on('click', async (e) => {
     // wire delete
     delBtn.addEventListener('click', async () => {
         try { await deleteImageRecord(id); marker.remove(); } catch (e) { console.warn(e); }
-    try { if (window.__schedulePublish) window.__schedulePublish(); } catch (e) {}
     });
 
     // clear pending
@@ -2746,7 +2639,7 @@ map.on('click', async (e) => {
                 const delBtn = document.createElement('button'); delBtn.textContent = 'Remove image'; delBtn.className = 'btn secondary'; popupDiv.appendChild(delBtn);
                 const popup = new mapboxgl.Popup().setDOMContent(popupDiv).setMaxWidth('320px');
                 marker.setPopup(popup);
-                delBtn.addEventListener('click', async () => { try { await deleteImageRecord(r.id); marker.remove(); } catch (e) { console.warn(e); } try { if (window.__schedulePublish) window.__schedulePublish(); } catch (e) {} });
+                delBtn.addEventListener('click', async () => { try { await deleteImageRecord(r.id); marker.remove(); } catch (e) { console.warn(e); } });
             } catch (e) { console.warn('Failed restoring image', e); }
         }
     } catch (e) { console.warn('Failed listing image records', e); }
@@ -2765,7 +2658,6 @@ map.on('click', (e) => {
         // restore overlays
         setOverlayBlocking(true);
         try { saveDraws(); refreshDrawSource(); } catch (e) { console.warn('Failed to save label', e); }
-    try { if (window.__schedulePublish) window.__schedulePublish(); } catch (e) {}
         return;
     }
     if (!drawing) return;
