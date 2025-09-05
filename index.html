@@ -43,39 +43,6 @@
         btn.onclick = showBackendStateViewer;
         document.body.appendChild(btn);
     });
-        // Prevent starting a text selection on controls by intercepting the native `selectstart` event
-        // Use selectstart instead of mousedown.preventDefault to avoid interfering with the browser's
-        // native drag behavior (which could produce a draggable ghost image on some desktops).
-        document.addEventListener('selectstart', (e) => {
-            try {
-                const t = e.target;
-                if (!t) return;
-                if (t.tagName === 'BUTTON' || (t.classList && t.classList.contains('btn')) || t.id === 'style-hamburger') {
-                    // prevent starting a selection from controls but don't block normal mousedown/drag semantics
-                    e.preventDefault();
-                }
-            } catch (err) { /* ignore */ }
-        }, true);
-
-        // Make the hamburger explicitly unselectable but still clickable
-        function makeHamburgerUnselectable() {
-            try {
-                const h = document.getElementById('style-hamburger');
-                if (!h) return;
-                h.style.userSelect = 'none';
-                h.style.webkitUserSelect = 'none';
-                h.style.MozUserSelect = 'none';
-                h.style.webkitTapHighlightColor = 'transparent';
-                // Prevent selectionstart specifically on the hamburger
-                h.addEventListener('selectstart', (ev) => { ev.preventDefault(); });
-                // Prevent selectionstart originating from the hamburger but don't call preventDefault on mousedown
-                // (which can lead to drag-image/ghost behavior on desktop). Stop propagation so our selectstart
-                // handler is effective while allowing the native click/drag semantics to remain intact.
-                h.addEventListener('mousedown', (ev) => { try { ev.stopPropagation(); } catch (e) {} }, { passive: true });
-            } catch (e) { }
-        }
-        // run once the DOM is ready
-        try { makeHamburgerUnselectable(); } catch (e) {}
     // Repeatedly nudge and re-apply draw layers to guarantee visibility after restore
     function forceDrawVisibility(attempts = 3, delay = 200) {
         let count = 0;
@@ -146,17 +113,6 @@
     .controls-left{display:flex; gap:8px; align-items:center}
     .topbar .btn{background: linear-gradient(180deg, #ffffff, #f8fafc); border: 1px solid rgba(2,6,23,0.06); padding:8px 12px; border-radius:10px; cursor:pointer; color:#0f1724; font-weight:600; box-shadow: var(--shadow); transition: transform .08s ease, box-shadow .08s ease}
     .topbar .btn:hover{transform: translateY(-1px);}
-    /* Prevent accidental text selection/highlight on controls */
-    .topbar .btn, .btn, #style-hamburger, .style-menu button, button {
-        -webkit-user-select: none;
-        -moz-user-select: none;
-        -ms-user-select: none;
-        user-select: none;
-        -webkit-tap-highlight-color: transparent;
-    }
-
-    /* Buttons should behave like images: prevent text selection on drag-start */
-    button, .btn, #style-hamburger { -webkit-user-drag: none; -webkit-touch-callout: none; }
     /* Make secondary buttons visually consistent and sleeker: subtle gradient, white text, and soft shadow */
     .btn.secondary{
         background: linear-gradient(90deg, rgba(6,182,212,0.14), rgba(124,58,237,0.14));
@@ -1575,9 +1531,27 @@
                     const id = j && j.id;
                     if (!id) throw new Error('Invalid response from backend');
                     const url = location.origin + location.pathname + '?state_id=' + encodeURIComponent(id);
-                    // Try Web Share API first (native share sheet on mobile), then clipboard, then prompt fallback
+                    // Try Web Share API first (native share sheet on mobile), prefer sharing a thumbnail image when supported
                     try {
                         if (navigator.share) {
+                            // attempt to capture a thumbnail from the map canvas
+                            try {
+                                const canvas = map && map.getCanvas && map.getCanvas();
+                                if (canvas && canvas.toBlob && window.File) {
+                                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                                    if (blob) {
+                                        const file = new File([blob], 'map-thumbnail.png', { type: 'image/png' });
+                                        // only include files if the UA supports sharing files
+                                        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                                            await navigator.share({ title: 'Shared location', text: 'Open this location', url, files: [file] });
+                                            return;
+                                        }
+                                    }
+                                }
+                            } catch (err) {
+                                console.warn('Thumbnail capture/share failed, falling back to URL share', err);
+                            }
+                            // fallback to URL-only share
                             await navigator.share({ title: 'Shared location', text: 'Open this location', url });
                             return;
                         }
