@@ -43,6 +43,17 @@
         btn.onclick = showBackendStateViewer;
         document.body.appendChild(btn);
     });
+        // Prevent text selection when mousing down on buttons (capture phase) while preserving click events
+        document.addEventListener('mousedown', (e) => {
+            try {
+                const t = e.target;
+                if (!t) return;
+                if (t.tagName === 'BUTTON' || t.classList && t.classList.contains('btn') || t.id === 'style-hamburger') {
+                    e.preventDefault();
+                    // trigger the click manually if needed on mouseup
+                }
+            } catch (e) {}
+        }, true);
     // Repeatedly nudge and re-apply draw layers to guarantee visibility after restore
     function forceDrawVisibility(attempts = 3, delay = 200) {
         let count = 0;
@@ -121,6 +132,9 @@
         user-select: none;
         -webkit-tap-highlight-color: transparent;
     }
+
+    /* Buttons should behave like images: prevent text selection on drag-start */
+    button, .btn, #style-hamburger { -webkit-user-drag: none; -webkit-touch-callout: none; }
     /* Make secondary buttons visually consistent and sleeker: subtle gradient, white text, and soft shadow */
     .btn.secondary{
         background: linear-gradient(90deg, rgba(6,182,212,0.14), rgba(124,58,237,0.14));
