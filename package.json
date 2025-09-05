@@ -1,4 +1,15 @@
 {
+  "name": "locations",
+  "version": "0.1.0",
+  "description": "Location Locations web app with collaborative session helpers",
+  "main": "index.html",
+  "scripts": {
+    "start": "echo 'This repo is a static frontend with Vercel serverless APIs'"
+  },
+  "author": "",
+  "license": "MIT"
+}
+{
   "name": "1more",
   "version": "1.0.0",
   "main": "index.js",

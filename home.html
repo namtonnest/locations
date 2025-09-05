@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Location Locations — Sessions</title>
+  <style>
+    body{font-family:Inter,system-ui,Segoe UI,Arial;background:#f6f7fb;color:#0f1724;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+    .card{background:white;padding:24px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.08);width:380px}
+    input,button{font-size:14px;padding:10px;border-radius:8px;border:1px solid rgba(2,6,23,0.06);width:100%;box-sizing:border-box}
+    button{background:#06b6d4;color:#062024;border:none;margin-top:8px;cursor:pointer}
+    .row{display:flex;gap:8px;margin-top:8px}
+    .hint{font-size:13px;color:#6b7280;margin-top:8px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2 style="margin:0 0 8px 0">Collaborative sessions</h2>
+    <div>Create a temporary session and share the ID so collaborators can join live.</div>
+
+    <div style="margin-top:12px">
+      <label style="font-size:13px">Your name</label>
+      <input id="name" placeholder="Optional display name" />
+      <button id="create">Create session</button>
+    </div>
+
+    <div class="hint">Or join an existing session</div>
+    <div class="row">
+      <input id="joinId" placeholder="Enter session id" />
+      <button id="joinBtn">Join</button>
+    </div>
+
+    <div id="result" class="hint"></div>
+  </div>
+
+  <script>
+    const create = document.getElementById('create');
+    const nameInput = document.getElementById('name');
+    const result = document.getElementById('result');
+    const joinId = document.getElementById('joinId');
+    const joinBtn = document.getElementById('joinBtn');
+
+    create.addEventListener('click', async () => {
+      create.disabled = true;
+      result.textContent = 'Creating session...';
+      try {
+        const res = await fetch('/api/create-session', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ ownerName: nameInput.value || 'Guest' }) });
+        if (!res.ok) throw new Error('Create failed ' + res.status);
+        const j = await res.json();
+        const id = j && j.id;
+        const url = window.location.origin + '/index.html?session_id=' + encodeURIComponent(id);
+        result.innerHTML = `Session <b>${id}</b> created. <div style="margin-top:8px"><a href="${url}">Open map (join)</a></div>`;
+      } catch (e) {
+        result.textContent = 'Failed to create session: ' + e.message;
+      } finally { create.disabled = false; }
+    });
+
+    joinBtn.addEventListener('click', () => {
+      const id = (joinId.value || '').trim();
+      if (!id) return alert('Enter session id');
+      const url = window.location.origin + '/index.html?session_id=' + encodeURIComponent(id);
+      window.location.href = url;
+    });
+  </script>
+</body>
+</html>
