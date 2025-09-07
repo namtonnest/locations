@@ -24,6 +24,10 @@
     <h2>Admin: Saved Map States</h2>
     <div class="row">
       <button id="refresh" class="btn">Refresh list</button>
+      <label style="display:flex;align-items:center;gap:8px">
+        <input id="importFile" type="file" accept="application/json" style="display:none" />
+        <button id="importBtn" class="btn small">Import JSON</button>
+      </label>
       <div style="flex:1"></div>
       <input id="manualId" placeholder="Enter state id (8 chars)" type="text" />
       <button id="fetchId" class="btn small">Fetch</button>
@@ -223,6 +227,43 @@
         detail.innerHTML = `<h3>State ${id}</h3><pre>${JSON.stringify(res, null, 2)}</pre>`;
         statusEl.textContent = 'Fetched ' + id;
       } catch (e) { statusEl.textContent = 'Failed to fetch: ' + e.message; detail.innerHTML = ''; }
+    });
+
+    // Import JSON file (single state or array of states) and POST to backend
+    const importFile = document.getElementById('importFile');
+    const importBtn = document.getElementById('importBtn');
+    importBtn.addEventListener('click', () => importFile.click());
+    importFile.addEventListener('change', async (ev) => {
+      const f = ev.target.files && ev.target.files[0];
+      if (!f) return;
+      try {
+        statusEl.textContent = 'Reading file...';
+        const txt = await f.text();
+        const parsed = JSON.parse(txt);
+        const items = Array.isArray(parsed) ? parsed : [parsed];
+        statusEl.textContent = 'Importing ' + items.length + ' states...';
+        const results = [];
+        for (const s of items) {
+          try {
+            const payload = { state: s };
+            const res = await fetch(BACKEND_STATE_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!res.ok) { results.push({ ok: false, error: 'HTTP ' + res.status }); continue; }
+            const j = await res.json();
+            const id = j && j.id;
+            if (id) {
+              // save locally for admin fallback
+              try { const key = 'admin_known_state_ids_v1'; const raw = localStorage.getItem(key); let arr = raw ? JSON.parse(raw) : []; if (!arr.includes(id)) { arr.unshift(id); localStorage.setItem(key, JSON.stringify(arr)); } } catch (e) {}
+              results.push({ ok: true, id });
+            } else {
+              results.push({ ok: false, error: 'No id returned' });
+            }
+          } catch (e) { results.push({ ok: false, error: e && e.message }); }
+        }
+        detail.innerHTML = '<h3>Import results</h3><pre>' + JSON.stringify(results, null, 2) + '</pre>';
+        statusEl.textContent = 'Import finished';
+        await refresh();
+      } catch (e) { statusEl.textContent = 'Import failed: ' + (e && e.message); alert('Import failed: ' + (e && e.message)); }
+      importFile.value = '';
     });
 
     // auto-refresh on load
