@@ -242,6 +242,7 @@
                     <button id="open-library-btn" class="btn secondary">Models</button>
                     <button id="open-models-btn" class="btn secondary">Info</button>
                     <button id="share-btn" class="btn secondary">Share</button>
+                    <button id="save-btn" class="btn secondary" title="Save state to server">Save</button>
                 </div>
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
@@ -1612,6 +1613,33 @@
             } catch (e) { alert('Failed to create share URL: ' + (e && e.message)); }
         })();
     });
+
+    // Save button: POST current state to backend and show returned id (for admin listing)
+    const saveBtn = document.getElementById('save-btn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', async () => {
+            try {
+                const data = serializePlacedModels();
+                const payload = { mapCenter: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), models: data, draws: drawnFeatures };
+                if (BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
+                    saveBtn.disabled = true;
+                    const res = await fetch(BACKEND_STATE_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: payload }) });
+                    if (!res.ok) throw new Error('Save failed: ' + res.status);
+                    const j = await res.json();
+                    const id = j && j.id;
+                    if (id) {
+                        alert('Saved state id: ' + id + '\nYou can view it in the admin page.');
+                        console.debug('Saved state id', id, j);
+                    } else {
+                        alert('Saved but server returned no id');
+                    }
+                    saveBtn.disabled = false;
+                } else {
+                    alert('No backend endpoint configured');
+                }
+            } catch (e) { alert('Save failed: ' + (e && e.message)); saveBtn.disabled = false; }
+        });
+    }
 
     // Try to restore state from URL params on load: prefer short ?state_id= when backend is used
     (function tryRestoreFromUrl(){
