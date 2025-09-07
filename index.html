@@ -213,6 +213,7 @@
     </div>
     <div class="controls-right">
         <button id="style-hamburger" class="btn secondary">☰</button>
+        <button id="locate-btn" class="btn" title="Center on your location" style="position:absolute; top:12px; right:12px; z-index:30;">Locate me</button>
     </div>
 </div>
 
@@ -322,6 +323,7 @@
     const shareBtn = document.getElementById('share-btn');
 
     const note = document.getElementById('map-note');
+    const locateBtn = document.getElementById('locate-btn');
 
     // Library panel elements
     const libraryPanel = document.getElementById('library');
@@ -735,6 +737,21 @@
                 </div>
         `;
         document.body.appendChild(controls);
+        // Move the style menu button into the Controls panel and relabel it 'Map Styles'
+        try {
+            const styleBtn = document.getElementById('style-hamburger');
+            if (styleBtn) {
+                styleBtn.textContent = 'Map Styles';
+                // remove absolute positioning used in topbar so it flows inside controls
+                styleBtn.style.position = 'static';
+                styleBtn.style.right = '';
+                styleBtn.style.top = '';
+                styleBtn.style.marginBottom = '8px';
+                // insert at top of the controls panel
+                const first = controls.firstChild;
+                controls.insertBefore(styleBtn, first);
+            }
+        } catch (e) { /* ignore if DOM not ready */ }
 
     // add a toggle button to show/hide controls on small screens
     const controlsToggle = document.createElement('button');
@@ -1157,6 +1174,26 @@
     // ensure layers present now and after style changes
     ensureDrawSourceAndLayers();
     map.on('style.load', () => { try { ensureDrawSourceAndLayers(); } catch (e) {} });
+
+    // Locate me button: use Geolocation API to add a Point feature and center map
+    if (locateBtn) locateBtn.addEventListener('click', () => {
+        if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
+        locateBtn.disabled = true;
+        navigator.geolocation.getCurrentPosition((pos) => {
+            const lng = pos.coords.longitude;
+            const lat = pos.coords.latitude;
+            // add as a Point feature to drawnFeatures
+            const feat = { type: 'Feature', geometry: { type: 'Point', coordinates: [lng, lat] }, properties: { color: '#ff6a00', text: 'You are here' } };
+            drawnFeatures.push(feat);
+            try { ensureDrawSourceAndLayers(); } catch (e) {}
+            try { if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures }); } catch (e) {}
+            try { refreshDrawSource(); } catch (e) {}
+            try { map.flyTo({ center: [lng, lat], zoom: 16 }); } catch (e) { map.setCenter([lng, lat]); }
+            try { nudgeDrawLayers(); } catch (e) {}
+            locateBtn.disabled = false;
+            saveDraws();
+        }, (err) => { alert('Failed to get location: ' + (err && err.message)); locateBtn.disabled = false; }, { enableHighAccuracy: true, timeout: 10000 });
+    });
     // control elements
     const rot = document.getElementById('rot');
     const rotInc = document.getElementById('rot-inc');
