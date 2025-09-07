@@ -68,6 +68,16 @@
         height: 36px;
         display:flex;align-items:center;justify-content:center;padding:6px;border-radius:8px
     }
+    /* Save button placed under Admin on desktop */
+    #save-btn{
+        position: absolute;
+        top: 96px;
+        right: 12px;
+        z-index: 30;
+        width: 36px;
+        height: 36px;
+        display:flex;align-items:center;justify-content:center;padding:6px;border-radius:8px;
+    }
     /* ensure the menu drops down below the button */
     .style-menu{position: absolute; right: 16px; top: 56px; background: rgba(255,255,255,0.98); padding:8px; border-radius:8px; box-shadow:var(--shadow); z-index:13; min-width:160px}
     .style-menu.hidden{display:none}
@@ -172,6 +182,16 @@
         #admin-btn {
             position: fixed !important;
             top: 40px !important;
+            right: -80px !important; /* moved off-screen to the right by 80px on mobile */
+            z-index: 62 !important;
+            width: 34px !important;
+            height: 34px !important;
+            border-radius: 6px !important;
+        }
+        /* save button on mobile: same off-screen behavior and placed below admin */
+        #save-btn {
+            position: fixed !important;
+            top: 80px !important;
             right: -80px !important; /* moved off-screen to the right by 80px on mobile */
             z-index: 62 !important;
             width: 34px !important;
