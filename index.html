@@ -1,31 +1,513 @@
-<!doctype html>
+    // Debug UI: fetch and display saved state from backend by share id
+    function showBackendStateViewer() {
+        const container = document.createElement('div');
+        container.style.position = 'fixed';
+        container.style.bottom = '16px';
+        container.style.right = '16px';
+        container.style.background = 'white';
+        container.style.border = '1px solid #ccc';
+        container.style.padding = '12px';
+        container.style.zIndex = '9999';
+        container.style.fontSize = '13px';
+        container.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+        container.innerHTML = '<b>Backend State Viewer</b><br><input id="stateIdInput" placeholder="Share ID" style="width:120px;margin-right:8px;"><button id="fetchStateBtn">Fetch</button><br><pre id="stateJson" style="max-width:400px;max-height:200px;overflow:auto;background:#f6f6f6;margin-top:8px;"></pre>';
+        document.body.appendChild(container);
+        container.querySelector('#fetchStateBtn').onclick = async () => {
+            const id = container.querySelector('#stateIdInput').value.trim();
+            if (!id) return;
+            const url = BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id);
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('Failed to fetch: ' + res.status);
+                const j = await res.json();
+                container.querySelector('#stateJson').textContent = JSON.stringify(j, null, 2);
+            } catch (e) {
+                container.querySelector('#stateJson').textContent = 'Error: ' + e;
+            }
+        };
+    }
+    // Add the debug button to the page
+    window.addEventListener('DOMContentLoaded', () => {
+        const btn = document.createElement('button');
+        btn.textContent = 'Show Backend State Viewer';
+        btn.style.position = 'fixed';
+        btn.style.bottom = '16px';
+        btn.style.right = '180px';
+        btn.style.zIndex = '9999';
+        btn.style.background = '#f59e0b';
+        btn.style.color = 'white';
+        btn.style.border = 'none';
+        btn.style.borderRadius = '6px';
+        btn.style.padding = '8px 12px';
+        btn.style.fontSize = '13px';
+        btn.onclick = showBackendStateViewer;
+        document.body.appendChild(btn);
+    });
+    // Repeatedly nudge and re-apply draw layers to guarantee visibility after restore
+    function forceDrawVisibility(attempts = 3, delay = 200) {
+        let count = 0;  
+        function tryNudge() {
+            try {
+                ensureDrawSourceAndLayers();
+                if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
+                refreshDrawSource();
+                if (map && map.triggerRepaint) map.triggerRepaint();
+                nudgeDrawLayers();
+            } catch (e) {}
+            count++;
+            if (count < attempts) setTimeout(tryNudge, delay);
+        }
+        tryNudge();
+    }
+<!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>Location Locations — Home</title>
-        <style>
-            body{font-family:Inter,system-ui,Arial;margin:0;background:#0f1724;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh}
-            .card{background:#fff;color:#0f1724;padding:28px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.4);max-width:680px;text-align:center}
-            .brand{font-weight:800;font-size:20px;color:#ff6a00;margin-bottom:8px}
-            .lead{color:#374151;margin:8px 0 18px}
-            .btn{background:#ff6a00;color:#fff;padding:10px 16px;border-radius:8px;border:none;cursor:pointer;font-weight:700}
-            .secondary{margin-left:12px;background:#e6eef6;color:#0f1724}
-            a{color:inherit;text-decoration:none}
-        </style>
-    </head>
-    <body>
-        <div class="card">
-            <div class="brand">Location — Map Editor</div>
-            <div class="lead">Welcome — open the map editor to place models, draw shapes, and share map state.</div>
-            <div>
-                <a href="/map.html"><button class="btn">Open Map Editor</button></a>
-                <a href="https://github.com/namtonnest/locations" target="_blank" rel="noopener"><button class="btn secondary">View Source</button></a>
+<head>
+<meta charset="utf-8">
+<title>Location Locations</title>
+<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.14.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.14.0/mapbox-gl.js"></script>
+<style>
+    :root{
+        --bg: #0f1724;
+    --card: #ffffff;
+    --muted: #6b7280;
+        --accent: #06b6d4;
+        --ui-text: #ff6a00; /* primary orange for UI text on white backgrounds */
+        --glass: rgba(255,255,255,0.06);
+        --shadow: 0 6px 18px rgba(2,6,23,0.3);
+    }
+    html,body{height:100%;}
+    body { margin: 0; padding: 0; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; background: var(--bg); color: #111827; }
+    #map { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+    /* Topbar */
+    .topbar{
+        position: absolute; left: 16px; right: 16px; top: 12px; z-index: 6; display:flex; justify-content:space-between; gap:12px;
+        pointer-events: auto;
+        padding-right: 72px; /* reserve space for the absolute hamburger on the right */
+    }
+    .controls-right{display:flex;gap:8px;align-items:center}
+    /* style menu (hamburger) */
+    /* place hamburger flush against the top-right margin */
+    #style-hamburger{
+        position: absolute;
+        top: 12px; /* match topbar offset */
+    right: 12px; /* slightly inset on desktop */
+    z-index: 14;
+    font-size: 14px; /* slightly smaller */
+    padding: 6px 8px;
+    margin: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    }
+    /* ensure the menu drops down below the button */
+    .style-menu{position: absolute; right: 16px; top: 56px; background: rgba(255,255,255,0.98); padding:8px; border-radius:8px; box-shadow:var(--shadow); z-index:13; min-width:160px}
+    .style-menu.hidden{display:none}
+    .style-menu button{display:block;width:100%;text-align:left;padding:8px;border:none;background:transparent;cursor:pointer;border-radius:6px}
+    .style-menu button:hover{background:rgba(15,23,36,0.04)}
+    .controls-left{display:flex; gap:8px; align-items:center}
+    .topbar .btn{background: linear-gradient(180deg, #ffffff, #f8fafc); border: 1px solid rgba(2,6,23,0.06); padding:8px 12px; border-radius:10px; cursor:pointer; color:#0f1724; font-weight:600; box-shadow: var(--shadow); transition: transform .08s ease, box-shadow .08s ease}
+    .topbar .btn:hover{transform: translateY(-1px);}
+    /* Make secondary buttons visually consistent and sleeker: subtle gradient, white text, and soft shadow */
+    .btn.secondary{
+        background: linear-gradient(90deg, rgba(6,182,212,0.14), rgba(124,58,237,0.14));
+        border: 1px solid rgba(255,255,255,0.08);
+        color: #0f1724; /* darker text for better readability */
+        box-shadow: 0 8px 20px rgba(2,6,23,0.14);
+        backdrop-filter: blur(6px);
+    }
+    .btn.secondary:hover{ transform: translateY(-1px) scale(1.02); }
+    .topbar .brand{font-weight:700; color:#fff; padding:8px 12px; border-radius:10px; background:linear-gradient(90deg,var(--accent),#7c3aed); box-shadow:var(--shadow); letter-spacing:0.2px}
+    .topbar .btn { min-width: 68px; }
+
+    /* Note */
+    #map-note{position:absolute; top:56px; left:18px; z-index:6; background: rgba(255,255,255,0.95); padding:8px 10px; border-radius:8px; display:none; font-size:13px; box-shadow:0 6px 18px rgba(15,23,36,0.14)}
+
+    /* Sidebar */
+    #sidebar{position:absolute; left:0; top:0; bottom:0; width:300px; background:linear-gradient(180deg, rgba(255,255,255,0.98), rgba(250,250,250,0.98)); z-index:4; padding:14px; overflow:auto; box-shadow:2px 0 18px rgba(2,6,23,0.12); border-right:1px solid rgba(2,6,23,0.04)}
+    #sidebar.hidden{display:none}
+    #sidebar h3{margin:0 0 8px 0; font-size:16px; color:var(--ui-text)}
+    .model-row{padding:10px; border-radius:8px; display:flex; justify-content:space-between; gap:8px; align-items:flex-start}
+    .model-row + .model-row{margin-top:8px}
+    .model-row.selected{background:#eef9ff}
+    .model-row .label{font-weight:600; color:var(--ui-text)}
+    .model-row .info{font-size:12px; color:rgba(255,106,0,0.85); margin-top:6px}
+    .model-row button{background:transparent; border:none; color:var(--ui-text); cursor:pointer; font-weight:600}
+    .model-left{display:flex;flex-direction:column}
+    .model-actions{display:flex;gap:8px;align-items:center}
+    .rename-input{width:140px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)}
+
+    /* Library panel */
+    #library{position:absolute; left:50%; transform:translateX(-50%); top:72px; z-index:6; background:rgba(255,255,255,0.98); padding:12px; border-radius:12px; box-shadow:var(--shadow); min-width:360px; display:none}
+    #library h4{margin:0 0 8px 0; color:var(--ui-text)}
+    #library-list{display:flex;flex-direction:column;gap:8px;max-height:260px;overflow:auto}
+    .lib-item{display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;border:1px solid rgba(2,6,23,0.04)}
+    .lib-item .url{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+    .lib-item button{background:transparent;border:none;color:var(--ui-text);cursor:pointer;font-weight:600}
+    #add-model-url{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(2,6,23,0.06);margin-top:8px}
+    .lib-item img.thumb{width:120px;height:80px;object-fit:cover;border-radius:6px;border:1px solid rgba(2,6,23,0.04);margin-right:8px}
+
+    /* ensure thumbnails have a white background for better contrast */
+    .lib-item img.thumb { background: #ffffff; }
+
+    /* Model controls */
+    #model-controls{position:absolute; right:18px; top:12px; z-index:12; background:rgba(255,255,255,0.98); padding:12px; border-radius:12px; box-shadow:var(--shadow); min-width:220px; pointer-events:auto}
+    #model-controls label{display:block; font-size:13px; color:var(--ui-text)}
+    #model-controls input[type=number]{width:86px; padding:6px; margin-left:8px; border-radius:6px; border:1px solid rgba(2,6,23,0.06)}
+
+    @media(max-width:640px){
+        /* place the info/sidebar near the bottom so it isn't covered by top overlays */
+        #sidebar{
+            position: fixed !important;
+            left: 8px !important;
+            right: 8px !important;
+            bottom: 12px !important;
+            top: auto !important;
+            width: auto !important;
+            height: 260px;
+            transform: none !important; /* opt out of parent scaling */
+            z-index: 71;
+        }
+        .topbar{left:8px; right:8px}
+        #model-controls{right:8px; left:8px; top:auto; bottom:12px}
+        /* hide controls by default on mobile; a toggle button will open them */
+        #model-controls{display:none}
+        #controls-toggle-btn{display:block}
+        /* ensure the style/hamburger button is flush to the viewport corner on mobile */
+        #style-hamburger {
+            position: fixed !important;
+            top: 8px !important;
+            right: 0 !important; /* flush to the viewport right edge */
+            margin: 0 !important;
+            transform: none !important; /* opt out of parent scaling */
+            z-index: 60;
+            font-size: 14px !important;
+            padding: 6px !important;
+            width: 36px !important;
+            height: 36px !important;
+            border-radius: 6px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+    }
+
+    /* Additional mobile compacting: slightly scale down UI and reduce paddings/font-sizes
+       so more controls fit on small screens without changing layout logic. */
+    @media (max-width: 640px) {
+        :root { --ui-scale: 0.88; }
+        /* Apply a subtle visual scale to primary overlay containers except panels that we pin to viewport */
+        .topbar, #model-controls, #sidebar, #draw-panel, #address-bar, .controls, .controls-left, .controls-right {
+            transform: scale(var(--ui-scale));
+            transform-origin: top left;
+        }
+        /* Keep library panel pinned to viewport center and opt out of scaling so it stays visible */
+        #library {
+            position: fixed !important;
+            left: 50% !important;
+            top: 72px !important;
+            transform: translateX(-50%) !important;
+            transform-origin: top center !important;
+            width: min(92%, 340px) !important;
+            min-width: 0 !important;
+            padding: 8px !important;
+            z-index: 72;
+            background: rgba(255,255,255,0.98);
+        }
+        /* Tighten button padding and reduce font sizes slightly */
+        .topbar .btn, .btn {
+            padding: 6px 8px;
+            font-size: 13px;
+        }
+        /* Make panels slightly narrower and reduce internal padding */
+        #draw-panel { width: 180px !important; padding: 8px !important; font-size: 13px; }
+        #draw-panel input, #draw-panel button, #model-controls input, #model-controls button, #sidebar .model-row { font-size: 13px; }
+        /* Nudge address bar sizing to fit better */
+        #address-bar { min-width: 260px; padding: 6px; font-size: 13px; bottom: 10px; }
+        /* Slightly smaller thumbnails */
+        .lib-item img.thumb { width: 100px; height: 68px; }
+    }
+
+    /* Controls toggle (default hidden on desktop) - positioned below the topbar */
+    #controls-toggle-btn{position:absolute; right:18px; top:56px; z-index:7; display:none;}
+
+    /* Address/search bar at bottom */
+    #address-bar{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;z-index:9;background:rgba(255,255,255,0.98);padding:8px;border-radius:10px;box-shadow:var(--shadow);display:flex;gap:8px;align-items:center;min-width:320px;max-width:90%}
+    #address-bar input{flex:1;padding:8px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)}
+    #address-bar button{padding:8px 10px;border-radius:8px}
+
+</style>
+</head>
+<body>
+<script src="https://unpkg.com/three@0.126.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.126.0/examples/js/loaders/GLTFLoader.js"></script>
+<!-- Load font and text geometry helpers so we can generate 3D text at runtime -->
+<script src="https://unpkg.com/three@0.126.0/examples/js/loaders/FontLoader.js"></script>
+<script src="https://unpkg.com/three@0.126.0/examples/js/geometries/TextGeometry.js"></script>
+<!-- Topbar markup: buttons are defined in HTML so JS doesn't inline-style them -->
+<div class="topbar">
+    <div class="controls-left">
+        <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start;margin-right:6px">
+            <div style="display:flex;align-items:center;gap:8px">
+                <div class="brand">Location</div>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <button id="open-library-btn" class="btn secondary">Models</button>
+                    <button id="open-models-btn" class="btn secondary">Info</button>
+                    <button id="share-btn" class="btn secondary">Share</button>
+                </div>
             </div>
-            <p style="font-size:13px;color:#6b7280;margin-top:14px">Tip: Drawings and labels are saved to the backend when you use Share.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+                <button id="add-image-btn" class="btn" style="padding:6px 10px;font-weight:600;">Add image</button>
+                <button id="add-model-btn" class="btn" style="padding:6px 10px;">Add model</button>
+                <button id="desktop-controls-btn" class="btn" style="padding:6px 10px;display:none">Controls</button>
+            </div>
         </div>
-    </body>
-</html>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+        <!-- placeholder for future search / account -->
+    </div>
+    <div class="controls-right">
+        <button id="style-hamburger" class="btn secondary">☰</button>
+    </div>
+</div>
+
+<!-- Style menu container (hidden by default) -->
+<div id="style-menu" class="style-menu hidden" aria-hidden="true">
+    <!-- populated by JS -->
+</div>
+
+<div id="map-note">Click on the map to place the model, or click the button again to cancel.</div>
+<div id="map"></div>
+<!-- Model library panel -->
+<div id="library" aria-hidden="true">
+    <h4>Model library</h4>
+    <div id="library-list"></div>
+    <input id="add-model-url" placeholder="Paste GLB url and press Add" />
+    <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="add-model-to-lib" class="btn">Add</button>
+        <button id="close-library" class="btn secondary">Close</button>
+    </div>
+</div>
+<script>
+    mapboxgl.accessToken = "pk.eyJ1IjoicHVycGhhY3RzIiwiYSI6ImNsdzY1bzVvNzFwb3IyamxyOG1vY3oyM2gifQ.2LikTeWKwlWsAcEneBXW0Q";
+    const map = new mapboxgl.Map({
+        container: 'map',
+    // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
+    // Default to Mapbox Streets for broader compatibility with layer names
+    style: 'mapbox://styles/mapbox/streets-v11',
+        config: {
+            basemap: {
+                theme: 'monochrome'
+            }
+        },
+    zoom: 18,
+    center: [-79.3875, 43.6426],
+        pitch: 60,
+        antialias: true // create the gl context with MSAA antialiasing, so custom layers are antialiased
+    });
+
+    // Backend endpoint that stores state and returns an 8-character id.
+    // Deploy the server code (README in repo) and set this to your deployed URL, e.g.
+    // const BACKEND_STATE_ENDPOINT = 'https://your-deployment.example.com/api/state';
+        const BACKEND_STATE_ENDPOINT = 'https://locations-seven.vercel.app/api/state';
+
+    // Prepare to allow adding a GLTF model interactively.
+    // Raw URL for the provided GitHub model (encoded for spaces)
+    const defaultModelUrl = 'https://raw.githubusercontent.com/namtonnest/3dmodels/main/food_truck.glb';
+
+    // Detect small/mobile viewports and adapt heavy work accordingly.
+    const isMobile = window.matchMedia && window.matchMedia('(max-width:640px)').matches;
+    // On low-memory/older mobile devices, generating thumbnails and doing
+    // complex WebGL work can cause the page to crash. We'll be defensive:
+    // - Avoid running expensive thumbnail rendering on mobile; use SVG fallback.
+    // - Make the custom three.js layer tolerate renderer creation failures.
+
+    // Mobile safety limits
+    // Removed hard model cap on mobile per user request. Keep lower concurrency on mobile.
+    const LOAD_CONCURRENCY = isMobile ? 1 : 3; // limit concurrent GLTF loads on mobile
+    let loaderQueue = [];
+    let activeLoads = 0;
+
+    function enqueueLoad(loader, url, onLoad, onProgress, onError) {
+        loaderQueue.push({ loader, url, onLoad, onProgress, onError });
+        processQueue();
+    }
+    function processQueue() {
+        if (!loaderQueue.length) return;
+        if (activeLoads >= LOAD_CONCURRENCY) return;
+        const item = loaderQueue.shift();
+        activeLoads++;
+        try {
+            item.loader.load(item.url, (gltf) => {
+                try { item.onLoad(gltf); } catch (e) { console.warn('onLoad handler error', e); }
+                activeLoads--; processQueue();
+            }, item.onProgress, (err) => { try { item.onError(err); } catch (e) {} activeLoads--; processQueue(); });
+        } catch (e) {
+            try { item.onError(e); } catch (ee) {}
+            activeLoads--; processQueue();
+        }
+    }
+
+
+    // UI: reference existing markup buttons
+    const addBtn = document.getElementById('add-model-btn');
+    addBtn.type = 'button';
+    addBtn.setAttribute('aria-pressed', 'false');
+
+    const modelsBtn = document.getElementById('open-models-btn');
+
+    // make the top-left brand act as a quick "reset to empty" action
+    const brandBtn = document.querySelector('.brand');
+    if (brandBtn) {
+        brandBtn.style.cursor = 'pointer';
+        brandBtn.title = 'Reload page without any placed models';
+        brandBtn.addEventListener('click', () => {
+            // remove all placed models from the scene
+            try {
+                placedModels.slice().forEach(p => removeModel(p.id));
+            } catch (e) { /* ignore if not ready */ }
+            // reload cleanly
+            // reload without query string or hash
+            const base = window.location.origin + window.location.pathname;
+            window.location.href = base;
+        });
+    }
+
+    // topbar buttons exist in DOM; just reference them
+    const shareBtn = document.getElementById('share-btn');
+
+    const note = document.getElementById('map-note');
+
+    // Library panel elements
+    const libraryPanel = document.getElementById('library');
+    const openLibraryBtn = document.getElementById('open-library-btn');
+    const libraryList = document.getElementById('library-list');
+    const addModelUrlInput = document.getElementById('add-model-url');
+    const addModelToLibBtn = document.getElementById('add-model-to-lib');
+    const closeLibraryBtn = document.getElementById('close-library');
+
+    // model library persistence key
+    const LIB_KEY = 'model_library_v1';
+    // default library items
+    const defaultLibrary = [
+        { id: 'jeep', name: 'Jeep', url: 'https://raw.githubusercontent.com/namtonnest/3dmodels/main/jeep.glb' },
+        { id: 'foodtruck', name: 'Food truck', url: 'https://raw.githubusercontent.com/namtonnest/3dmodels/main/food_truck.glb' }
+    ];
+
+
+    function loadLibrary() {
+        try {
+            const raw = localStorage.getItem(LIB_KEY);
+            if (!raw) return defaultLibrary.slice();
+            return JSON.parse(raw);
+        } catch (e) { return defaultLibrary.slice(); }
+    }
+
+    function saveLibrary(items) {
+        localStorage.setItem(LIB_KEY, JSON.stringify(items));
+    }
+
+    let modelLibrary = loadLibrary();
+
+    // helper to add a model URL into the library if not already present
+    function addModelToLibraryUrl(url, name) {
+        if (!url) return;
+        if (modelLibrary.some(i => i.url === url)) return;
+        const id = 'm_' + Date.now();
+        modelLibrary.unshift({ id, name: name || url.split('/').pop(), url });
+        saveLibrary(modelLibrary);
+    }
+
+    // helper to add a 3D-text entry into the library (type: '3dtext')
+    function addTextModelToLibrary(name) {
+        if (modelLibrary.some(i => i.type === '3dtext' && i.name === name)) return;
+        const id = 'm_' + Date.now();
+        modelLibrary.unshift({ id, name: name || '3D Text', type: '3dtext' });
+        saveLibrary(modelLibrary);
+    }
+
+    // ensure any previously-added Car entry is removed (user requested removal)
+    modelLibrary = modelLibrary.filter(i => i.url !== 'https://raw.githubusercontent.com/namtonnest/LocationLocations/main/car.glb');
+    saveLibrary(modelLibrary);
+
+    // Add traffic cone model requested by user (idempotent)
+    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/3dmodels/main/traffic_cone.glb', 'Traffic cone');
+
+    // Add police car model requested by user (idempotent)
+    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/3dmodels/main/cop_sedan_90_-_low_poly_model.glb', 'Police car');
+
+    // Add truck model requested by user (idempotent) and set a default scale
+    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/truck.glb', 'truck');
+    // Add restrooms model requested by user (idempotent)
+    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/restroom_model.glb', 'Restrooms');
+    // Ensure default scales for some models (truck, jeep)
+    (function attachDefaultScales(){
+        try {
+            const truck = modelLibrary.find(i => i.url && i.url.includes('truck.glb'));
+            if (truck) truck.defaultScale = 0.6;
+            const jeep = modelLibrary.find(i => i.id === 'jeep' || (i.url && i.url.includes('jeep.glb')));
+            if (jeep) jeep.defaultScale = 0.5;
+            const police = modelLibrary.find(i => (i.name && i.name.toLowerCase().includes('police')) || (i.url && i.url.includes('cop_sedan')));
+            if (police) police.defaultScale = 0.55;
+            const restrooms = modelLibrary.find(i => i.url && i.url.includes('restroom_model.glb'));
+            if (restrooms) restrooms.defaultScale = 3;
+            saveLibrary(modelLibrary);
+        } catch (e) {}
+    })();
+
+    // Add a 3D Text helper entry so users can add custom 3D text from the library
+    addTextModelToLibrary('3D Text');
+
+    // thumbnail cache key
+    const THUMB_KEY = 'model_thumbs_v1';
+    let thumbCache = {};
+    try { thumbCache = JSON.parse(localStorage.getItem(THUMB_KEY) || '{}'); } catch (e) { thumbCache = {}; }
+
+    // small helper to save thumbnail cache (try/catch to avoid quota errors)
+    function saveThumbCache() {
+        try { localStorage.setItem(THUMB_KEY, JSON.stringify(thumbCache)); } catch (e) { /* ignore quota errors */ }
+    }
+
+    // fallback svg data url
+    function fallbackThumb(name) {
+        const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='240' height='160'><rect width='100%' height='100%' fill='#ffffff'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#ff6a00' font-family='Arial' font-size='18'>${name}</text></svg>`;
+        return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+    }
+
+    // generate thumbnail: load model with GLTFLoader into an offscreen renderer and capture
+    async function generateThumbnail(url, id) {
+    // Attempt to generate thumbnails on mobile too; use smaller canvas to
+    // reduce memory and GPU pressure. If WebGL or loading fails, we'll
+    // gracefully fall back to an SVG image (see try/catch below).
+
+    // already cached
+    if (thumbCache[url]) return thumbCache[url];
+        return new Promise((resolve) => {
+            try {
+                const loader = new THREE.GLTFLoader();
+                // offscreen canvas - smaller on mobile to reduce resource use
+                const canvas = document.createElement('canvas');
+                const canvasWidth = isMobile ? 180 : 240;
+                const canvasHeight = isMobile ? 120 : 160;
+                canvas.width = canvasWidth; canvas.height = canvasHeight;
+                let renderer;
+                try {
+                    // Request an opaque canvas so the rendered thumbnail has a white background
+                    renderer = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true, alpha: false });
+                } catch (err) {
+                    // If renderer creation fails (common on some mobile browsers),
+                    // bail out and return the SVG fallback.
+                    console.warn('Thumbnail renderer creation failed, returning SVG fallback', err);
+                    resolve(fallbackThumb(id || 'Model'));
+                    return;
+                }
+                renderer.setSize(canvas.width, canvas.height);
+                // draw with a white clear color so thumbnails have white background
                 try { if (renderer.setClearColor) renderer.setClearColor(0xffffff, 1); } catch (e) {}
                 // paint 2D canvas white as an additional safety (some browsers composite differently)
                 try { const ctx2d = canvas.getContext('2d'); if (ctx2d) { ctx2d.fillStyle = '#ffffff'; ctx2d.fillRect(0,0,canvas.width,canvas.height); } } catch(e) {}
