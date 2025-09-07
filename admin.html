@@ -123,10 +123,11 @@
           await deleteState(id);
           return;
         }
-        // Open in new tab using the main app page with state_id query param
-        const url = location.origin + '/' + location.pathname.replace(/\\[^/]*$/, '/') + 'index.html?state_id=' + encodeURIComponent(id);
-        // simpler: open root with param
-        window.open(location.origin + location.pathname.replace(/\\[^/]*$/, '/') + '?state_id=' + encodeURIComponent(id), '_blank');
+  // Open in new tab using the main app page with state_id query param
+  // Compute the base path (strip the last path segment) and open the main map with the state_id
+  const base = location.pathname.replace(/[^/]*$/, '');
+  const target = location.origin + base + 'index.html?state_id=' + encodeURIComponent(id);
+  window.open(target, '_blank');
       }));
     }
 
