@@ -266,7 +266,7 @@
                 </div>
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
-                <button id="add-image-btn" class="btn" style="padding:6px 10px;font-weight:600;">Add image</button>
+                <!-- Add image button removed from main UI; available in Draw panel -->
                 <button id="add-model-btn" class="btn" style="padding:6px 10px;">Add model</button>
                 <button id="desktop-controls-btn" class="btn" style="padding:6px 10px;display:none">Controls</button>
             </div>
@@ -969,6 +969,7 @@
         <div style="display:flex;gap:8px;margin-bottom:8px">
             <button id="draw-clear" class="btn secondary">Clear</button>
             <button id="draw-save" class="btn">Save</button>
+            <button id="draw-add-image" class="btn">Add image</button>
         </div>
         <button id="draw-refresh" class="btn" style="background:#f59e0b;color:white;border-radius:6px;padding:6px 12px;font-size:13px;margin-bottom:6px;width:100%">Refresh Draw Models</button>
         <div style="margin-top:6px;font-size:13px;font-weight:600">Color</div>
@@ -2651,7 +2652,13 @@ async function listImageRecords() {
 // UI state for placing an image
 let pendingImageDataUrl = null;
 
-addImageBtn.addEventListener('click', () => { fileInput.click(); });
+if (addImageBtn) addImageBtn.addEventListener('click', () => { fileInput.click(); });
+
+// also allow adding images from the Draw panel
+try {
+    const drawAddImageBtn = document.getElementById('draw-add-image');
+    if (drawAddImageBtn) drawAddImageBtn.addEventListener('click', () => { fileInput.click(); });
+} catch (e) { /* ignore */ }
 
 fileInput.addEventListener('change', async (ev) => {
     const f = ev.target.files && ev.target.files[0];
