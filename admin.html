@@ -121,6 +121,24 @@
       statusEl.textContent = 'Refreshing...';
       const found = await tryFetchList();
       if (!found) {
+        statusEl.textContent = 'No listing endpoint found. Trying locally saved ids...';
+        // look for locally-saved ids added by the Save button
+        try {
+          const raw = localStorage.getItem('admin_known_state_ids_v1');
+          const list = raw ? JSON.parse(raw) : [];
+          if (list && list.length) {
+            const rows = [];
+            for (const id of list) {
+              try {
+                const res = await fetchStateById(id);
+                rows.push({ id, state: res && res.state ? res.state : res });
+              } catch (e) { rows.push({ id, error: true }); }
+            }
+            renderTable(rows);
+            statusEl.textContent = 'Loaded ' + rows.length + ' locally-saved entries.';
+            return;
+          }
+        } catch (e) { /* ignore */ }
         statusEl.textContent = 'No listing endpoint found. Use manual fetch by ID.';
         return;
       }

@@ -1630,6 +1630,14 @@
                     if (id) {
                         alert('Saved state id: ' + id + '\nYou can view it in the admin page.');
                         console.debug('Saved state id', id, j);
+                        try {
+                            // persist known saved ids locally so admin page can list them
+                            const key = 'admin_known_state_ids_v1';
+                            const raw = localStorage.getItem(key);
+                            let arr = [];
+                            try { arr = raw ? JSON.parse(raw) : []; } catch (e) { arr = []; }
+                            if (!arr.includes(id)) { arr.unshift(id); arr = arr.slice(0, 200); localStorage.setItem(key, JSON.stringify(arr)); }
+                        } catch (e) { /* ignore localStorage errors */ }
                     } else {
                         alert('Saved but server returned no id');
                     }
