@@ -1,0 +1,171 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin — Saved Map States</title>
+  <style>
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:18px;background:#0f1724;color:#e6eef8}
+    .card{background:#0b1220;padding:16px;border-radius:8px;box-shadow:0 8px 24px rgba(2,6,23,.6);max-width:1100px;margin:12px auto}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.04);text-align:left;font-size:13px}
+    th{color:#9fb6c9;font-weight:600}
+    .muted{color:#9fb6c9}
+    .btn{background:#06b6d4;color:#071325;padding:6px 10px;border-radius:6px;border:none;cursor:pointer}
+    .small{font-size:12px;padding:4px 8px}
+    pre{background:#041018;padding:8px;border-radius:6px;overflow:auto;color:#dbeafe}
+    .row{display:flex;gap:8px;align-items:center}
+    input[type=text]{padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit}
+    .note{font-size:13px;color:#9fb6c9;margin-top:8px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Admin: Saved Map States</h2>
+    <div class="row">
+      <button id="refresh" class="btn">Refresh list</button>
+      <div style="flex:1"></div>
+      <input id="manualId" placeholder="Enter state id (8 chars)" type="text" />
+      <button id="fetchId" class="btn small">Fetch</button>
+    </div>
+    <div class="note">This page attempts to fetch a list of saved states from the server. If your backend does not expose a listing endpoint, paste a saved <code>state_id</code> above and click Fetch.</div>
+    <div id="status" class="note"></div>
+
+    <table id="results" style="display:none">
+      <thead>
+        <tr><th>ID</th><th>Created</th><th>Models</th><th>Draws</th><th>Center</th><th>Actions</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div id="detail" style="margin-top:12px"></div>
+  </div>
+
+  <script>
+    const BACKEND_STATE_ENDPOINT = 'https://locations-seven.vercel.app/api/state';
+
+    const statusEl = document.getElementById('status');
+    const resultsTbl = document.getElementById('results');
+    const tbody = resultsTbl.querySelector('tbody');
+    const detail = document.getElementById('detail');
+
+    async function tryFetchList() {
+      statusEl.textContent = 'Looking for listing endpoints...';
+      const candidates = [BACKEND_STATE_ENDPOINT + '/list', BACKEND_STATE_ENDPOINT + '/all', BACKEND_STATE_ENDPOINT, BACKEND_STATE_ENDPOINT + '/states'];
+      for (const url of candidates) {
+        try {
+          statusEl.textContent = 'Trying ' + url;
+          const res = await fetch(url, { method: 'GET' });
+          if (!res.ok) { continue; }
+          const j = await res.json();
+          // Accept either an array of ids, or array of full objects, or wrapper { states: [...] }
+          if (Array.isArray(j)) return { type: 'array', data: j, url };
+          if (Array.isArray(j.states)) return { type: 'array', data: j.states, url };
+          if (Array.isArray(j.items)) return { type: 'array', data: j.items, url };
+          // fallback: if object contains many keys, it might be a single state
+          if (j && j.state && (j.id || j._id)) return { type: 'single', data: j, url };
+        } catch (e) { /* ignore and try next */ }
+      }
+      return null;
+    }
+
+    async function fetchStateById(id) {
+      try {
+        const res = await fetch(BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id));
+        if (!res.ok) throw new Error('Not found');
+        return await res.json();
+      } catch (e) { throw e; }
+    }
+
+    function renderTable(entries) {
+      tbody.innerHTML = '';
+      if (!entries.length) {
+        resultsTbl.style.display = 'none';
+        statusEl.textContent = 'No entries found.';
+        return;
+      }
+      resultsTbl.style.display = '';
+      entries.forEach(e => {
+        const tr = document.createElement('tr');
+        const id = e.id || e._id || (e.key || '');
+        const created = e.createdAt || e.created || '';
+        const state = e.state || e;
+        const models = state && state.models ? (state.models.length || 0) : (e.modelsCount || 0);
+        const draws = state && state.draws ? (state.draws.length || 0) : (e.drawsCount || 0);
+        const center = state && state.mapCenter ? (Array.isArray(state.mapCenter) ? state.mapCenter.join(',') : JSON.stringify(state.mapCenter)) : '';
+
+        tr.innerHTML = `<td><code>${id}</code></td><td class="muted">${created}</td><td>${models}</td><td>${draws}</td><td class="muted">${center}</td><td><button class="btn small" data-id="${id}">Open</button> <button class="btn small" data-id="${id}" data-action="view">View JSON</button></td>`;
+        tbody.appendChild(tr);
+      });
+      // wire buttons
+      tbody.querySelectorAll('button').forEach(b => b.addEventListener('click', async (ev) => {
+        const id = b.dataset.id;
+        const action = b.dataset.action;
+        if (!id) return;
+        if (action === 'view') {
+          try {
+            const j = await fetchStateById(id);
+            detail.innerHTML = `<h3>State ${id}</h3><pre>${JSON.stringify(j, null, 2)}</pre>`;
+          } catch (e) { detail.innerHTML = '<div class="note">Failed to fetch: '+ e.message +'</div>'; }
+          return;
+        }
+        // Open in new tab using the main app page with state_id query param
+        const url = location.origin + '/' + location.pathname.replace(/\/[^/]*$/, '/') + 'index.html?state_id=' + encodeURIComponent(id);
+        // simpler: open root with param
+        window.open(location.origin + location.pathname.replace(/\/[^/]*$/, '/') + '?state_id=' + encodeURIComponent(id), '_blank');
+      }));
+    }
+
+    async function refresh() {
+      detail.innerHTML = '';
+      statusEl.textContent = 'Refreshing...';
+      const found = await tryFetchList();
+      if (!found) {
+        statusEl.textContent = 'No listing endpoint found. Use manual fetch by ID.';
+        return;
+      }
+      statusEl.textContent = 'Parsing list from ' + found.url;
+      let items = found.data;
+      // If items are simple ids, fetch each
+      if (items.length && typeof items[0] === 'string') {
+        const rows = [];
+        statusEl.textContent = 'Fetching ' + items.length + ' states...';
+        await Promise.all(items.map(async (id) => {
+          try {
+            const res = await fetchStateById(id);
+            const obj = res && res.state ? Object.assign({ id }, res.state) : Object.assign({ id }, res);
+            rows.push({ id, state: obj });
+          } catch (e) { rows.push({ id, error: true }); }
+        }));
+        renderTable(rows);
+        statusEl.textContent = 'Loaded ' + rows.length + ' entries.';
+        return;
+      }
+      // If items are objects that may include state or metrics
+      const normalized = items.map(it => {
+        if (it && (it.state || it.models || it.draws)) return it;
+        // if wrapper like { id, state }
+        if (it && it.id && it.state) return Object.assign({ id: it.id }, it);
+        return it;
+      });
+      renderTable(normalized);
+      statusEl.textContent = 'Loaded ' + normalized.length + ' entries.';
+    }
+
+    document.getElementById('refresh').addEventListener('click', refresh);
+    document.getElementById('fetchId').addEventListener('click', async () => {
+      const id = document.getElementById('manualId').value.trim();
+      if (!id) { statusEl.textContent = 'Enter an id first'; return; }
+      statusEl.textContent = 'Fetching ' + id + '...';
+      try {
+        const res = await fetchStateById(id);
+        detail.innerHTML = `<h3>State ${id}</h3><pre>${JSON.stringify(res, null, 2)}</pre>`;
+        statusEl.textContent = 'Fetched ' + id;
+      } catch (e) { statusEl.textContent = 'Failed to fetch: ' + e.message; detail.innerHTML = ''; }
+    });
+
+    // auto-refresh on load
+    refresh();
+  </script>
+</body>
+</html>
