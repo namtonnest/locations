@@ -1641,9 +1641,16 @@
             try {
                 const data = serializePlacedModels();
                 const payload = { mapCenter: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), models: data, draws: drawnFeatures };
+                // Prompt user for an optional name for this saved map
+                let name = null;
+                try { name = prompt('Enter a name for this map (optional)'); } catch (e) { name = null; }
+                if (name !== null) name = (String(name).trim() || null);
+
                 if (BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
                     saveBtn.disabled = true;
-                    const res = await fetch(BACKEND_STATE_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: payload }) });
+                    // include name alongside state; backend may ignore unknown fields but will receive it if supported
+                    const body = JSON.stringify({ state: payload, name });
+                    const res = await fetch(BACKEND_STATE_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
                     if (!res.ok) throw new Error('Save failed: ' + res.status);
                     const j = await res.json();
                     const id = j && j.id;
@@ -1657,6 +1664,15 @@
                             let arr = [];
                             try { arr = raw ? JSON.parse(raw) : []; } catch (e) { arr = []; }
                             if (!arr.includes(id)) { arr.unshift(id); arr = arr.slice(0, 200); localStorage.setItem(key, JSON.stringify(arr)); }
+                            // also persist a local mapping id->name so admin can show names when server doesn't
+                            try {
+                                const namesKey = 'admin_known_state_names_v1';
+                                const rawNames = localStorage.getItem(namesKey);
+                                let map = {};
+                                try { map = rawNames ? JSON.parse(rawNames) : {}; } catch (e) { map = {}; }
+                                if (name) map[id] = name; else if (!map[id]) map[id] = '';
+                                localStorage.setItem(namesKey, JSON.stringify(map));
+                            } catch (e) { /* ignore localStorage errors */ }
                         } catch (e) { /* ignore localStorage errors */ }
                     } else {
                         alert('Saved but server returned no id');

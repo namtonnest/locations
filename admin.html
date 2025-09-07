@@ -37,7 +37,7 @@
 
     <table id="results" style="display:none">
       <thead>
-        <tr><th>ID</th><th>Created</th><th>Models</th><th>Draws</th><th>Center</th><th>Actions</th></tr>
+        <tr><th>ID</th><th>Name</th><th>Created</th><th>Models</th><th>Draws</th><th>Center</th><th>Actions</th></tr>
       </thead>
       <tbody></tbody>
     </table>
@@ -94,13 +94,29 @@
         const id = e.id || e._id || (e.key || '');
         const created = e.createdAt || e.created || '';
         const state = e.state || e;
+        // determine a display name: prefer server-provided state.name or top-level e.name, otherwise local mapping
+        let displayName = '';
+        if (state && state.name) displayName = state.name;
+        else if (e && e.name) displayName = e.name;
+        else {
+          try {
+            const raw = localStorage.getItem('admin_known_state_names_v1');
+            const map = raw ? JSON.parse(raw) : {};
+            if (map && map[id]) displayName = map[id];
+          } catch (err) { displayName = ''; }
+        }
         const models = state && state.models ? (state.models.length || 0) : (e.modelsCount || 0);
         const draws = state && state.draws ? (state.draws.length || 0) : (e.drawsCount || 0);
         const center = state && state.mapCenter ? (Array.isArray(state.mapCenter) ? state.mapCenter.join(',') : JSON.stringify(state.mapCenter)) : '';
 
-        tr.innerHTML = `<td><code>${id}</code></td><td class="muted">${created}</td><td>${models}</td><td>${draws}</td><td class="muted">${center}</td><td><button class="btn small" data-id="${id}">Open</button> <button class="btn small" data-id="${id}" data-action="view">View JSON</button> <button class="btn small" data-id="${id}" data-action="delete" style="background:#ef4444;color:#fff">Delete</button></td>`;
+        tr.innerHTML = `<td><code>${id}</code></td><td>${escapeHtml(displayName)}</td><td class="muted">${created}</td><td>${models}</td><td>${draws}</td><td class="muted">${center}</td><td><button class="btn small" data-id="${id}">Open</button> <button class="btn small" data-id="${id}" data-action="view">View JSON</button> <button class="btn small" data-id="${id}" data-action="delete" style="background:#ef4444;color:#fff">Delete</button></td>`;
         tbody.appendChild(tr);
       });
+      // tiny helper to escape HTML when injecting displayName
+      function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/[&<>"']/g, function(m) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[m]; });
+      }
       // wire buttons
       tbody.querySelectorAll('button').forEach(b => b.addEventListener('click', async (ev) => {
         const id = b.dataset.id;
