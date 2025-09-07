@@ -94,7 +94,7 @@
         const draws = state && state.draws ? (state.draws.length || 0) : (e.drawsCount || 0);
         const center = state && state.mapCenter ? (Array.isArray(state.mapCenter) ? state.mapCenter.join(',') : JSON.stringify(state.mapCenter)) : '';
 
-        tr.innerHTML = `<td><code>${id}</code></td><td class="muted">${created}</td><td>${models}</td><td>${draws}</td><td class="muted">${center}</td><td><button class="btn small" data-id="${id}">Open</button> <button class="btn small" data-id="${id}" data-action="view">View JSON</button></td>`;
+        tr.innerHTML = `<td><code>${id}</code></td><td class="muted">${created}</td><td>${models}</td><td>${draws}</td><td class="muted">${center}</td><td><button class="btn small" data-id="${id}">Open</button> <button class="btn small" data-id="${id}" data-action="view">View JSON</button> <button class="btn small" data-id="${id}" data-action="delete" style="background:#ef4444;color:#fff">Delete</button></td>`;
         tbody.appendChild(tr);
       });
       // wire buttons
@@ -105,14 +105,24 @@
         if (action === 'view') {
           try {
             const j = await fetchStateById(id);
-            detail.innerHTML = `<h3>State ${id}</h3><pre>${JSON.stringify(j, null, 2)}</pre>`;
+            detail.innerHTML = `<h3>State ${id}</h3><pre>${JSON.stringify(j, null, 2)}</pre><div style="margin-top:8px"><button id="detail-delete" class="btn" style="background:#ef4444;color:#fff">Delete this state</button></div>`;
+            // wire delete in detail
+            document.getElementById('detail-delete').addEventListener('click', async () => {
+              if (!confirm('Delete state ' + id + '? This cannot be undone.')) return;
+              await deleteState(id);
+            });
           } catch (e) { detail.innerHTML = '<div class="note">Failed to fetch: '+ e.message +'</div>'; }
           return;
         }
+        if (action === 'delete') {
+          if (!confirm('Delete state ' + id + '? This cannot be undone.')) return;
+          await deleteState(id);
+          return;
+        }
         // Open in new tab using the main app page with state_id query param
-        const url = location.origin + '/' + location.pathname.replace(/\/[^/]*$/, '/') + 'index.html?state_id=' + encodeURIComponent(id);
+        const url = location.origin + '/' + location.pathname.replace(/\\[^/]*$/, '/') + 'index.html?state_id=' + encodeURIComponent(id);
         // simpler: open root with param
-        window.open(location.origin + location.pathname.replace(/\/[^/]*$/, '/') + '?state_id=' + encodeURIComponent(id), '_blank');
+        window.open(location.origin + location.pathname.replace(/\\[^/]*$/, '/') + '?state_id=' + encodeURIComponent(id), '_blank');
       }));
     }
 
@@ -168,6 +178,39 @@
       });
       renderTable(normalized);
       statusEl.textContent = 'Loaded ' + normalized.length + ' entries.';
+    }
+
+    // helper to remove id from localStorage known list
+    function removeLocalKnownId(id) {
+      try {
+        const key = 'admin_known_state_ids_v1';
+        const raw = localStorage.getItem(key);
+        if (!raw) return;
+        let arr = [];
+        try { arr = JSON.parse(raw); } catch (e) { arr = []; }
+        arr = arr.filter(x => x !== id);
+        localStorage.setItem(key, JSON.stringify(arr));
+      } catch (e) { /* ignore */ }
+    }
+
+    async function deleteState(id) {
+      try {
+        statusEl.textContent = 'Deleting ' + id + '...';
+        const res = await fetch(BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error('Delete failed: ' + res.status + ' ' + txt);
+        }
+        // remove from local known ids too
+        removeLocalKnownId(id);
+        statusEl.textContent = 'Deleted ' + id;
+        // refresh list
+        await refresh();
+        detail.innerHTML = '';
+      } catch (e) {
+        statusEl.textContent = 'Delete failed: ' + (e && e.message);
+        alert('Delete failed: ' + (e && e.message));
+      }
     }
 
     document.getElementById('refresh').addEventListener('click', refresh);
