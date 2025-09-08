@@ -1896,12 +1896,13 @@
             el.style.fontWeight = '600';
             el.style.fontSize = '12px';
             el.style.lineHeight = '1';
-            el.style.border = '1px solid rgba(2,6,23,0.06)';
+            el.style.border = '1px solid rgba(2,6,23,0.12)';
             el.style.whiteSpace = 'nowrap';
             el.style.overflow = 'hidden';
             el.style.textOverflow = 'ellipsis';
             el.textContent = entry.name || 'Model';
-            const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
+            // offset the marker upward so it doesn't get visually overlapped by tall 3D models
+            const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom', offset: [0, -20] })
                 .setLngLat([entry.geo.lng, entry.geo.lat])
                 .addTo(map);
             return marker;
