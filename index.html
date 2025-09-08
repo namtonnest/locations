@@ -1816,6 +1816,18 @@
             });
             actions.appendChild(renameBtn);
 
+            // Show name toggle: persistently show/hide model name on map
+            const tooltipBtn = document.createElement('button');
+            tooltipBtn.textContent = (entry && entry._nameMarker) ? 'Hide name' : 'Show name';
+            tooltipBtn.addEventListener('click', () => {
+                try {
+                    toggleModelName(entry.id);
+                    // update button label after toggling
+                    tooltipBtn.textContent = (entry && entry._nameMarker) ? 'Hide name' : 'Show name';
+                } catch (e) { console.warn('toggleModelName failed', e); }
+            });
+            actions.appendChild(tooltipBtn);
+
             const delBtn = document.createElement('button');
             delBtn.textContent = 'Remove';
             delBtn.addEventListener('click', () => removeModel(entry.id));
@@ -1855,6 +1867,11 @@
         if (modelLayerRef && entry.object) {
             try { modelLayerRef.scene.remove(entry.object); } catch (e) { console.warn(e); }
         }
+        // remove any persistent name marker
+        try {
+            if (entry && entry._nameMarker) { try { entry._nameMarker.remove(); } catch (e) {} }
+            if (_modelNameMarkers[id]) { try { _modelNameMarkers[id].remove(); } catch (e) {} delete _modelNameMarkers[id]; }
+        } catch (e) {}
         placedModels.splice(idx, 1);
         if (selectedModelId === id) {
             selectedModelId = null;
@@ -1863,6 +1880,52 @@
         renderSidebar();
         if (map) map.triggerRepaint();
     }
+
+    // Map of persistent name markers by model id
+    const _modelNameMarkers = {};
+    function createNameMarker(entry) {
+        if (!entry || !entry.geo) return null;
+        try {
+            const el = document.createElement('div');
+            el.className = 'model-name-marker';
+            // compact styling: smaller padding, thinner border-radius, lighter shadow
+            el.style.padding = '4px 6px';
+            el.style.background = 'white';
+            el.style.borderRadius = '4px';
+            el.style.boxShadow = '0 4px 10px rgba(2,6,23,0.08)';
+            el.style.fontWeight = '600';
+            el.style.fontSize = '12px';
+            el.style.lineHeight = '1';
+            el.style.border = '1px solid rgba(2,6,23,0.06)';
+            el.style.whiteSpace = 'nowrap';
+            el.style.overflow = 'hidden';
+            el.style.textOverflow = 'ellipsis';
+            el.textContent = entry.name || 'Model';
+            const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
+                .setLngLat([entry.geo.lng, entry.geo.lat])
+                .addTo(map);
+            return marker;
+        } catch (e) { console.warn('createNameMarker failed', e); return null; }
+    }
+
+    function toggleModelName(id) {
+        const entry = placedModels.find(p => p.id === id);
+        if (!entry) return;
+        // if a marker exists, remove it
+        if (entry._nameMarker) {
+            try { entry._nameMarker.remove(); } catch (e) {}
+            delete entry._nameMarker;
+            if (_modelNameMarkers[id]) { try { _modelNameMarkers[id].remove(); } catch (e) {} delete _modelNameMarkers[id]; }
+            return;
+        }
+        // otherwise create and persist one
+        const marker = createNameMarker(entry);
+        if (marker) {
+            entry._nameMarker = marker;
+            _modelNameMarkers[id] = marker;
+        }
+    }
+
 
     // variables used by the custom three.js layer
     let modelLayerRef = null; // set in onAdd
