@@ -217,17 +217,47 @@
     async function deleteState(id) {
       try {
         statusEl.textContent = 'Deleting ' + id + '...';
-        const res = await fetch(BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id), { method: 'DELETE' });
-        if (!res.ok) {
-          const txt = await res.text();
-          throw new Error('Delete failed: ' + res.status + ' ' + txt);
+        // helper to centralize success handling
+        const handleSuccess = async () => {
+          removeLocalKnownId(id);
+          statusEl.textContent = 'Deleted ' + id;
+          await refresh();
+          detail.innerHTML = '';
+        };
+
+        // 1) Try DELETE
+        let res = null;
+        try {
+          res = await fetch(BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id), { method: 'DELETE' });
+        } catch (err) {
+          // network error - surface later
+          res = null;
         }
-        // remove from local known ids too
-        removeLocalKnownId(id);
-        statusEl.textContent = 'Deleted ' + id;
-        // refresh list
-        await refresh();
-        detail.innerHTML = '';
+        if (res && res.ok) { await handleSuccess(); return; }
+
+        // 2) If server rejects method (405) or DELETE not allowed, try POST with method override header
+        const status = res ? res.status : 0;
+        if (status === 405 || !res || !res.ok) {
+          try {
+            const res2 = await fetch(BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id), { method: 'POST', headers: { 'X-HTTP-Method-Override': 'DELETE', 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+            if (res2.ok) { await handleSuccess(); return; }
+          } catch (e) {}
+          // 3) try POST to a /delete endpoint with id in body
+          try {
+            const res3 = await fetch(BACKEND_STATE_ENDPOINT + '/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+            if (res3.ok) { await handleSuccess(); return; }
+          } catch (e) {}
+          // 4) try POST to /:id/delete
+          try {
+            const res4 = await fetch(BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id) + '/delete', { method: 'POST' });
+            if (res4.ok) { await handleSuccess(); return; }
+          } catch (e) {}
+        }
+
+        // If we get here, compose an informative error
+        let text = '';
+        try { if (res) text = await res.text(); } catch (e) { text = String(e && e.message || ''); }
+        throw new Error('Delete failed: ' + (res ? res.status : 'no-response') + ' ' + (text || 'Method not allowed or no suitable delete endpoint'));
       } catch (e) {
         statusEl.textContent = 'Delete failed: ' + (e && e.message);
         alert('Delete failed: ' + (e && e.message));
