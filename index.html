@@ -84,7 +84,7 @@
     .style-menu button{display:block;width:100%;text-align:left;padding:8px;border:none;background:transparent;cursor:pointer;border-radius:6px}
     .style-menu button:hover{background:rgba(15,23,36,0.04)}
     .controls-left{display:flex; gap:8px; align-items:center}
-    .topbar .btn{background: linear-gradient(180deg, #ffffff, #f8fafc); border: 1px solid rgba(2,6,23,0.06); padding:8px 12px; border-radius:10px; cursor:pointer; color:#0f1724; font-weight:600; box-shadow: var(--shadow); transition: transform .08s ease, box-shadow .08s ease}
+    .topbar .btn{background: linear-gradient(180deg, #ffffff, #f8fafc); border: 1px solid rgba(2,6,23,0.06); padding:8px 12px; border-radius:10px; cursor:pointer; color:#0f1724; font-weight:700; box-shadow: var(--shadow); transition: transform .08s ease, box-shadow .08s ease}
     .topbar .btn:hover{transform: translateY(-1px);}
     /* Make secondary buttons visually consistent and sleeker: subtle gradient, white text, and soft shadow */
     .btn.secondary{
@@ -94,6 +94,8 @@
         box-shadow: 0 8px 20px rgba(2,6,23,0.14);
         backdrop-filter: blur(6px);
     }
+    /* Make all buttons use bold text for better legibility */
+    .btn { font-weight: 700; }
     .btn.secondary:hover{ transform: translateY(-1px) scale(1.02); }
     .topbar .brand{font-weight:700; color:#fff; padding:8px 12px; border-radius:10px; background:linear-gradient(90deg,var(--accent),#7c3aed); box-shadow:var(--shadow); letter-spacing:0.2px}
     .topbar .btn { min-width: 68px; }
