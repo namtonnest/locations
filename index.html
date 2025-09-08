@@ -212,6 +212,20 @@
             height: 34px !important;
             border-radius: 6px !important;
         }
+        /* Right-side stacked container for small screens: groups action buttons */
+        #right-stack{
+            position: fixed !important;
+            right: 12px !important;
+            top: 8px !important;
+            z-index: 80 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+            align-items: flex-end !important;
+            pointer-events: auto !important;
+        }
+        /* when buttons are inside the stack, make them compact and remove absolute offsets */
+        #right-stack .btn{ position: static !important; right: auto !important; top: auto !important; width:36px !important; height:36px !important; display:flex !important; align-items:center !important; justify-content:center !important }
     }
 
     /* Additional mobile compacting: slightly scale down UI and reduce paddings/font-sizes
@@ -2866,6 +2880,47 @@ map.on('click', (e) => {
         }
     } catch (e) { console.warn('drawing click failed', e); }
 });
+
+// --- Right-stack layout handling: move action buttons into a stacked container on small screens ---
+(function setupRightStack() {
+    const STACK_ID = 'right-stack';
+    let stackElem = document.getElementById(STACK_ID);
+    const locate = document.getElementById('locate-btn');
+    const admin = document.getElementById('admin-btn');
+    const save = document.getElementById('save-btn');
+    // create stack container if missing
+    function ensureStack() {
+        stackElem = document.getElementById(STACK_ID) || document.createElement('div');
+        stackElem.id = STACK_ID;
+        document.body.appendChild(stackElem);
+        return stackElem;
+    }
+
+    function moveButtonsToStack() {
+        ensureStack();
+        // append in order: locate, admin, save
+        try { if (locate && !stackElem.contains(locate)) stackElem.appendChild(locate); } catch (e) {}
+        try { if (admin && !stackElem.contains(admin)) stackElem.appendChild(admin); } catch (e) {}
+        try { if (save && !stackElem.contains(save)) stackElem.appendChild(save); } catch (e) {}
+    }
+
+    function restoreButtons() {
+        try { if (locate) document.body.appendChild(locate); } catch (e) {}
+        try { if (admin) document.body.appendChild(admin); } catch (e) {}
+        try { if (save) document.body.appendChild(save); } catch (e) {}
+        // remove stack if empty
+        try { if (stackElem && stackElem.parentNode) stackElem.parentNode.removeChild(stackElem); } catch (e) {}
+    }
+
+    function refreshStackLayout() {
+        const isSmall = window.matchMedia && window.matchMedia('(max-width:640px)').matches;
+        if (isSmall) moveButtonsToStack(); else restoreButtons();
+    }
+
+    // run on load and resize
+    window.addEventListener('resize', refreshStackLayout);
+    setTimeout(refreshStackLayout, 50);
+})();
 </script>
 
 </body>
