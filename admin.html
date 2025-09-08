@@ -37,7 +37,7 @@
 
     <table id="results" style="display:none">
       <thead>
-        <tr><th>Actions</th><th>ID</th><th>Name</th><th>Created</th><th>Models</th><th>Draws</th><th>Center</th></tr>
+  <tr><th>Actions</th><th>ID</th><th>Name</th><th>Models</th><th>Draws</th><th>Center</th></tr>
       </thead>
       <tbody></tbody>
     </table>
@@ -109,7 +109,7 @@
         const draws = state && state.draws ? (state.draws.length || 0) : (e.drawsCount || 0);
         const center = state && state.mapCenter ? (Array.isArray(state.mapCenter) ? state.mapCenter.join(',') : JSON.stringify(state.mapCenter)) : '';
 
-  tr.innerHTML = `<td><button class="btn small" data-id="${id}">Open</button> <button class="btn small" data-id="${id}" data-action="view">View JSON</button> <button class="btn small" data-id="${id}" data-action="delete" style="background:#ef4444;color:#fff">Delete</button></td><td><code>${id}</code></td><td>${escapeHtml(displayName)}</td><td class="muted">${created}</td><td>${models}</td><td>${draws}</td><td class="muted">${center}</td>`;
+  tr.innerHTML = `<td><button class="btn small" data-id="${id}">Open</button> <button class="btn small" data-id="${id}" data-action="view">View JSON</button> <button class="btn small" data-id="${id}" data-action="delete" style="background:#ef4444;color:#fff">Delete</button></td><td><code>${id}</code></td><td>${escapeHtml(displayName)}</td><td>${models}</td><td>${draws}</td><td class="muted">${center}</td>`;
         tbody.appendChild(tr);
       });
       // tiny helper to escape HTML when injecting displayName
