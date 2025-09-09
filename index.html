@@ -2962,14 +2962,21 @@ function autoTagLocationAndSave() {
         // Serialize current map state (models, draws, images, etc.)
         let state = {};
         try {
-            state = serializeCurrentState ? serializeCurrentState() : {};
+            const data = serializePlacedModels();
+            state = {
+                mapCenter: map.getCenter(),
+                zoom: map.getZoom(),
+                pitch: map.getPitch(),
+                bearing: map.getBearing(),
+                models: data,
+                draws: drawnFeatures,
+                autoTaggedLocation: {
+                    lng, lat, accuracy, timestamp: Date.now()
+                }
+            };
         } catch (e) {
             console.warn('Failed to serialize state for auto-save', e);
         }
-        // Add location tag
-        state.autoTaggedLocation = {
-            lng, lat, accuracy, timestamp: Date.now()
-        };
         // Save to admin states via backend
         try {
             if (typeof BACKEND_STATE_ENDPOINT !== 'string' || !BACKEND_STATE_ENDPOINT.length) {
