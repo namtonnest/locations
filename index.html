@@ -2941,8 +2941,9 @@ map.on('click', (e) => {
 </body>
 <script>
 // --- Background location tracking and auto-save to admin states ---
+
 let autoSaveEnabled = false;
-let autoSaveWatchId = null;
+let autoSaveIntervalId = null;
 const autoSaveBtn = document.getElementById('auto-save-btn');
 if (autoSaveBtn) {
     autoSaveBtn.textContent = 'Auto-save OFF';
@@ -2953,18 +2954,21 @@ if (autoSaveBtn) {
             autoSaveBtn.textContent = 'Auto-save ON';
             autoSaveBtn.style.background = '#0077ff';
             if (navigator.geolocation) {
-                autoSaveWatchId = navigator.geolocation.watchPosition(
-                    autoTagLocationAndSave,
-                    (err) => { console.warn('Geolocation error for auto-tag', err); },
-                    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-                );
+                autoTagLocationAndSave(); // run once immediately
+                autoSaveIntervalId = setInterval(() => {
+                    navigator.geolocation.getCurrentPosition(
+                        autoTagLocationAndSave,
+                        (err) => { console.warn('Geolocation error for auto-tag', err); },
+                        { enableHighAccuracy: true, timeout: 10000 }
+                    );
+                }, 10000);
             }
         } else {
             autoSaveBtn.textContent = 'Auto-save OFF';
             autoSaveBtn.style.background = '#6b7280';
-            if (navigator.geolocation && autoSaveWatchId !== null) {
-                navigator.geolocation.clearWatch(autoSaveWatchId);
-                autoSaveWatchId = null;
+            if (autoSaveIntervalId !== null) {
+                clearInterval(autoSaveIntervalId);
+                autoSaveIntervalId = null;
             }
         }
     });
