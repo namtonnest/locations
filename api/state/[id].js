@@ -49,17 +49,30 @@ module.exports = async (req, res) => {
   setCors(res);
 
   const { id } = req.query || {};
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   if (!id) return res.status(400).json({ error: 'Missing id param' });
-  try {
-  const redis = getRedis();
-  const raw = await redis.get(`state:${id}`);
-    if (raw === null || raw === undefined) return res.status(404).json({ error: 'Not found' });
-    let parsed;
-    try { parsed = JSON.parse(raw); } catch (e) { parsed = raw; }
-    return res.json({ state: parsed });
-  } catch (err) {
-    console.error('fetch error', err);
-    return res.status(500).json({ error: err.message || String(err) });
+  if (req.method === 'GET') {
+    try {
+      const redis = getRedis();
+      const raw = await redis.get(`state:${id}`);
+      if (raw === null || raw === undefined) return res.status(404).json({ error: 'Not found' });
+      let parsed;
+      try { parsed = JSON.parse(raw); } catch (e) { parsed = raw; }
+      return res.json({ state: parsed });
+    } catch (err) {
+      console.error('fetch error', err);
+      return res.status(500).json({ error: err.message || String(err) });
+    }
+  } else if (req.method === 'DELETE') {
+    try {
+      const redis = getRedis();
+      const result = await redis.del(`state:${id}`);
+      if (result === 0) return res.status(404).json({ error: 'Not found or already deleted' });
+      return res.json({ ok: true, deleted: id });
+    } catch (err) {
+      console.error('delete error', err);
+      return res.status(500).json({ error: err.message || String(err) });
+    }
+  } else {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 };
