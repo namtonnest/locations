@@ -57,6 +57,7 @@ function setCors(res) {
 
 
 
+
 module.exports = async (req, res) => {
   setCors(res);
 
@@ -82,12 +83,12 @@ module.exports = async (req, res) => {
       // Optionally set TTL (uncomment if needed)
       // await redis.expire(`state:${id}`, 30 * 24 * 60 * 60); // 30 days
       res.status(201).json({ id });
-    } catch (err) {
+    }
+    catch (err) {
       console.error('[Upstash] Failed to save state:', err);
       res.status(500).json({ error: 'Failed to save state' });
     }
     return;
-  } else {
-    res.status(405).json({ error: 'Method not allowed' });
   }
+  res.status(405).json({ error: 'Method not allowed' });
 };
