@@ -1709,7 +1709,7 @@
             if (id && BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
                 setTimeout(async () => {
                     try {
-                        const url = BACKEND_STATE_ENDPOINT + '?id=' + encodeURIComponent(id);
+                        const url = BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id);
                         const res = await fetch(url);
                         if (!res.ok) throw new Error('Failed to fetch state: ' + res.status);
                         const j = await res.json();
