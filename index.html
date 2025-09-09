@@ -1660,40 +1660,29 @@
 
     // Share button: create a short share URL by saving current state to the backend
     const shareBtn = document.getElementById('share-btn');
-    // Local state sharing helpers
-    function generateLocalStateId() {
-        // Simple random 8-char id
-        return 'l_' + Math.random().toString(36).substr(2, 8);
-    }
-    function saveStateLocally(id, state) {
-        try {
-            localStorage.setItem('local_state_' + id, JSON.stringify(state));
-        } catch (e) { console.warn('Failed to save local state', e); }
-    }
-    function loadStateLocally(id) {
-        try {
-            const raw = localStorage.getItem('local_state_' + id);
-            if (!raw) return null;
-            return JSON.parse(raw);
-        } catch (e) { return null; }
-    }
-
     async function shareCurrentState() {
         try {
             const data = serializePlacedModels();
             const payload = { mapCenter: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), models: data, draws: drawnFeatures };
-            // Save locally and show/copy local link
-            const id = generateLocalStateId();
-            saveStateLocally(id, payload);
-            const url = location.origin + location.pathname + '?local_state_id=' + encodeURIComponent(id);
-            try {
-                if (navigator.share) { await navigator.share({ url }); return; }
-            } catch (e) { console.warn('navigator.share failed', e); }
-            try {
-                if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(url); alert('Local share URL copied to clipboard'); return; }
-            } catch (e) { console.warn('clipboard write failed', e); }
-            try { window.prompt('Copy this local URL', url); } catch (e) { alert(url); }
-        } catch (e) { alert('Failed to create local share URL: ' + (e && e.message)); }
+            if (BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
+                shareBtn.disabled = true;
+                const res = await fetch(BACKEND_STATE_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: payload }) });
+                if (!res.ok) throw new Error('Backend save failed: ' + res.status);
+                const j = await res.json();
+                const id = j && j.id;
+                if (!id) throw new Error('Invalid response from backend');
+                const url = location.origin + location.pathname + '?state_id=' + encodeURIComponent(id);
+                try {
+                    if (navigator.share) { await navigator.share({ url }); return; }
+                } catch (e) { console.warn('navigator.share failed', e); }
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(url); alert('Share URL copied to clipboard'); return; }
+                } catch (e) { console.warn('clipboard write failed', e); }
+                try { window.prompt('Copy this URL', url); } catch (e) { alert(url); }
+            } else {
+                alert('No backend configured for sharing');
+            }
+        } catch (e) { alert('Failed to create share URL: ' + (e && e.message)); }
         finally { try { if (shareBtn) shareBtn.disabled = false; } catch (e) {} }
     }
     if (shareBtn) shareBtn.addEventListener('click', shareCurrentState);
