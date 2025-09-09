@@ -489,6 +489,8 @@
 
     // Add truck model requested by user (idempotent) and set a default scale
     addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/truck.glb', 'truck');
+    // Add Cubed Van model (box-truck.glb) requested by user
+    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/box-truck.glb', 'Cubed Van');
     // Add restrooms model requested by user (idempotent)
     addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/restroom_model.glb', 'Restrooms');
     // Ensure default scales for some models (truck, jeep)
@@ -502,6 +504,8 @@
             if (police) police.defaultScale = 0.55;
             const restrooms = modelLibrary.find(i => i.url && i.url.includes('restroom_model.glb'));
             if (restrooms) restrooms.defaultScale = 3;
+            const boxtruck = modelLibrary.find(i => i.url && i.url.includes('box-truck.glb'));
+            if (boxtruck) boxtruck.defaultScale = 0.9;
             saveLibrary(modelLibrary);
         } catch (e) {}
     })();
