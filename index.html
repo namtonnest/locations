@@ -1707,10 +1707,24 @@
                 return;
             }
             if (id && BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
-                // ...existing code for backend fetch...
                 setTimeout(async () => {
-                    // ...existing code...
-                    // (unchanged, see above)
+                    try {
+                        const url = BACKEND_STATE_ENDPOINT + '?id=' + encodeURIComponent(id);
+                        const res = await fetch(url);
+                        if (!res.ok) throw new Error('Failed to fetch state: ' + res.status);
+                        const j = await res.json();
+                        console.log('[DEBUG] Loaded state from backend:', j);
+                        if (j && j.state) {
+                            restoreSavedState(j.state);
+                        } else if (j && j.models) {
+                            // fallback: some older backend versions may return models at top level
+                            restoreSavedState(j);
+                        } else {
+                            console.warn('No state found in backend response', j);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to restore from backend', e);
+                    }
                 }, 500);
                 return;
             }
