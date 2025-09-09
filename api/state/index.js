@@ -55,67 +55,39 @@ function setCors(res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
+
+
 module.exports = async (req, res) => {
-  // Handle CORS preflight
+  setCors(res);
+
   if (req.method === 'POST') {
-    // Save a new state
-    const payload = req.body;
-    if (!payload || typeof payload !== 'object') {
-      res.status(400).json({ error: 'Missing or invalid payload' });
-      return;
-    }
-    const id = nanoid(8);
     try {
-      // Log Upstash Redis client config and payload
+      if (!nanoid) {
+        const mod = await import('nanoid');
+        nanoid = mod.nanoid || (mod.default && mod.default.nanoid) || mod.default || mod;
+      }
+      const body = req.body || {};
+      const state = body.state || body;
+      if (!state || typeof state !== 'object') {
+        res.status(400).json({ error: 'Missing or invalid state in request body' });
+        return;
+      }
+      const id = nanoid(8);
+      const redis = getRedis();
       console.log('[Upstash] Redis client config:', redis?.clientOptions || redis?.options || 'unknown');
       console.log('[Upstash] Saving state with id:', id);
-      console.log('[Upstash] Payload:', JSON.stringify(payload));
-      await redis.set(`state:${id}`, JSON.stringify(payload));
+      console.log('[Upstash] Payload:', JSON.stringify(state));
+      await redis.set(`state:${id}`, JSON.stringify(state));
       console.log('[Upstash] State saved successfully:', id);
-      res.status(200).json({ id });
+      // Optionally set TTL (uncomment if needed)
+      // await redis.expire(`state:${id}`, 30 * 24 * 60 * 60); // 30 days
+      res.status(201).json({ id });
     } catch (err) {
       console.error('[Upstash] Failed to save state:', err);
       res.status(500).json({ error: 'Failed to save state' });
     }
     return;
+  } else {
+    res.status(405).json({ error: 'Method not allowed' });
   }
-      if (!raw) return res.status(404).json({ error: 'State not found' });
-      let state = null;
-      try { state = JSON.parse(raw); } catch (e) { state = raw; }
-      return res.status(200).json({ id, state });
-    } catch (err) {
-      console.error('get error', err);
-      return res.status(500).json({ error: err.message || String(err) });
-    }
-  }
-
-  // POST /api/state - save new state
-  if (req.method === 'POST') {
-    try {
-      const body = req.body || {};
-      const state = body.state || body;
-      if (!state) return res.status(400).json({ error: 'Missing state in request body' });
-
-      // generate an 8-char id
-      if (!nanoid) {
-        const mod = await import('nanoid');
-        nanoid = mod.nanoid || (mod.default && mod.default.nanoid) || mod.default || mod;
-      }
-      const id = nanoid(8);
-      // save as stringified JSON under key state:<id>
-      const redis = getRedis();
-      await redis.set(`state:${id}`, JSON.stringify(state));
-
-      // optionally set TTL by uncommenting the next line (seconds). Example: 30 days -> 30*24*60*60
-      // await redis.expire(`state:${id}`, 30 * 24 * 60 * 60);
-
-      return res.status(201).json({ id });
-    } catch (err) {
-      console.error('save error', err);
-      return res.status(500).json({ error: err.message || String(err) });
-    }
-  }
-
-  // Method not allowed
-  return res.status(405).json({ error: 'Method not allowed' });
 };
