@@ -491,6 +491,10 @@
     addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/truck.glb', 'truck');
     // Add Cubed Van model (box-truck.glb) requested by user
     addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/box-truck.glb', 'Cubed Van');
+    // Add Sprinter van model (Mercedes Sprinter)
+    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/3dmodels/main/mercedes_benz_sprinter_2006.glb', 'Sprinter');
+    // Add Package truck model (roman diesel box truck)
+    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/roman_diesel_box_truck.glb', 'Package truck');
     // Add restrooms model requested by user (idempotent)
     addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/restroom_model.glb', 'Restrooms');
     // Ensure default scales for some models (truck, jeep)
@@ -506,6 +510,10 @@
             if (restrooms) restrooms.defaultScale = 3;
             const boxtruck = modelLibrary.find(i => i.url && i.url.includes('box-truck.glb'));
             if (boxtruck) boxtruck.defaultScale = 0.1;
+            const sprinter = modelLibrary.find(i => i.url && (i.url.includes('sprinter') || i.url.includes('mercedes_benz_sprinter')));
+            if (sprinter) sprinter.defaultScale = 0.6;
+            const packtruck = modelLibrary.find(i => i.url && i.url.includes('roman_diesel_box_truck.glb'));
+            if (packtruck) packtruck.defaultScale = 0.8;
             saveLibrary(modelLibrary);
         } catch (e) {}
     })();
