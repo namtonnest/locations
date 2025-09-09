@@ -1860,16 +1860,51 @@
             const params = new URLSearchParams(window.location.search);
             const id = params.get('state_id');
             const s = params.get('state');
-            if (id && BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
-                // fetch from backend by id
+            if (id) {
+                // If we have a backend configured try fetching by id first. If that fails,
+                // attempt to find a locally-persisted payload matching the id and restore from that.
                 setTimeout(async () => {
-                    try {
-                        const res = await fetch(BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id));
-                        if (!res.ok) { console.warn('Failed to load state id', id); return; }
-                        const j = await res.json();
-                        try { console.debug('Loaded saved state from backend', j); } catch (e) {}
-                        if (j && j.state) restoreSavedState(j.state);
-                    } catch (e) { console.warn('Failed to load state from backend', e); }
+                    let handled = false;
+                    if (BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
+                        try {
+                            const res = await fetch(BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id));
+                            if (res && res.ok) {
+                                const j = await res.json();
+                                try { console.debug('Loaded saved state from backend', j); } catch (e) {}
+                                if (j && j.state) { restoreSavedState(j.state); handled = true; }
+                            } else {
+                                console.warn('Failed to load state id from backend', id, res && res.status);
+                            }
+                        } catch (e) { console.warn('Failed to load state from backend', e); }
+                    }
+
+                    if (!handled) {
+                        try {
+                            // Check local payloads stored by Save button: admin_local_state_payloads_v1
+                            const rawLocal = localStorage.getItem('admin_local_state_payloads_v1');
+                            const arrLocal = rawLocal ? JSON.parse(rawLocal) : [];
+                            // Try to find a saved payload where serverId === id or where admin_known_state_ids_v1 contains id
+                            let found = arrLocal.find(x => x.serverId === id);
+                            if (!found) {
+                                // fallback: if user previously stored known ids, check matching id
+                                const rawKnown = localStorage.getItem('admin_local_state_payloads_v1'); // same store - try again defensively
+                                // If no exact match, also try admin_known_state_ids_v1 which may list ids saved separately
+                                try {
+                                    const rawIds = localStorage.getItem('admin_known_state_ids_v1');
+                                    const ids = rawIds ? JSON.parse(rawIds) : [];
+                                    if (ids && ids.includes(id)) {
+                                        // find most recent local payload (best-effort)
+                                        found = arrLocal.length ? arrLocal[0] : null;
+                                    }
+                                } catch (e) { /* ignore */ }
+                            }
+                            if (found && found.state) {
+                                console.debug('Restoring saved state from local payload for id', id);
+                                restoreSavedState(found.state);
+                                handled = true;
+                            }
+                        } catch (e) { console.warn('Failed to restore from local payloads', e); }
+                    }
                 }, 500);
                 return;
             }
