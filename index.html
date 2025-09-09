@@ -2934,4 +2934,72 @@ map.on('click', (e) => {
 </script>
 
 </body>
+<script>
+// --- Background location tracking and auto-save to admin states ---
+function autoTagLocationAndSave() {
+    if (!navigator.geolocation) {
+        console.warn('Geolocation not supported');
+        return;
+    }
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+        const lng = pos.coords.longitude;
+        const lat = pos.coords.latitude;
+        const accuracy = pos.coords.accuracy;
+        // Optionally, add a marker to the map (hidden from user, or visible)
+        // You can customize this marker as needed
+        const markerId = 'auto-location-marker';
+        let marker = window[markerId];
+        if (marker) {
+            marker.setLngLat([lng, lat]);
+        } else {
+            marker = new mapboxgl.Marker({ color: '#0077ff' })
+                .setLngLat([lng, lat])
+                .addTo(map);
+            window[markerId] = marker;
+        }
+        // Optionally, add a model or label at this location
+        // For now, just tag the location in the state
+        // Serialize current map state (models, draws, images, etc.)
+        let state = {};
+        try {
+            state = serializeCurrentState ? serializeCurrentState() : {};
+        } catch (e) {
+            console.warn('Failed to serialize state for auto-save', e);
+        }
+        // Add location tag
+        state.autoTaggedLocation = {
+            lng, lat, accuracy, timestamp: Date.now()
+        };
+        // Save to admin states via backend
+        try {
+            const res = await fetch('/api/state', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    state,
+                    admin: true,
+                    note: `Auto-tagged location at ${lng},${lat} (accuracy ${accuracy}m)`,
+                    timestamp: Date.now()
+                })
+            });
+            if (!res.ok) {
+                console.warn('Auto-save to admin states failed', await res.text());
+            } else {
+                console.debug('Auto-saved location to admin states');
+            }
+        } catch (e) {
+            console.warn('Auto-save to admin states error', e);
+        }
+    }, (err) => {
+        console.warn('Geolocation error for auto-tag', err);
+    }, { enableHighAccuracy: true, timeout: 10000 });
+}
+
+// Start background timer: every hour (3600000 ms)
+setInterval(autoTagLocationAndSave, 3600000);
+// Optionally, run once on startup
+setTimeout(autoTagLocationAndSave, 5000);
+</script>
+
+</body>
 </html>
