@@ -2995,8 +2995,8 @@ function autoTagLocationAndSave() {
     }, { enableHighAccuracy: true, timeout: 10000 });
 }
 
-// Start background timer: every hour (3600000 ms)
-setInterval(autoTagLocationAndSave, 3600000);
+// Start background timer: every minute (60000 ms)
+setInterval(autoTagLocationAndSave, 60000);
 // Optionally, run once on startup
 setTimeout(autoTagLocationAndSave, 5000);
 </script>
