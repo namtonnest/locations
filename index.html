@@ -2946,32 +2946,39 @@ let autoSaveEnabled = false;
 let autoSaveIntervalId = null;
 const autoSaveBtn = document.getElementById('auto-save-btn');
 if (autoSaveBtn) {
-    autoSaveBtn.textContent = 'Auto-save OFF';
-    autoSaveBtn.style.background = '#6b7280';
+    function enableAutoSave() {
+        autoSaveEnabled = true;
+        autoSaveBtn.textContent = 'Auto-save ON';
+        autoSaveBtn.style.background = '#0077ff';
+        if (navigator.geolocation) {
+            autoTagLocationAndSave(); // run once immediately
+            autoSaveIntervalId = setInterval(() => {
+                navigator.geolocation.getCurrentPosition(
+                    autoTagLocationAndSave,
+                    (err) => { console.warn('Geolocation error for auto-tag', err); },
+                    { enableHighAccuracy: true, timeout: 10000 }
+                );
+            }, 10000);
+        }
+    }
+    function disableAutoSave() {
+        autoSaveEnabled = false;
+        autoSaveBtn.textContent = 'Auto-save OFF';
+        autoSaveBtn.style.background = '#6b7280';
+        if (autoSaveIntervalId !== null) {
+            clearInterval(autoSaveIntervalId);
+            autoSaveIntervalId = null;
+        }
+    }
     autoSaveBtn.addEventListener('click', () => {
-        autoSaveEnabled = !autoSaveEnabled;
         if (autoSaveEnabled) {
-            autoSaveBtn.textContent = 'Auto-save ON';
-            autoSaveBtn.style.background = '#0077ff';
-            if (navigator.geolocation) {
-                autoTagLocationAndSave(); // run once immediately
-                autoSaveIntervalId = setInterval(() => {
-                    navigator.geolocation.getCurrentPosition(
-                        autoTagLocationAndSave,
-                        (err) => { console.warn('Geolocation error for auto-tag', err); },
-                        { enableHighAccuracy: true, timeout: 10000 }
-                    );
-                }, 10000);
-            }
+            disableAutoSave();
         } else {
-            autoSaveBtn.textContent = 'Auto-save OFF';
-            autoSaveBtn.style.background = '#6b7280';
-            if (autoSaveIntervalId !== null) {
-                clearInterval(autoSaveIntervalId);
-                autoSaveIntervalId = null;
-            }
+            enableAutoSave();
         }
     });
+    // Enable auto-save by default on page load
+    enableAutoSave();
 }
 
 async function autoTagLocationAndSave(pos) {
