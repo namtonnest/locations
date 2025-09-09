@@ -605,25 +605,56 @@
                             outCtx.fillStyle = '#ffffff';
                             outCtx.fillRect(0, 0, out.width, out.height);
                             outCtx.drawImage(canvas, 0, 0);
-                            const dataUrl = out.toDataURL('image/png');
-                            thumbCache[url] = dataUrl;
+                            // If this model is a vehicle, rotate the thumbnail 90deg clockwise
+                            const urlLowerLocal = String(url || '').toLowerCase();
+                            const idLowerLocal = String(id || '').toLowerCase();
+                            const isVehicleLocal = /truck|van|sprinter|food_truck|box-truck|box_truck/.test(urlLowerLocal) || /truck|van|sprinter|food_truck|box-truck|box_truck/.test(idLowerLocal);
+                            let finalDataUrl;
+                            if (isVehicleLocal) {
+                                const rot = document.createElement('canvas');
+                                rot.width = out.height; rot.height = out.width;
+                                const rctx = rot.getContext('2d');
+                                // rotate 90deg clockwise
+                                rctx.translate(rot.width / 2, rot.height / 2);
+                                rctx.rotate(Math.PI / 2);
+                                rctx.drawImage(out, -out.width / 2, -out.height / 2);
+                                finalDataUrl = rot.toDataURL('image/png');
+                            } else {
+                                finalDataUrl = out.toDataURL('image/png');
+                            }
+                            thumbCache[url] = finalDataUrl;
                             saveThumbCache();
                             // cleanup
                             renderer.dispose();
                             try { scene.remove(obj); } catch (e) {}
-                            resolve(dataUrl);
+                            resolve(finalDataUrl);
                             return;
                         }
                     } catch (err) {
                         console.warn('Composite canvas failed, falling back to raw canvas', err);
                     }
                     // fallback if composite failed
-                    const dataUrl = canvas.toDataURL('image/png');
-                    thumbCache[url] = dataUrl;
+                    // rotate fallback canvas if vehicle
+                    const urlLowerFallback = String(url || '').toLowerCase();
+                    const idLowerFallback = String(id || '').toLowerCase();
+                    const isVehicleFallback = /truck|van|sprinter|food_truck|box-truck|box_truck/.test(urlLowerFallback) || /truck|van|sprinter|food_truck|box-truck|box_truck/.test(idLowerFallback);
+                    let dataUrlFallback;
+                    if (isVehicleFallback) {
+                        const rot2 = document.createElement('canvas');
+                        rot2.width = canvas.height; rot2.height = canvas.width;
+                        const rctx2 = rot2.getContext('2d');
+                        rctx2.translate(rot2.width / 2, rot2.height / 2);
+                        rctx2.rotate(Math.PI / 2);
+                        rctx2.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+                        dataUrlFallback = rot2.toDataURL('image/png');
+                    } else {
+                        dataUrlFallback = canvas.toDataURL('image/png');
+                    }
+                    thumbCache[url] = dataUrlFallback;
                     saveThumbCache();
                     renderer.dispose();
                     try { scene.remove(obj); } catch (e) {}
-                    resolve(dataUrl);
+                    resolve(dataUrlFallback);
                 }, undefined, (err) => {
                     resolve(fallbackThumb(id || 'Model'));
                 });
