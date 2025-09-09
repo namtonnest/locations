@@ -2163,6 +2163,18 @@
         originalGeoLat: geo ? geo[1] : null,
         originalGeoLng: geo ? geo[0] : null
         };
+                // Model-specific placement rotations
+                try {
+                    const urlLower = String(url || '').toLowerCase();
+                    // Package truck: flip 180deg so it faces the other direction by default
+                    if (urlLower.includes('roman_diesel_box_truck')) {
+                        entry.transform.rotateY = (entry.transform.rotateY || 0) + Math.PI;
+                    }
+                    // Jeep, Food truck, Police car: rotate -90deg (counter-clockwise) for side-facing placement
+                    if (urlLower.includes('jeep') || urlLower.includes('food_truck') || urlLower.includes('cop_sedan') || urlLower.includes('police') || urlLower.includes('food-truck')) {
+                        entry.transform.rotateY = (entry.transform.rotateY || 0) + (Math.PI / 2);
+                    }
+                } catch (e) {}
                 placedModels.push(entry);
                 renderSidebar();
                 // load new gltf and attach to scene when ready
