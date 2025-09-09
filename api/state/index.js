@@ -57,22 +57,28 @@ function setCors(res) {
 
 module.exports = async (req, res) => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    setCors(res);
-    return res.status(204).end();
-  }
-
-  setCors(res);
-
-  // GET /api/state/:id - retrieve saved state
-  if (req.method === 'GET') {
+  if (req.method === 'POST') {
+    // Save a new state
+    const payload = req.body;
+    if (!payload || typeof payload !== 'object') {
+      res.status(400).json({ error: 'Missing or invalid payload' });
+      return;
+    }
+    const id = nanoid(8);
     try {
-      // Extract id from URL (supports /api/state/:id)
-      const urlParts = req.url.split('/');
-      const id = urlParts[urlParts.length - 1] || '';
-      if (!id || id === 'state') return res.status(400).json({ error: 'Missing state id in URL' });
-      const redis = getRedis();
-      const raw = await redis.get(`state:${id}`);
+      // Log Upstash Redis client config and payload
+      console.log('[Upstash] Redis client config:', redis?.clientOptions || redis?.options || 'unknown');
+      console.log('[Upstash] Saving state with id:', id);
+      console.log('[Upstash] Payload:', JSON.stringify(payload));
+      await redis.set(`state:${id}`, JSON.stringify(payload));
+      console.log('[Upstash] State saved successfully:', id);
+      res.status(200).json({ id });
+    } catch (err) {
+      console.error('[Upstash] Failed to save state:', err);
+      res.status(500).json({ error: 'Failed to save state' });
+    }
+    return;
+  }
       if (!raw) return res.status(404).json({ error: 'State not found' });
       let state = null;
       try { state = JSON.parse(raw); } catch (e) { state = raw; }
