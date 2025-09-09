@@ -64,28 +64,52 @@ module.exports = async (req, res) => {
 
   setCors(res);
 
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  try {
-    const body = req.body || {};
-    const state = body.state || body;
-    if (!state) return res.status(400).json({ error: 'Missing state in request body' });
-
-    // generate an 8-char id
-    if (!nanoid) {
-      const mod = await import('nanoid');
-      nanoid = mod.nanoid || (mod.default && mod.default.nanoid) || mod.default || mod;
+  // GET /api/state/:id - retrieve saved state
+  if (req.method === 'GET') {
+    try {
+      // Extract id from URL (supports /api/state/:id)
+      const urlParts = req.url.split('/');
+      const id = urlParts[urlParts.length - 1] || '';
+      if (!id || id === 'state') return res.status(400).json({ error: 'Missing state id in URL' });
+      const redis = getRedis();
+      const raw = await redis.get(`state:${id}`);
+      if (!raw) return res.status(404).json({ error: 'State not found' });
+      let state = null;
+      try { state = JSON.parse(raw); } catch (e) { state = raw; }
+      return res.status(200).json({ id, state });
+    } catch (err) {
+      console.error('get error', err);
+      return res.status(500).json({ error: err.message || String(err) });
     }
-    const id = nanoid(8);
-  // save as stringified JSON under key state:<id>
-  const redis = getRedis();
-  await redis.set(`state:${id}`, JSON.stringify(state));
-
-    // optionally set TTL by uncommenting the next line (seconds). Example: 30 days -> 30*24*60*60
-    // await redis.expire(`state:${id}`, 30 * 24 * 60 * 60);
-
-    return res.status(201).json({ id });
-  } catch (err) {
-    console.error('save error', err);
-    return res.status(500).json({ error: err.message || String(err) });
   }
+
+  // POST /api/state - save new state
+  if (req.method === 'POST') {
+    try {
+      const body = req.body || {};
+      const state = body.state || body;
+      if (!state) return res.status(400).json({ error: 'Missing state in request body' });
+
+      // generate an 8-char id
+      if (!nanoid) {
+        const mod = await import('nanoid');
+        nanoid = mod.nanoid || (mod.default && mod.default.nanoid) || mod.default || mod;
+      }
+      const id = nanoid(8);
+      // save as stringified JSON under key state:<id>
+      const redis = getRedis();
+      await redis.set(`state:${id}`, JSON.stringify(state));
+
+      // optionally set TTL by uncommenting the next line (seconds). Example: 30 days -> 30*24*60*60
+      // await redis.expire(`state:${id}`, 30 * 24 * 60 * 60);
+
+      return res.status(201).json({ id });
+    } catch (err) {
+      console.error('save error', err);
+      return res.status(500).json({ error: err.message || String(err) });
+    }
+  }
+
+  // Method not allowed
+  return res.status(405).json({ error: 'Method not allowed' });
 };
