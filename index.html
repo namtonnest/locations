@@ -2972,7 +2972,11 @@ function autoTagLocationAndSave() {
         };
         // Save to admin states via backend
         try {
-            const res = await fetch('/api/state', {
+            if (typeof BACKEND_STATE_ENDPOINT !== 'string' || !BACKEND_STATE_ENDPOINT.length) {
+                console.warn('No BACKEND_STATE_ENDPOINT configured for auto-save');
+                return;
+            }
+            const res = await fetch(BACKEND_STATE_ENDPOINT, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
