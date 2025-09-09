@@ -24,7 +24,6 @@
     <h2>Admin: Saved Map States</h2>
     <div class="row">
       <button id="refresh" class="btn">Refresh list</button>
-  <button id="pushLocal" class="btn small">Push local states</button>
       <label style="display:flex;align-items:center;gap:8px">
         <input id="importFile" type="file" accept="application/json" style="display:none" />
         <button id="importBtn" class="btn small">Import JSON</button>
@@ -77,8 +76,17 @@
     async function fetchStateById(id) {
       try {
         const res = await fetch(BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id));
-        if (!res.ok) throw new Error('Not found');
-        return await res.json();
+        // Try to parse as JSON, but if it fails, show the raw text (for HTML error pages)
+        const txt = await res.text();
+        let parsed;
+        try {
+          parsed = JSON.parse(txt);
+        } catch (err) {
+          // If not JSON, return the raw text as an error
+          throw new Error('Non-JSON response: ' + txt);
+        }
+        if (!res.ok) throw new Error(parsed && parsed.error ? parsed.error : 'Not found');
+        return parsed;
       } catch (e) { throw e; }
     }
 
@@ -218,81 +226,17 @@
     async function deleteState(id) {
       try {
         statusEl.textContent = 'Deleting ' + id + '...';
-        // helper to centralize success handling
-        const handleSuccess = async () => {
-          removeLocalKnownId(id);
-          statusEl.textContent = 'Deleted ' + id;
-          await refresh();
-          detail.innerHTML = '';
-        };
-
-        const attempts = [];
-
-        // small helper to perform a fetch and record the outcome
-        async function tryFetch(label, url, opts) {
-          let out = { label, url, opts: Object.assign({}, opts || {}) };
-          try {
-            const r = await fetch(url, opts || {});
-            out.status = r.status;
-            try { out.text = await r.text(); } catch (e) { out.text = '[no-body]'; }
-            out.ok = r.ok;
-            attempts.push(out);
-            return out;
-          } catch (err) {
-            out.error = String(err && err.message || err);
-            attempts.push(out);
-            return out;
-          }
+        const res = await fetch(BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error('Delete failed: ' + res.status + ' ' + txt);
         }
-
-        const idPath = '/' + encodeURIComponent(id);
-        const base = BACKEND_STATE_ENDPOINT;
-
-        // 1) DELETE as-is
-        const a1 = await tryFetch('DELETE', base + idPath, { method: 'DELETE' });
-        if (a1.ok) { await handleSuccess(); return; }
-
-        // 2) DELETE with JSON content-type and empty body (some servers expect a body)
-        const a2 = await tryFetch('DELETE-with-body', base + idPath, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
-        if (a2.ok) { await handleSuccess(); return; }
-
-        // 3) POST with method override header
-        const a3 = await tryFetch('POST-x-http-method-override', base + idPath, { method: 'POST', headers: { 'X-HTTP-Method-Override': 'DELETE', 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
-        if (a3.ok) { await handleSuccess(); return; }
-
-        // 4) POST to /delete with id in body
-        const a4 = await tryFetch('POST-/delete', base + '/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-        if (a4.ok) { await handleSuccess(); return; }
-
-        // 5) POST to /:id/delete
-        const a5 = await tryFetch('POST-/:id/delete', base + idPath + '/delete', { method: 'POST' });
-        if (a5.ok) { await handleSuccess(); return; }
-
-        // 6) try /remove variants
-        const a6 = await tryFetch('POST-/remove', base + '/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-        if (a6.ok) { await handleSuccess(); return; }
-        const a7 = await tryFetch('POST-/:id/remove', base + idPath + '/remove', { method: 'POST' });
-        if (a7.ok) { await handleSuccess(); return; }
-
-        // nothing succeeded — build a full diagnostic message
-        const diag = attempts.map(a => ({ label: a.label, url: a.url, status: a.status || 'no-response', ok: !!a.ok, text: a.text || a.error || '' }));
-        // Offer a local-only removal fallback if the server refuses
-        const diagStr = JSON.stringify(diag, null, 2);
-        const msg = `Remote delete failed. Attempts:\n${diagStr}\n\nYou can remove the id from this browser (local-only) so it won't show in the admin list. Proceed with local-only removal?`;
-        statusEl.textContent = 'Delete failed: server refused delete';
-        // show detailed diagnostic in the detail pane using a safe textContent pre element
-        detail.innerHTML = '<h3>Delete diagnostics</h3>';
-        const pre = document.createElement('pre');
-        pre.textContent = diagStr;
-        detail.appendChild(pre);
-        if (confirm(msg)) {
-          removeLocalKnownId(id);
-          statusEl.textContent = 'Locally removed ' + id;
-          await refresh();
-          detail.innerHTML = '';
-          return;
-        }
-        throw new Error('Delete failed: remote server refused delete. See diagnostics.');
+        // remove from local known ids too
+        removeLocalKnownId(id);
+        statusEl.textContent = 'Deleted ' + id;
+        // refresh list
+        await refresh();
+        detail.innerHTML = '';
       } catch (e) {
         statusEl.textContent = 'Delete failed: ' + (e && e.message);
         alert('Delete failed: ' + (e && e.message));
@@ -300,37 +244,6 @@
     }
 
     document.getElementById('refresh').addEventListener('click', refresh);
-    document.getElementById('pushLocal').addEventListener('click', async () => {
-      const localKey = 'admin_local_state_payloads_v1';
-      try {
-        const raw = localStorage.getItem(localKey);
-        const arr = raw ? JSON.parse(raw) : [];
-        if (!arr || !arr.length) { statusEl.textContent = 'No local payloads found'; return; }
-        statusEl.textContent = 'Pushing ' + arr.length + ' local payload(s)...';
-        const results = [];
-        for (let item of arr) {
-          try {
-            const payload = { state: item.state, name: item.name || '' };
-            const res = await fetch(BACKEND_STATE_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            if (!res.ok) { results.push({ ok: false, error: 'HTTP ' + res.status, item }); continue; }
-            const j = await res.json();
-            const id = j && j.id;
-            if (id) {
-              // store id/name in local known lists
-              try { const key = 'admin_known_state_ids_v1'; const rawk = localStorage.getItem(key); let arrk = rawk ? JSON.parse(rawk) : []; if (!arrk.includes(id)) { arrk.unshift(id); localStorage.setItem(key, JSON.stringify(arrk)); } } catch (e) {}
-              try { const namesKey = 'admin_known_state_names_v1'; const rawNames = localStorage.getItem(namesKey); let map = rawNames ? JSON.parse(rawNames) : {}; map[id] = item.name || ''; localStorage.setItem(namesKey, JSON.stringify(map)); } catch (e) {}
-              results.push({ ok: true, id, item });
-            } else {
-              results.push({ ok: false, error: 'no id returned', item });
-            }
-          } catch (e) { results.push({ ok: false, error: e && e.message, item }); }
-        }
-        detail.innerHTML = '<h3>Push results</h3><pre>' + JSON.stringify(results, null, 2) + '</pre>';
-        statusEl.textContent = 'Push finished';
-        // optionally refresh list now
-        await refresh();
-      } catch (e) { statusEl.textContent = 'Push failed: ' + (e && e.message); alert('Push failed: ' + (e && e.message)); }
-    });
     document.getElementById('fetchId').addEventListener('click', async () => {
       const id = document.getElementById('manualId').value.trim();
       if (!id) { statusEl.textContent = 'Enter an id first'; return; }
