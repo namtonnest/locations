@@ -1355,19 +1355,41 @@
 
     // open admin page in new tab
     if (adminBtn) {
-        adminBtn.addEventListener('click', () => {
-            // compute a robust base path that works for root and subpath deployments
+        adminBtn.addEventListener('click', async () => {
+            // Try several candidate locations for admin.html and open the first reachable one
+            const candidates = [];
             try {
-                let base = location.pathname;
-                // ensure base ends with '/'
+                let base = location.pathname || '/';
                 if (!base.endsWith('/')) base = base.replace(/[^/]*$/, '');
-                const url = location.origin + base + 'admin.html';
-                window.open(url, '_blank');
-                return;
-            } catch (e) {
-                // fallback to root
-                try { window.open(location.origin + '/admin.html', '_blank'); } catch (e) { window.open('admin.html', '_blank'); }
+                candidates.push(location.origin + base + 'admin.html');
+            } catch (e) {}
+            // root
+            try { candidates.push(location.origin + '/admin.html'); } catch (e) {}
+            // repo root (if app is served under a repo name)
+            try { candidates.push(location.origin + '/' + (location.pathname.split('/')[1] || '') + '/admin.html'); } catch (e) {}
+            // GitHub Pages (common deploy) and raw fallback
+            candidates.push('https://namtonnest.github.io/locations/admin.html');
+            candidates.push('https://raw.githubusercontent.com/namtonnest/locations/main/admin.html');
+
+            // helper to test a URL via fetch and return true if OK
+            async function urlOk(u) {
+                try {
+                    const res = await fetch(u, { method: 'GET', cache: 'no-store' });
+                    return res && res.ok;
+                } catch (e) { return false; }
             }
+
+            for (const u of candidates) {
+                if (!u) continue;
+                try {
+                    const ok = await urlOk(u);
+                    if (ok) { window.open(u, '_blank'); return; }
+                } catch (e) {}
+            }
+
+            // Final fallback: open admin.html relative to current location (still worth trying)
+            try { window.open(location.origin + '/admin.html', '_blank'); return; } catch (e) {}
+            try { window.open('admin.html', '_blank'); } catch (e) { alert('Unable to find admin.html. Check deployment.'); }
         });
     }
     // control elements
