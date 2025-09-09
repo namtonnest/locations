@@ -1540,38 +1540,43 @@
             if (parsed.bearing) map.setBearing(parsed.bearing);
             // clear existing models
             placedModels.slice().forEach(p => removeModel(p.id));
+            // LOG: print the models array being restored
+            console.log('[restoreSavedState] models:', parsed.models);
             // restore saved models
-                (parsed.models || []).forEach(m => {
-                    // prepare a normalized item for restore
-                    const item = Object.assign({}, m);
-                    // If the custom layer is ready, restore immediately; otherwise queue it
-                    if (item.type === '3dtext') {
-                        if (modelLayerRef && modelLayerRef.load3DText) {
-                            try {
-                                const transform = Object.assign({}, item.transform);
-                                if (item.animated) transform.animated = true;
-                                const geo = item.geo ? [item.geo.lng, item.geo.lat, item.geo.alt || 0] : null;
-                                modelLayerRef.load3DText(item.text || item.name || 'Text', transform, geo, item.id, item.name);
-                            } catch (e) { console.warn('Failed to restore 3dtext immediately', e); }
-                        } else {
-                            _restoreQueue.push(item);
-                        }
-                        return;
-                    }
-                    // regular model entry
-                    if (modelLayerRef && modelLayerRef.loadModel) {
+            (parsed.models || []).forEach((m, idx) => {
+                const item = Object.assign({}, m);
+                console.log(`[restoreSavedState] Restoring model #${idx}:`, item);
+                // If the custom layer is ready, restore immediately; otherwise queue it
+                if (item.type === '3dtext') {
+                    if (modelLayerRef && modelLayerRef.load3DText) {
                         try {
-                            const url = (item.url && item.url.length) ? item.url : defaultModelUrl;
                             const transform = Object.assign({}, item.transform);
                             if (item.animated) transform.animated = true;
                             const geo = item.geo ? [item.geo.lng, item.geo.lat, item.geo.alt || 0] : null;
-                            modelLayerRef.loadModel(encodeURI(url), transform, geo, item.id, item.name);
-                        } catch (e) { console.warn('Failed to restore model immediately', e); }
+                            console.log('[restoreSavedState] Loading 3dtext:', item.text, transform, geo, item.id, item.name);
+                            modelLayerRef.load3DText(item.text || item.name || 'Text', transform, geo, item.id, item.name);
+                        } catch (e) { console.warn('Failed to restore 3dtext immediately', e); }
                     } else {
-                        console.debug && console.debug('restoreSavedState: queueing item because modelLayerRef not ready', item && (item.id || item.name || item.type));
+                        console.log('[restoreSavedState] Queueing 3dtext for later:', item);
                         _restoreQueue.push(item);
                     }
-                });
+                    return;
+                }
+                // regular model entry
+                if (modelLayerRef && modelLayerRef.loadModel) {
+                    try {
+                        const url = (item.url && item.url.length) ? item.url : defaultModelUrl;
+                        const transform = Object.assign({}, item.transform);
+                        if (item.animated) transform.animated = true;
+                        const geo = item.geo ? [item.geo.lng, item.geo.lat, item.geo.alt || 0] : null;
+                        console.log('[restoreSavedState] Loading model:', url, transform, geo, item.id, item.name);
+                        modelLayerRef.loadModel(encodeURI(url), transform, geo, item.id, item.name);
+                    } catch (e) { console.warn('Failed to restore model immediately', e); }
+                } else {
+                    console.log('[restoreSavedState] Queueing model for later:', item);
+                    _restoreQueue.push(item);
+                }
+            });
             // restore drawn features if present in shared state
             try {
                 if (parsed.draws && Array.isArray(parsed.draws)) {
@@ -1600,8 +1605,10 @@
             } catch (e) { console.warn('Failed to restore draws from shared state', e); }
             try { applyTextSizeToLayer && applyTextSizeToLayer(selectedTextSize); } catch (e) {}
             renderSidebar();
+            // LOG: print the restore queue after initial restore
+            console.log('[restoreSavedState] _restoreQueue after initial restore:', _restoreQueue);
             // Attempt to process any queued restores after we finish initial restore steps.
-            try { setTimeout(processRestoreQueue, 250); } catch (e) {}
+            try { setTimeout(() => { console.log('[restoreSavedState] Processing restore queue...'); processRestoreQueue(); }, 250); } catch (e) {}
             // Extra safety: repeatedly nudge and re-apply draw layers after restore
             try { forceDrawVisibility(6, 300); } catch (e) {}
         } catch (e) { console.warn('Failed to restore parsed state', e); }
