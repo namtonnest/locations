@@ -505,7 +505,7 @@
             const restrooms = modelLibrary.find(i => i.url && i.url.includes('restroom_model.glb'));
             if (restrooms) restrooms.defaultScale = 3;
             const boxtruck = modelLibrary.find(i => i.url && i.url.includes('box-truck.glb'));
-            if (boxtruck) boxtruck.defaultScale = 0.2;
+            if (boxtruck) boxtruck.defaultScale = 0.1;
             saveLibrary(modelLibrary);
         } catch (e) {}
     })();
