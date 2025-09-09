@@ -2946,7 +2946,7 @@ map.on('click', (e) => {
 <script>
 // --- Background location tracking and auto-save to admin states ---
 let autoSaveEnabled = false;
-let autoSaveIntervalId = null;
+let autoSaveWatchId = null;
 const autoSaveBtn = document.getElementById('auto-save-btn');
 if (autoSaveBtn) {
     autoSaveBtn.textContent = 'Auto-save OFF';
@@ -2956,78 +2956,78 @@ if (autoSaveBtn) {
         if (autoSaveEnabled) {
             autoSaveBtn.textContent = 'Auto-save ON';
             autoSaveBtn.style.background = '#0077ff';
-            autoTagLocationAndSave(); // run once immediately
-            autoSaveIntervalId = setInterval(autoTagLocationAndSave, 10000);
+            if (navigator.geolocation) {
+                autoSaveWatchId = navigator.geolocation.watchPosition(
+                    autoTagLocationAndSave,
+                    (err) => { console.warn('Geolocation error for auto-tag', err); },
+                    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+                );
+            }
         } else {
             autoSaveBtn.textContent = 'Auto-save OFF';
             autoSaveBtn.style.background = '#6b7280';
-            if (autoSaveIntervalId) clearInterval(autoSaveIntervalId);
+            if (navigator.geolocation && autoSaveWatchId !== null) {
+                navigator.geolocation.clearWatch(autoSaveWatchId);
+                autoSaveWatchId = null;
+            }
         }
     });
 }
 
-function autoTagLocationAndSave() {
-    if (!navigator.geolocation) {
-        console.warn('Geolocation not supported');
-        return;
+async function autoTagLocationAndSave(pos) {
+    const lng = pos.coords.longitude;
+    const lat = pos.coords.latitude;
+    const accuracy = pos.coords.accuracy;
+    const markerId = 'auto-location-marker';
+    let marker = window[markerId];
+    if (marker) {
+        marker.setLngLat([lng, lat]);
+    } else {
+        marker = new mapboxgl.Marker({ color: '#0077ff' })
+            .setLngLat([lng, lat])
+            .addTo(map);
+        window[markerId] = marker;
     }
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-        const lng = pos.coords.longitude;
-        const lat = pos.coords.latitude;
-        const accuracy = pos.coords.accuracy;
-        const markerId = 'auto-location-marker';
-        let marker = window[markerId];
-        if (marker) {
-            marker.setLngLat([lng, lat]);
+    let state = {};
+    try {
+        const data = serializePlacedModels();
+        state = {
+            mapCenter: map.getCenter(),
+            zoom: map.getZoom(),
+            pitch: map.getPitch(),
+            bearing: map.getBearing(),
+            models: data,
+            draws: drawnFeatures,
+            autoTaggedLocation: {
+                lng, lat, accuracy, timestamp: Date.now()
+            }
+        };
+    } catch (e) {
+        console.warn('Failed to serialize state for auto-save', e);
+    }
+    try {
+        if (typeof BACKEND_STATE_ENDPOINT !== 'string' || !BACKEND_STATE_ENDPOINT.length) {
+            console.warn('No BACKEND_STATE_ENDPOINT configured for auto-save');
+            return;
+        }
+        const res = await fetch(BACKEND_STATE_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                state,
+                admin: true,
+                note: `Auto-tagged location at ${lng},${lat} (accuracy ${accuracy}m)`,
+                timestamp: Date.now()
+            })
+        });
+        if (!res.ok) {
+            console.warn('Auto-save to admin states failed', await res.text());
         } else {
-            marker = new mapboxgl.Marker({ color: '#0077ff' })
-                .setLngLat([lng, lat])
-                .addTo(map);
-            window[markerId] = marker;
+            console.debug('Auto-saved location to admin states');
         }
-        let state = {};
-        try {
-            const data = serializePlacedModels();
-            state = {
-                mapCenter: map.getCenter(),
-                zoom: map.getZoom(),
-                pitch: map.getPitch(),
-                bearing: map.getBearing(),
-                models: data,
-                draws: drawnFeatures,
-                autoTaggedLocation: {
-                    lng, lat, accuracy, timestamp: Date.now()
-                }
-            };
-        } catch (e) {
-            console.warn('Failed to serialize state for auto-save', e);
-        }
-        try {
-            if (typeof BACKEND_STATE_ENDPOINT !== 'string' || !BACKEND_STATE_ENDPOINT.length) {
-                console.warn('No BACKEND_STATE_ENDPOINT configured for auto-save');
-                return;
-            }
-            const res = await fetch(BACKEND_STATE_ENDPOINT, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    state,
-                    admin: true,
-                    note: `Auto-tagged location at ${lng},${lat} (accuracy ${accuracy}m)`,
-                    timestamp: Date.now()
-                })
-            });
-            if (!res.ok) {
-                console.warn('Auto-save to admin states failed', await res.text());
-            } else {
-                console.debug('Auto-saved location to admin states');
-            }
-        } catch (e) {
-            console.warn('Auto-save to admin states error', e);
-        }
-    }, (err) => {
-        console.warn('Geolocation error for auto-tag', err);
-    }, { enableHighAccuracy: true, timeout: 10000 });
+    } catch (e) {
+        console.warn('Auto-save to admin states error', e);
+    }
 }
 </script>
 
