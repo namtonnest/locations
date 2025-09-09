@@ -1679,6 +1679,25 @@
 
                 if (BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
                     saveBtn.disabled = true;
+                    // persist the payload locally so admin can push it to the server later if needed
+                    try {
+                        const payloadEntry = {
+                            localKey: 'local-' + Date.now() + '-' + Math.random().toString(36).slice(2,8),
+                            name: name || '',
+                            state: payload,
+                            createdAt: (new Date()).toISOString(),
+                            serverId: null
+                        };
+                        const localKey = 'admin_local_state_payloads_v1';
+                        const rawLocal = localStorage.getItem(localKey);
+                        let arrLocal = [];
+                        try { arrLocal = rawLocal ? JSON.parse(rawLocal) : []; } catch (e) { arrLocal = []; }
+                        arrLocal.unshift(payloadEntry);
+                        // keep a reasonable cap
+                        arrLocal = arrLocal.slice(0, 200);
+                        localStorage.setItem(localKey, JSON.stringify(arrLocal));
+                    } catch (e) { /* ignore localStorage errors */ }
+
                     // include name alongside state; backend may ignore unknown fields but will receive it if supported
                     const body = JSON.stringify({ state: payload, name });
                     const res = await fetch(BACKEND_STATE_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
@@ -1704,6 +1723,22 @@
                                 if (name) map[id] = name; else if (!map[id]) map[id] = '';
                                 localStorage.setItem(namesKey, JSON.stringify(map));
                             } catch (e) { /* ignore localStorage errors */ }
+
+                            // update the local payload entry to include serverId where possible
+                            try {
+                                const localKey = 'admin_local_state_payloads_v1';
+                                const rawLocal = localStorage.getItem(localKey);
+                                let arrLocal = rawLocal ? JSON.parse(rawLocal) : [];
+                                let updated = false;
+                                for (let item of arrLocal) {
+                                    if (!item.serverId && item.name === (name || '') && JSON.stringify(item.state) === JSON.stringify(payload)) {
+                                        item.serverId = id;
+                                        updated = true;
+                                        break;
+                                    }
+                                }
+                                if (updated) localStorage.setItem(localKey, JSON.stringify(arrLocal));
+                            } catch (e) { /* ignore */ }
                         } catch (e) { /* ignore localStorage errors */ }
                     } else {
                         alert('Saved but server returned no id');
