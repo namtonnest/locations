@@ -1632,23 +1632,21 @@
                     if (id) {
                         alert('Saved state id: ' + id + '\nYou can view it in the admin page.');
                         console.debug('Saved state id', id, j);
+                        // Always update localStorage id list and name mapping
                         try {
-                            // persist known saved ids locally so admin page can list them
                             const key = 'admin_known_state_ids_v1';
-                            const raw = localStorage.getItem(key);
                             let arr = [];
-                            try { arr = raw ? JSON.parse(raw) : []; } catch (e) { arr = []; }
-                            if (!arr.includes(id)) { arr.unshift(id); arr = arr.slice(0, 200); localStorage.setItem(key, JSON.stringify(arr)); }
-                            // also persist a local mapping id->name so admin can show names when server doesn't
-                            try {
-                                const namesKey = 'admin_known_state_names_v1';
-                                const rawNames = localStorage.getItem(namesKey);
-                                let map = {};
-                                try { map = rawNames ? JSON.parse(rawNames) : {}; } catch (e) { map = {}; }
-                                if (name) map[id] = name; else if (!map[id]) map[id] = '';
-                                localStorage.setItem(namesKey, JSON.stringify(map));
-                            } catch (e) { /* ignore localStorage errors */ }
-                        } catch (e) { /* ignore localStorage errors */ }
+                            try { arr = JSON.parse(localStorage.getItem(key) || '[]'); } catch (e) { arr = []; }
+                            if (!arr.includes(id)) { arr.unshift(id); arr = arr.slice(0, 200); }
+                            localStorage.setItem(key, JSON.stringify(arr));
+                        } catch (e) {}
+                        try {
+                            const namesKey = 'admin_known_state_names_v1';
+                            let map = {};
+                            try { map = JSON.parse(localStorage.getItem(namesKey) || '{}'); } catch (e) { map = {}; }
+                            map[id] = name || '';
+                            localStorage.setItem(namesKey, JSON.stringify(map));
+                        } catch (e) {}
                     } else {
                         alert('Saved but server returned no id');
                     }
