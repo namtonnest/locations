@@ -3002,31 +3002,37 @@ async function autoTagLocationAndSave(pos) {
                 lng, lat, accuracy, timestamp: Date.now()
             }
         };
+        console.log('[AutoSave] Payload:', state);
     } catch (e) {
-        console.warn('Failed to serialize state for auto-save', e);
+        console.warn('[AutoSave] Failed to serialize state for auto-save', e);
     }
     try {
         if (typeof BACKEND_STATE_ENDPOINT !== 'string' || !BACKEND_STATE_ENDPOINT.length) {
-            console.warn('No BACKEND_STATE_ENDPOINT configured for auto-save');
+            console.warn('[AutoSave] No BACKEND_STATE_ENDPOINT configured for auto-save');
             return;
         }
+        const payload = {
+            state,
+            admin: true,
+            note: `Auto-tagged location at ${lng},${lat} (accuracy ${accuracy}m)`,
+            timestamp: Date.now()
+        };
+        console.log('[AutoSave] Sending POST to', BACKEND_STATE_ENDPOINT, payload);
         const res = await fetch(BACKEND_STATE_ENDPOINT, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                state,
-                admin: true,
-                note: `Auto-tagged location at ${lng},${lat} (accuracy ${accuracy}m)`,
-                timestamp: Date.now()
-            })
+            body: JSON.stringify(payload)
         });
+        const text = await res.text();
         if (!res.ok) {
-            console.warn('Auto-save to admin states failed', await res.text());
+            console.warn('[AutoSave] Auto-save to admin states failed', text);
         } else {
-            console.debug('Auto-saved location to admin states');
+            let json = null;
+            try { json = JSON.parse(text); } catch (e) {}
+            console.debug('[AutoSave] Success:', json || text);
         }
     } catch (e) {
-        console.warn('Auto-save to admin states error', e);
+        console.warn('[AutoSave] Auto-save to admin states error', e);
     }
 }
 </script>
