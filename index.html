@@ -1356,8 +1356,18 @@
     // open admin page in new tab
     if (adminBtn) {
         adminBtn.addEventListener('click', () => {
-            const url = location.pathname.replace(/\/[^/]*$/, '/') + 'admin.html';
-            window.open(url, '_blank');
+            // compute a robust base path that works for root and subpath deployments
+            try {
+                let base = location.pathname;
+                // ensure base ends with '/'
+                if (!base.endsWith('/')) base = base.replace(/[^/]*$/, '');
+                const url = location.origin + base + 'admin.html';
+                window.open(url, '_blank');
+                return;
+            } catch (e) {
+                // fallback to root
+                try { window.open(location.origin + '/admin.html', '_blank'); } catch (e) { window.open('admin.html', '_blank'); }
+            }
         });
     }
     // control elements
