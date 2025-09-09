@@ -513,7 +513,7 @@
             const sprinter = modelLibrary.find(i => i.url && (i.url.includes('sprinter') || i.url.includes('mercedes_benz_sprinter')));
             if (sprinter) sprinter.defaultScale = 0.6;
             const packtruck = modelLibrary.find(i => i.url && i.url.includes('roman_diesel_box_truck.glb'));
-            if (packtruck) packtruck.defaultScale = 0.8;
+            if (packtruck) packtruck.defaultScale = 0.7;
             saveLibrary(modelLibrary);
         } catch (e) {}
     })();
@@ -583,7 +583,17 @@
                     const maxDim = Math.max(size.x, size.y, size.z);
                     obj.position.x -= center.x; obj.position.y -= center.y; obj.position.z -= center.z;
                     scene.add(obj);
-                    camera.position.set(0, maxDim * 0.7, maxDim * 1.8);
+                    // For vehicles (trucks, vans, sprinters, food trucks, etc.) render a horizontal/side preview
+                    const urlLower = String(url || '').toLowerCase();
+                    const idLower = String(id || '').toLowerCase();
+                    const isVehicle = /truck|van|sprinter|food_truck|box-truck|box_truck|restroom|police|jeep/.test(urlLower) || /truck|van|sprinter|food_truck|box-truck|box_truck|restroom|police|jeep/.test(idLower);
+                    if (isVehicle) {
+                        // rotate model to show its side and place camera along X axis for a horizontal composition
+                        try { obj.rotation.y = Math.PI / 2; } catch (e) {}
+                        camera.position.set(maxDim * 1.4, maxDim * 0.45, 0);
+                    } else {
+                        camera.position.set(0, maxDim * 0.7, maxDim * 1.8);
+                    }
                     camera.lookAt(new THREE.Vector3(0,0,0));
                     renderer.render(scene, camera);
                     // Composite onto a white 2D canvas to avoid transparent/black backgrounds
