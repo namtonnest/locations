@@ -1303,8 +1303,9 @@
     // open admin page in new tab
     if (adminBtn) {
         adminBtn.addEventListener('click', () => {
-            const url = location.pathname.replace(/\/[^/]*$/, '/') + 'admin.html';
-            window.open(url, '_blank');
+            // Always open admin.html in the same directory as index.html
+            const base = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
+            window.open(base + 'admin.html', '_blank');
         });
     }
     // control elements
