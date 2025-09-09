@@ -2144,15 +2144,6 @@
                 return;
             }
 
-            // expose ref so outer code can call loadModel
-            modelLayerRef = this;
-            // process any queued restore items now that the layer is ready
-            try { processRestoreQueue(); } catch (e) { console.warn('processRestoreQueue failed on onAdd', e); }
-            // After custom layer is ready, force draw visibility again
-            setTimeout(() => {
-                try { console.debug('Custom layer ready, forcing draw visibility'); forceDrawVisibility(6, 300); } catch (e) {}
-            }, 400);
-
             // helper to create a 3D text entry (used when restoring serialized state)
             this.load3DText = (text, transform, geo, preferredId, preferredName) => {
                 try {
@@ -2292,6 +2283,14 @@
                 }
                 return id;
             };
+            // expose ref so outer code can call loadModel
+            modelLayerRef = this;
+            // process any queued restore items now that the layer and its helpers are defined
+            try { processRestoreQueue(); } catch (e) { console.warn('processRestoreQueue failed on onAdd', e); }
+            // After custom layer is ready, force draw visibility again
+            setTimeout(() => {
+                try { console.debug('Custom layer ready, forcing draw visibility'); forceDrawVisibility(6, 300); } catch (e) {}
+            }, 400);
         },
         render: function (gl, matrix) {
             // no-op when layer disabled due to missing WebGL support
