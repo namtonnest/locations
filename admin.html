@@ -24,6 +24,7 @@
     <h2>Admin: Saved Map States</h2>
     <div class="row">
       <button id="refresh" class="btn">Refresh list</button>
+      <button id="deleteAll" class="btn" style="background:#ef4444;color:#fff">Delete All</button>
       <label style="display:flex;align-items:center;gap:8px">
         <input id="importFile" type="file" accept="application/json" style="display:none" />
         <button id="importBtn" class="btn small">Import JSON</button>
@@ -304,6 +305,31 @@
         await refresh();
       } catch (e) { statusEl.textContent = 'Import failed: ' + (e && e.message); alert('Import failed: ' + (e && e.message)); }
       importFile.value = '';
+    });
+
+    // Delete all states currently listed (up to 100)
+    document.getElementById('deleteAll').addEventListener('click', async () => {
+      if (!confirm('Delete ALL listed states? This cannot be undone.')) return;
+      statusEl.textContent = 'Deleting all states...';
+      const found = await tryFetchList();
+      if (!found || !found.data || !found.data.length) {
+        statusEl.textContent = 'No states to delete.';
+        return;
+      }
+      let count = 0;
+      for (const entry of found.data) {
+        const id = entry.id || entry._id || entry.key;
+        if (id) {
+          try {
+            await deleteState(id);
+            count++;
+          } catch (e) {
+            console.error('Failed to delete', id, e);
+          }
+        }
+      }
+      statusEl.textContent = `Deleted ${count} states.`;
+      await refresh();
     });
 
     // auto-refresh on load
