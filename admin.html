@@ -113,19 +113,25 @@
     }
 
     function renderTable(entries) {
+      // Filter out states with 0 models and 0 draws
+      const filtered = entries.filter(e => {
+        const state = e.state || e;
+        const models = state && state.models ? state.models.length : 0;
+        const draws = state && state.draws ? state.draws.length : 0;
+        return models > 0 || draws > 0;
+      });
       tbody.innerHTML = '';
-      if (!entries.length) {
+      if (!filtered.length) {
         resultsTbl.style.display = 'none';
         statusEl.textContent = 'No entries found.';
         return;
       }
       resultsTbl.style.display = '';
-      entries.forEach(e => {
+      filtered.forEach(e => {
         const tr = document.createElement('tr');
         const id = e.id || e._id || (e.key || '');
         const created = e.createdAt || e.created || '';
         const state = e.state || e;
-        // determine a display name: prefer server-provided state.name or top-level e.name, otherwise local mapping
         let displayName = '';
         if (state && state.name) displayName = state.name;
         else if (e && e.name) displayName = e.name;
@@ -140,7 +146,7 @@
         const draws = state && state.draws ? (state.draws.length || 0) : (e.drawsCount || 0);
         const center = state && state.mapCenter ? (Array.isArray(state.mapCenter) ? state.mapCenter.join(',') : JSON.stringify(state.mapCenter)) : '';
 
-  tr.innerHTML = `<td><button class="btn small" data-id="${id}">Open</button> <button class="btn small" data-id="${id}" data-action="view">View JSON</button> <button class="btn small" data-id="${id}" data-action="delete" style="background:#ef4444;color:#fff">Delete</button></td><td><code>${id}</code></td><td>${escapeHtml(displayName)}</td><td>${models}</td><td>${draws}</td><td class="muted">${center}</td>`;
+        tr.innerHTML = `<td><button class="btn small" data-id="${id}">Open</button> <button class="btn small" data-id="${id}" data-action="view">View JSON</button> <button class="btn small" data-id="${id}" data-action="delete" style="background:#ef4444;color:#fff">Delete</button></td><td><code>${id}</code></td><td>${escapeHtml(displayName)}</td><td>${models}</td><td>${draws}</td><td class="muted">${center}</td>`;
         tbody.appendChild(tr);
       });
       // tiny helper to escape HTML when injecting displayName
@@ -181,55 +187,25 @@
     async function refresh() {
       detail.innerHTML = '';
       statusEl.textContent = 'Refreshing...';
-      const found = await tryFetchList();
-      if (!found) {
-        statusEl.textContent = 'No listing endpoint found. Trying locally saved ids...';
-        // look for locally-saved ids added by the Save button
-        try {
-          const raw = localStorage.getItem('admin_known_state_ids_v1');
-          const list = raw ? JSON.parse(raw) : [];
-          if (list && list.length) {
-            const rows = [];
-            for (const id of list) {
-              try {
-                const res = await fetchStateById(id);
-                rows.push({ id, state: res && res.state ? res.state : res });
-              } catch (e) { rows.push({ id, error: true }); }
-            }
-            renderTable(rows);
-            statusEl.textContent = 'Loaded ' + rows.length + ' locally-saved entries.';
-            return;
+      // Always use locally saved state IDs
+      try {
+        const raw = localStorage.getItem('admin_known_state_ids_v1');
+        const list = raw ? JSON.parse(raw) : [];
+        if (list && list.length) {
+          const rows = [];
+          for (const id of list) {
+            try {
+              const res = await fetchStateById(id);
+              rows.push({ id, state: res && res.state ? res.state : res });
+            } catch (e) { rows.push({ id, error: true }); }
           }
-        } catch (e) { /* ignore */ }
-        statusEl.textContent = 'No listing endpoint found. Use manual fetch by ID.';
-        return;
-      }
-      statusEl.textContent = 'Parsing list from ' + found.url;
-      let items = found.data;
-      // If items are simple ids, fetch each
-      if (items.length && typeof items[0] === 'string') {
-        const rows = [];
-        statusEl.textContent = 'Fetching ' + items.length + ' states...';
-        await Promise.all(items.map(async (id) => {
-          try {
-            const res = await fetchStateById(id);
-            const obj = res && res.state ? Object.assign({ id }, res.state) : Object.assign({ id }, res);
-            rows.push({ id, state: obj });
-          } catch (e) { rows.push({ id, error: true }); }
-        }));
-        renderTable(rows);
-        statusEl.textContent = 'Loaded ' + rows.length + ' entries.';
-        return;
-      }
-      // If items are objects that may include state or metrics
-      const normalized = items.map(it => {
-        if (it && (it.state || it.models || it.draws)) return it;
-        // if wrapper like { id, state }
-        if (it && it.id && it.state) return Object.assign({ id: it.id }, it);
-        return it;
-      });
-      renderTable(normalized);
-      statusEl.textContent = 'Loaded ' + normalized.length + ' entries.';
+          renderTable(rows);
+          statusEl.textContent = 'Loaded ' + rows.length + ' locally-saved entries.';
+          return;
+        }
+      } catch (e) { /* ignore */ }
+      statusEl.textContent = 'No locally saved states found. Use manual fetch by ID.';
+      return;
     }
 
     // helper to remove id from localStorage known list
