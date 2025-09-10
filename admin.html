@@ -61,12 +61,12 @@
     }
     async function tryFetchList() {
       statusEl.textContent = 'Looking for listing endpoints...';
-      // Add ?limit=1000 to endpoints that support query params
+      // Add ?limit=10000 to endpoints that support query params
       const candidates = [
-        BACKEND_STATE_ENDPOINT + '/list?limit=1000',
-        BACKEND_STATE_ENDPOINT + '/all?limit=1000',
-        BACKEND_STATE_ENDPOINT + '?limit=1000',
-        BACKEND_STATE_ENDPOINT + '/states?limit=1000',
+        BACKEND_STATE_ENDPOINT + '/list?limit=10000',
+        BACKEND_STATE_ENDPOINT + '/all?limit=10000',
+        BACKEND_STATE_ENDPOINT + '?limit=10000',
+        BACKEND_STATE_ENDPOINT + '/states?limit=10000',
         BACKEND_STATE_ENDPOINT + '/list',
         BACKEND_STATE_ENDPOINT + '/all',
         BACKEND_STATE_ENDPOINT,

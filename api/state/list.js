@@ -56,38 +56,22 @@ module.exports = async (req, res) => {
 
   try {
     const redis = getRedis();
-    // Use SCAN to safely fetch up to 100 keys matching 'state:*'
-    let cursor = 0;
-    let keys = [];
-    let scanned = 0;
-    const MAX_KEYS = 100;
-    do {
-      const result = await redis.scan(cursor, { match: 'state:*', count: MAX_KEYS });
-      cursor = result[0];
-      keys = keys.concat(result[1]);
-      scanned += result[1].length;
-      if (keys.length >= MAX_KEYS) {
-        keys = keys.slice(0, MAX_KEYS);
-        break;
-      }
-    } while (cursor !== 0);
+    // Use KEYS for simplicity; for large datasets consider SCAN pagination.
+    const keys = await redis.keys('state:*');
     if (!keys || !keys.length) return res.json({ states: [] });
 
     // mget to fetch all values in one round trip
     const values = await redis.mget(...keys);
+    // Filter out deleted/null states
     const states = keys.map((k, i) => {
+      if (values[i] === null || values[i] === undefined) return null;
       const id = k.replace(/^state:/, '');
       let parsed = null;
       try { parsed = JSON.parse(values[i]); } catch (e) { parsed = values[i]; }
       return { id, state: parsed };
-    });
+    }).filter(Boolean);
 
-    // Add a warning if there may be more states
-    let warning = null;
-    if (keys.length === MAX_KEYS) {
-      warning = 'Showing first 100 states only. There may be more. Please implement pagination for full access.';
-    }
-    return res.json({ states, warning });
+    return res.json({ states });
   } catch (err) {
     console.error('list error', err);
     return res.status(500).json({ error: err.message || String(err) });
