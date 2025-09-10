@@ -24,6 +24,7 @@
     <h2>Admin: Saved Map States</h2>
     <div class="row">
       <button id="refresh" class="btn">Refresh list</button>
+      <button id="deleteAll" class="btn" style="background:#ef4444;color:#fff">Delete All</button>
       <label style="display:flex;align-items:center;gap:8px">
         <input id="importFile" type="file" accept="application/json" style="display:none" />
         <button id="importBtn" class="btn small">Import JSON</button>
@@ -60,7 +61,17 @@
     }
     async function tryFetchList() {
       statusEl.textContent = 'Looking for listing endpoints...';
-      const candidates = [BACKEND_STATE_ENDPOINT + '/list', BACKEND_STATE_ENDPOINT + '/all', BACKEND_STATE_ENDPOINT, BACKEND_STATE_ENDPOINT + '/states'];
+      // Add ?limit=1000 to endpoints that support query params
+      const candidates = [
+        BACKEND_STATE_ENDPOINT + '/list?limit=1000',
+        BACKEND_STATE_ENDPOINT + '/all?limit=1000',
+        BACKEND_STATE_ENDPOINT + '?limit=1000',
+        BACKEND_STATE_ENDPOINT + '/states?limit=1000',
+        BACKEND_STATE_ENDPOINT + '/list',
+        BACKEND_STATE_ENDPOINT + '/all',
+        BACKEND_STATE_ENDPOINT,
+        BACKEND_STATE_ENDPOINT + '/states'
+      ];
       for (const url of candidates) {
         try {
           statusEl.textContent = 'Trying ' + url;
@@ -255,6 +266,25 @@
     }
 
     document.getElementById('refresh').addEventListener('click', refresh);
+    document.getElementById('deleteAll').addEventListener('click', async () => {
+      if (!tbody || !tbody.children.length) { alert('No entries to delete.'); return; }
+      if (!confirm('Delete ALL listed states? This cannot be undone.')) return;
+      // Gather all ids from the current table
+      const ids = Array.from(tbody.children).map(tr => {
+        const btn = tr.querySelector('button[data-id]');
+        return btn ? btn.getAttribute('data-id') : null;
+      }).filter(Boolean);
+      statusEl.textContent = 'Deleting ' + ids.length + ' states...';
+      for (const id of ids) {
+        try {
+          await deleteState(id);
+        } catch (e) {
+          console.warn('Failed to delete', id, e);
+        }
+      }
+      statusEl.textContent = 'Delete all finished.';
+      await refresh();
+    });
     document.getElementById('fetchId').addEventListener('click', async () => {
       const id = document.getElementById('manualId').value.trim();
       if (!id) { statusEl.textContent = 'Enter an id first'; return; }
