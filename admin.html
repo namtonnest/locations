@@ -54,11 +54,7 @@
     const tbody = resultsTbl.querySelector('tbody');
     const detail = document.getElementById('detail');
 
-    let adminToken = localStorage.getItem('admin_token') || '';
-    if (!adminToken) {
-      adminToken = prompt('Enter admin token for state listing:');
-      if (adminToken) localStorage.setItem('admin_token', adminToken);
-    }
+  // No admin token required
     async function tryFetchList() {
       statusEl.textContent = 'Looking for listing endpoints...';
       // Add ?limit=10000 to endpoints that support query params
@@ -76,8 +72,7 @@
         try {
           statusEl.textContent = 'Trying ' + url;
           const res = await fetch(url, {
-            method: 'GET',
-            headers: adminToken ? { 'x-admin-token': adminToken } : {}
+            method: 'GET'
           });
           if (!res.ok) { continue; }
           const text = await res.text();
