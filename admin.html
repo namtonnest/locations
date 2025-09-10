@@ -182,25 +182,55 @@
     async function refresh() {
       detail.innerHTML = '';
       statusEl.textContent = 'Refreshing...';
-      // Always use locally saved state IDs
-      try {
-        const raw = localStorage.getItem('admin_known_state_ids_v1');
-        const list = raw ? JSON.parse(raw) : [];
-        if (list && list.length) {
-          const rows = [];
-          for (const id of list) {
-            try {
-              const res = await fetchStateById(id);
-              rows.push({ id, state: res && res.state ? res.state : res });
-            } catch (e) { rows.push({ id, error: true }); }
+      const found = await tryFetchList();
+      if (!found) {
+        statusEl.textContent = 'No listing endpoint found. Trying locally saved ids...';
+        // look for locally-saved ids added by the Save button
+        try {
+          const raw = localStorage.getItem('admin_known_state_ids_v1');
+          const list = raw ? JSON.parse(raw) : [];
+          if (list && list.length) {
+            const rows = [];
+            for (const id of list) {
+              try {
+                const res = await fetchStateById(id);
+                rows.push({ id, state: res && res.state ? res.state : res });
+              } catch (e) { rows.push({ id, error: true }); }
+            }
+            renderTable(rows);
+            statusEl.textContent = 'Loaded ' + rows.length + ' locally-saved entries.';
+            return;
           }
-          renderTable(rows);
-          statusEl.textContent = 'Loaded ' + rows.length + ' locally-saved entries.';
-          return;
-        }
-      } catch (e) { /* ignore */ }
-      statusEl.textContent = 'No locally saved states found. Use manual fetch by ID.';
-      return;
+        } catch (e) { /* ignore */ }
+        statusEl.textContent = 'No listing endpoint found. Use manual fetch by ID.';
+        return;
+      }
+      statusEl.textContent = 'Parsing list from ' + found.url;
+      let items = found.data;
+      // If items are simple ids, fetch each
+      if (items.length && typeof items[0] === 'string') {
+        const rows = [];
+        statusEl.textContent = 'Fetching ' + items.length + ' states...';
+        await Promise.all(items.map(async (id) => {
+          try {
+            const res = await fetchStateById(id);
+            const obj = res && res.state ? Object.assign({ id }, res.state) : Object.assign({ id }, res);
+            rows.push({ id, state: obj });
+          } catch (e) { rows.push({ id, error: true }); }
+        }));
+        renderTable(rows);
+        statusEl.textContent = 'Loaded ' + rows.length + ' entries.';
+        return;
+      }
+      // If items are objects that may include state or metrics
+      const normalized = items.map(it => {
+        if (it && (it.state || it.models || it.draws)) return it;
+        // if wrapper like { id, state }
+        if (it && it.id && it.state) return Object.assign({ id: it.id }, it);
+        return it;
+      });
+      renderTable(normalized);
+      statusEl.textContent = 'Loaded ' + normalized.length + ' entries.';
     }
 
     // helper to remove id from localStorage known list
