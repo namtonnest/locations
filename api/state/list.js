@@ -56,13 +56,20 @@ module.exports = async (req, res) => {
 
   try {
     const redis = getRedis();
-    // Use SCAN to safely fetch all keys matching 'state:*'
+    // Use SCAN to safely fetch up to 100 keys matching 'state:*'
     let cursor = 0;
     let keys = [];
+    let scanned = 0;
+    const MAX_KEYS = 100;
     do {
-      const result = await redis.scan(cursor, { match: 'state:*', count: 100 });
+      const result = await redis.scan(cursor, { match: 'state:*', count: MAX_KEYS });
       cursor = result[0];
       keys = keys.concat(result[1]);
+      scanned += result[1].length;
+      if (keys.length >= MAX_KEYS) {
+        keys = keys.slice(0, MAX_KEYS);
+        break;
+      }
     } while (cursor !== 0);
     if (!keys || !keys.length) return res.json({ states: [] });
 
@@ -75,7 +82,12 @@ module.exports = async (req, res) => {
       return { id, state: parsed };
     });
 
-    return res.json({ states });
+    // Add a warning if there may be more states
+    let warning = null;
+    if (keys.length === MAX_KEYS) {
+      warning = 'Showing first 100 states only. There may be more. Please implement pagination for full access.';
+    }
+    return res.json({ states, warning });
   } catch (err) {
     console.error('list error', err);
     return res.status(500).json({ error: err.message || String(err) });
