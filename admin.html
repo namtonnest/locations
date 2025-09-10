@@ -61,7 +61,10 @@
           statusEl.textContent = 'Trying ' + url;
           const res = await fetch(url, { method: 'GET' });
           if (!res.ok) { continue; }
-          const j = await res.json();
+          const text = await res.text();
+          console.log('[Admin] Raw response from', url, text);
+          let j;
+          try { j = JSON.parse(text); } catch (e) { j = text; }
           // Accept either an array of ids, or array of full objects, or wrapper { states: [...] }
           if (Array.isArray(j)) return { type: 'array', data: j, url };
           if (Array.isArray(j.states)) return { type: 'array', data: j.states, url };
