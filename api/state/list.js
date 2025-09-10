@@ -56,8 +56,14 @@ module.exports = async (req, res) => {
 
   try {
     const redis = getRedis();
-    // Use KEYS for simplicity; for large datasets consider SCAN pagination.
-    const keys = await redis.keys('state:*');
+    // Use SCAN to safely fetch all keys matching 'state:*'
+    let cursor = 0;
+    let keys = [];
+    do {
+      const result = await redis.scan(cursor, { match: 'state:*', count: 100 });
+      cursor = result[0];
+      keys = keys.concat(result[1]);
+    } while (cursor !== 0);
     if (!keys || !keys.length) return res.json({ states: [] });
 
     // mget to fetch all values in one round trip
