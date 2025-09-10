@@ -24,7 +24,6 @@
     <h2>Admin: Saved Map States</h2>
     <div class="row">
       <button id="refresh" class="btn">Refresh list</button>
-      <button id="deleteAll" class="btn" style="background:#ef4444;color:#fff">Delete All</button>
       <label style="display:flex;align-items:center;gap:8px">
         <input id="importFile" type="file" accept="application/json" style="display:none" />
         <button id="importBtn" class="btn small">Import JSON</button>
@@ -60,30 +59,27 @@
       if (adminToken) localStorage.setItem('admin_token', adminToken);
     }
     async function tryFetchList() {
-      statusEl.textContent = 'Fetching state list from backend...';
-      const url = BACKEND_STATE_ENDPOINT + '/list';
-      try {
-        const res = await fetch(url, {
-          method: 'GET',
-          headers: adminToken ? { 'x-admin-token': adminToken } : {}
-        });
-        const text = await res.text();
-        console.log('[Admin] Raw response from', url, text);
-        if (!res.ok) {
-          statusEl.textContent = `Failed to fetch: ${res.status} ${text}`;
-          return null;
-        }
-        let j;
-        try { j = JSON.parse(text); } catch (e) { j = text; }
-        // Accept either an array of ids, or array of full objects, or wrapper { states: [...] }
-        if (Array.isArray(j)) return { type: 'array', data: j, url };
-        if (Array.isArray(j.states)) return { type: 'array', data: j.states, url };
-        if (Array.isArray(j.items)) return { type: 'array', data: j.items, url };
-        // fallback: if object contains many keys, it might be a single state
-        if (j && j.state && (j.id || j._id)) return { type: 'single', data: j, url };
-      } catch (e) {
-        statusEl.textContent = 'Error fetching state list: ' + (e && e.message);
-        return null;
+      statusEl.textContent = 'Looking for listing endpoints...';
+      const candidates = [BACKEND_STATE_ENDPOINT + '/list', BACKEND_STATE_ENDPOINT + '/all', BACKEND_STATE_ENDPOINT, BACKEND_STATE_ENDPOINT + '/states'];
+      for (const url of candidates) {
+        try {
+          statusEl.textContent = 'Trying ' + url;
+          const res = await fetch(url, {
+            method: 'GET',
+            headers: adminToken ? { 'x-admin-token': adminToken } : {}
+          });
+          if (!res.ok) { continue; }
+          const text = await res.text();
+          console.log('[Admin] Raw response from', url, text);
+          let j;
+          try { j = JSON.parse(text); } catch (e) { j = text; }
+          // Accept either an array of ids, or array of full objects, or wrapper { states: [...] }
+          if (Array.isArray(j)) return { type: 'array', data: j, url };
+          if (Array.isArray(j.states)) return { type: 'array', data: j.states, url };
+          if (Array.isArray(j.items)) return { type: 'array', data: j.items, url };
+          // fallback: if object contains many keys, it might be a single state
+          if (j && j.state && (j.id || j._id)) return { type: 'single', data: j, url };
+        } catch (e) { /* ignore and try next */ }
       }
       return null;
     }
@@ -305,31 +301,6 @@
         await refresh();
       } catch (e) { statusEl.textContent = 'Import failed: ' + (e && e.message); alert('Import failed: ' + (e && e.message)); }
       importFile.value = '';
-    });
-
-    // Delete all states currently listed (up to 100)
-    document.getElementById('deleteAll').addEventListener('click', async () => {
-      if (!confirm('Delete ALL listed states? This cannot be undone.')) return;
-      statusEl.textContent = 'Deleting all states...';
-      const found = await tryFetchList();
-      if (!found || !found.data || !found.data.length) {
-        statusEl.textContent = 'No states to delete.';
-        return;
-      }
-      let count = 0;
-      for (const entry of found.data) {
-        const id = entry.id || entry._id || entry.key;
-        if (id) {
-          try {
-            await deleteState(id);
-            count++;
-          } catch (e) {
-            console.error('Failed to delete', id, e);
-          }
-        }
-      }
-      statusEl.textContent = `Deleted ${count} states.`;
-      await refresh();
     });
 
     // auto-refresh on load
