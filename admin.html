@@ -23,12 +23,7 @@
   <div class="card">
     <h2>Admin: Saved Map States</h2>
     <div class="card" style="margin-bottom:16px;background:#112233">
-      <h3>Employee Sign-In</h3>
-      <div class="row">
-        <input id="employeeName" type="text" placeholder="Enter your name" />
-        <button id="signInBtn" class="btn">Sign In & Track Location</button>
-      </div>
-      <div id="employeeStatus" class="note"></div>
+      <h3>Employee Location Tracker</h3>
       <div class="note" style="margin-top:16px">
         <a href="employee.html" class="btn" style="text-decoration:none;">Go to Employee Location Tracker</a>
       </div>
@@ -61,56 +56,6 @@
     const BACKEND_STATE_ENDPOINT = 'https://locations-seven.vercel.app/api/state';
   const EMPLOYEE_LOCATION_ENDPOINT = 'https://locations-seven.vercel.app/api/employee-location'; // Vercel deployment endpoint
 
-    let locationInterval = null;
-    let employeeName = '';
-
-    function sendLocation(lat, lng) {
-      fetch(EMPLOYEE_LOCATION_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: employeeName, lat, lng, timestamp: Date.now() })
-      }).then(res => {
-        if (!res.ok) throw new Error('Failed to send location');
-        return res.json();
-      }).then(data => {
-        document.getElementById('employeeStatus').textContent = 'Location sent: ' + lat + ', ' + lng;
-      }).catch(err => {
-        document.getElementById('employeeStatus').textContent = 'Error sending location: ' + err.message;
-      });
-    }
-
-    function startLocationTracking() {
-      if (!navigator.geolocation) {
-        document.getElementById('employeeStatus').textContent = 'Geolocation not supported.';
-        return;
-      }
-      // Immediately send location, then every 10 minutes
-      navigator.geolocation.getCurrentPosition(pos => {
-        sendLocation(pos.coords.latitude, pos.coords.longitude);
-      }, err => {
-        document.getElementById('employeeStatus').textContent = 'Error: ' + err.message;
-      });
-      locationInterval = setInterval(() => {
-        navigator.geolocation.getCurrentPosition(pos => {
-          sendLocation(pos.coords.latitude, pos.coords.longitude);
-        }, err => {
-          document.getElementById('employeeStatus').textContent = 'Error: ' + err.message;
-        });
-      }, 10 * 60 * 1000); // 10 minutes
-      document.getElementById('employeeStatus').textContent = 'Tracking started. Your location will be sent every 10 minutes.';
-    }
-
-    document.getElementById('signInBtn').addEventListener('click', () => {
-      const nameInput = document.getElementById('employeeName');
-      const name = nameInput.value.trim();
-      if (!name) {
-        document.getElementById('employeeStatus').textContent = 'Please enter your name.';
-        return;
-      }
-      employeeName = name;
-      document.getElementById('employeeStatus').textContent = 'Signed in as ' + employeeName;
-      startLocationTracking();
-    });
 
     const statusEl = document.getElementById('status');
     const resultsTbl = document.getElementById('results');
