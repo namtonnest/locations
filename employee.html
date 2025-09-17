@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Employee Location Tracker</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.14.0/mapbox-gl.css" rel="stylesheet">
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.14.0/mapbox-gl.js"></script>
+  <style>
+    body { font-family: Inter, system-ui, Segoe UI, Roboto, Arial; margin: 0; background: #0f1724; color: #e6eef8; }
+    .card { background: #0b1220; padding: 16px; border-radius: 8px; max-width: 400px; margin: 32px auto; }
+    .btn { background: #06b6d4; color: #071325; padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+    input[type=text] { padding: 8px; border-radius: 6px; border: 1px solid #222; background: #fff; color: #071325; }
+    #map { width: 100%; height: 400px; margin-top: 24px; border-radius: 8px; }
+    .note { font-size: 13px; color: #9fb6c9; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Employee Sign-In</h2>
+    <input id="employeeName" type="text" placeholder="Enter your name" />
+    <button id="signInBtn" class="btn">Sign In & Track Location</button>
+    <div id="status" class="note"></div>
+  </div>
+  <div id="map" style="display:none"></div>
+  <script>
+    mapboxgl.accessToken = "pk.eyJ1IjoicHVycGhhY3RzIiwiYSI6ImNsdzY1bzVvNzFwb3IyamxyOG1vY3oyM2gifQ.2LikTeWKwlWsAcEneBXW0Q";
+    let map, marker;
+    let employeeName = '';
+    document.getElementById('signInBtn').addEventListener('click', () => {
+      const name = document.getElementById('employeeName').value.trim();
+      if (!name) {
+        document.getElementById('status').textContent = 'Please enter your name.';
+        return;
+      }
+      employeeName = name;
+      document.getElementById('status').textContent = 'Signed in as ' + employeeName + '. Tracking location...';
+      document.getElementById('map').style.display = 'block';
+      if (!navigator.geolocation) {
+        document.getElementById('status').textContent = 'Geolocation not supported.';
+        return;
+      }
+      navigator.geolocation.watchPosition(pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        if (!map) {
+          map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/light-v10',
+            center: [lng, lat],
+            zoom: 16
+          });
+        }
+        if (!marker) {
+          marker = new mapboxgl.Marker({ color: '#06b6d4' })
+            .setLngLat([lng, lat])
+            .addTo(map);
+        } else {
+          marker.setLngLat([lng, lat]);
+        }
+        map.setCenter([lng, lat]);
+      }, err => {
+        document.getElementById('status').textContent = 'Error: ' + err.message;
+      }, { enableHighAccuracy: true });
+    });
+  </script>
+</body>
+</html>
