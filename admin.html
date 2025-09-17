@@ -33,6 +33,57 @@
       <input id="manualId" placeholder="Enter state id (8 chars)" type="text" />
       <button id="fetchId" class="btn small">Fetch</button>
     </div>
+    <div class="row" style="margin-top:16px">
+      <input id="employeeName" type="text" placeholder="Employee name or ID" style="min-width:180px" />
+      <button id="loginBtn" class="btn">Login & Start Tracking</button>
+      <span id="loginStatus" class="note"></span>
+    </div>
+    // Employee GPS tracking logic
+    let gpsInterval = null;
+    let employeeId = null;
+    document.getElementById('loginBtn').addEventListener('click', () => {
+      const nameInput = document.getElementById('employeeName');
+      const statusSpan = document.getElementById('loginStatus');
+      const name = nameInput.value.trim();
+      if (!name) {
+        statusSpan.textContent = 'Please enter your name or ID.';
+        return;
+      }
+      employeeId = name;
+      statusSpan.textContent = 'Tracking started for ' + employeeId;
+      if (gpsInterval) clearInterval(gpsInterval);
+      // Immediately send location, then every 5 min
+      sendLocation();
+      gpsInterval = setInterval(sendLocation, 5 * 60 * 1000);
+    });
+
+    async function sendLocation() {
+      if (!employeeId) return;
+      if (!navigator.geolocation) {
+        document.getElementById('loginStatus').textContent = 'Geolocation not supported.';
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(async pos => {
+        const { latitude, longitude } = pos.coords;
+        try {
+          const res = await fetch('/api/employee-location', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ employeeId, latitude, longitude })
+          });
+          if (!res.ok) {
+            const err = await res.text();
+            document.getElementById('loginStatus').textContent = 'Error sending location: ' + err;
+          } else {
+            document.getElementById('loginStatus').textContent = `Location sent: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+          }
+        } catch (e) {
+          document.getElementById('loginStatus').textContent = 'Network error: ' + e.message;
+        }
+      }, err => {
+        document.getElementById('loginStatus').textContent = 'Unable to get location: ' + err.message;
+      });
+    }
     <div class="note">This page attempts to fetch a list of saved states from the server. If your backend does not expose a listing endpoint, paste a saved <code>state_id</code> above and click Fetch.</div>
     <div id="status" class="note"></div>
 

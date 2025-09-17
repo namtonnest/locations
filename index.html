@@ -1,3 +1,31 @@
+// Employee location markers
+let employeeMarkers = [];
+async function fetchAndShowEmployeeLocations() {
+    try {
+        const res = await fetch('/api/employee-location-list');
+        if (!res.ok) return;
+        const data = await res.json();
+        // Remove old markers
+        employeeMarkers.forEach(m => m.remove());
+        employeeMarkers = [];
+        if (data && data.employees && Array.isArray(data.employees)) {
+            data.employees.forEach(emp => {
+                if (typeof emp.latitude === 'number' && typeof emp.longitude === 'number') {
+                    const marker = new mapboxgl.Marker({ color: '#ef4444' })
+                        .setLngLat([emp.longitude, emp.latitude])
+                        .setPopup(new mapboxgl.Popup().setText(`Employee: ${emp.id}`))
+                        .addTo(map);
+                    employeeMarkers.push(marker);
+                }
+            });
+        }
+    } catch (e) { /* ignore */ }
+}
+
+// Refresh employee locations every 5 min
+setInterval(fetchAndShowEmployeeLocations, 5 * 60 * 1000);
+// Initial fetch
+fetchAndShowEmployeeLocations();
 <!DOCTYPE html>
 <html>
 <head>
