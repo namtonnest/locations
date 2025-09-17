@@ -1,31 +1,3 @@
-// Employee location markers
-let employeeMarkers = [];
-async function fetchAndShowEmployeeLocations() {
-    try {
-        const res = await fetch('/api/employee-location-list');
-        if (!res.ok) return;
-        const data = await res.json();
-        // Remove old markers
-        employeeMarkers.forEach(m => m.remove());
-        employeeMarkers = [];
-        if (data && data.employees && Array.isArray(data.employees)) {
-            data.employees.forEach(emp => {
-                if (typeof emp.latitude === 'number' && typeof emp.longitude === 'number') {
-                    const marker = new mapboxgl.Marker({ color: '#ef4444' })
-                        .setLngLat([emp.longitude, emp.latitude])
-                        .setPopup(new mapboxgl.Popup().setText(`Employee: ${emp.id}`))
-                        .addTo(map);
-                    employeeMarkers.push(marker);
-                }
-            });
-        }
-    } catch (e) { /* ignore */ }
-}
-
-// Refresh employee locations every 5 min
-setInterval(fetchAndShowEmployeeLocations, 5 * 60 * 1000);
-// Initial fetch
-fetchAndShowEmployeeLocations();
 <!DOCTYPE html>
 <html>
 <head>
@@ -1808,9 +1780,6 @@ fetchAndShowEmployeeLocations();
     sidebar.id = 'sidebar';
     sidebar.className = 'hidden';
     sidebar.innerHTML = '<div style="font-weight:700;margin-bottom:8px">Placed models</div><div id="models-list"></div>';
-    sidebar.innerHTML = '<div style="font-weight:700;margin-bottom:8px">Placed models</div>' +
-        '<button id="auto-save-btn" class="btn secondary" style="margin-bottom:8px;width:100%">Auto-save OFF</button>' +
-        '<div id="models-list"></div>';
     document.body.appendChild(sidebar);
 
     // toggle sidebar open/close
@@ -2969,44 +2938,33 @@ map.on('click', (e) => {
 </body>
 <script>
 // --- Background location tracking and auto-save to admin states ---
-
 let autoSaveEnabled = false;
-let autoSaveIntervalId = null;
+let autoSaveWatchId = null;
 const autoSaveBtn = document.getElementById('auto-save-btn');
 if (autoSaveBtn) {
-    function enableAutoSave() {
-        autoSaveEnabled = true;
-        autoSaveBtn.textContent = 'Auto-save ON';
-        autoSaveBtn.style.background = '#0077ff';
-        if (navigator.geolocation) {
-            autoTagLocationAndSave(); // run once immediately
-            autoSaveIntervalId = setInterval(() => {
-                navigator.geolocation.getCurrentPosition(
+    autoSaveBtn.textContent = 'Auto-save OFF';
+    autoSaveBtn.style.background = '#6b7280';
+    autoSaveBtn.addEventListener('click', () => {
+        autoSaveEnabled = !autoSaveEnabled;
+        if (autoSaveEnabled) {
+            autoSaveBtn.textContent = 'Auto-save ON';
+            autoSaveBtn.style.background = '#0077ff';
+            if (navigator.geolocation) {
+                autoSaveWatchId = navigator.geolocation.watchPosition(
                     autoTagLocationAndSave,
                     (err) => { console.warn('Geolocation error for auto-tag', err); },
-                    { enableHighAccuracy: true, timeout: 10000 }
+                    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
                 );
-            }, 10000);
-        }
-    }
-    function disableAutoSave() {
-        autoSaveEnabled = false;
-        autoSaveBtn.textContent = 'Auto-save OFF';
-        autoSaveBtn.style.background = '#6b7280';
-        if (autoSaveIntervalId !== null) {
-            clearInterval(autoSaveIntervalId);
-            autoSaveIntervalId = null;
-        }
-    }
-    autoSaveBtn.addEventListener('click', () => {
-        if (autoSaveEnabled) {
-            disableAutoSave();
+            }
         } else {
-            enableAutoSave();
+            autoSaveBtn.textContent = 'Auto-save OFF';
+            autoSaveBtn.style.background = '#6b7280';
+            if (navigator.geolocation && autoSaveWatchId !== null) {
+                navigator.geolocation.clearWatch(autoSaveWatchId);
+                autoSaveWatchId = null;
+            }
         }
     });
-    // Auto-save is OFF by default on page load
-    disableAutoSave();
 }
 
 async function autoTagLocationAndSave(pos) {

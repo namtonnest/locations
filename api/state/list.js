@@ -62,14 +62,12 @@ module.exports = async (req, res) => {
 
     // mget to fetch all values in one round trip
     const values = await redis.mget(...keys);
-    // Filter out deleted/null states
     const states = keys.map((k, i) => {
-      if (values[i] === null || values[i] === undefined) return null;
       const id = k.replace(/^state:/, '');
       let parsed = null;
       try { parsed = JSON.parse(values[i]); } catch (e) { parsed = values[i]; }
       return { id, state: parsed };
-    }).filter(Boolean);
+    });
 
     return res.json({ states });
   } catch (err) {

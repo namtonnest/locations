@@ -50,9 +50,9 @@ module.exports = async (req, res) => {
 
   const { id } = req.query || {};
   if (!id) return res.status(400).json({ error: 'Missing id param' });
+  const redis = getRedis();
   if (req.method === 'GET') {
     try {
-      const redis = getRedis();
       const raw = await redis.get(`state:${id}`);
       if (raw === null || raw === undefined) return res.status(404).json({ error: 'Not found' });
       let parsed;
@@ -64,10 +64,9 @@ module.exports = async (req, res) => {
     }
   } else if (req.method === 'DELETE') {
     try {
-      const redis = getRedis();
       const result = await redis.del(`state:${id}`);
-      if (result === 0) return res.status(404).json({ error: 'Not found or already deleted' });
-      return res.json({ ok: true, deleted: id });
+      if (result === 0) return res.status(404).json({ error: 'Not found' });
+      return res.json({ success: true, id });
     } catch (err) {
       console.error('delete error', err);
       return res.status(500).json({ error: err.message || String(err) });
