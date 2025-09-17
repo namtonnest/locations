@@ -30,19 +30,6 @@
       </div>
       <div id="employeeStatus" class="note"></div>
     </div>
-    <div class="card" style="margin-bottom:16px;background:#0b1220">
-      <h3>Employee Locations Map</h3>
-      <div id="employeeMap" style="height:400px;width:100%;border-radius:8px;"></div>
-      <div id="employeeMapStatus" class="note"></div>
-    </div>
-    <div class="card" style="margin-bottom:16px;background:#112233">
-      <h3>Employee Sign-In</h3>
-      <div class="row">
-        <input id="employeeName" type="text" placeholder="Enter your name" />
-        <button id="signInBtn" class="btn">Sign In & Track Location</button>
-      </div>
-      <div id="employeeStatus" class="note"></div>
-    </div>
     <div class="row">
       <button id="refresh" class="btn">Refresh list</button>
       <button id="deleteAll" class="btn" style="background:#ef4444;color:#fff">Delete All</button>
@@ -68,59 +55,8 @@
   </div>
 
   <script>
-    // Mapbox GL JS
-    const MAPBOX_TOKEN = 'pk.eyJ1IjoiZXhhbXBsZXVzZXIiLCJhIjoiY2xvY2F0aW9uc2FkbWluIn0.1234567890abcdef'; // Replace with your token
-
-    let map;
-    let employeeMarkers = [];
-
-    function initEmployeeMap() {
-      mapboxgl.accessToken = MAPBOX_TOKEN;
-      map = new mapboxgl.Map({
-        container: 'employeeMap',
-        style: 'mapbox://styles/mapbox/streets-v12',
-        center: [-98.5795, 39.8283], // Center USA
-        zoom: 4
-      });
-      fetchAndShowEmployeeLocations();
-    }
-
-    function clearEmployeeMarkers() {
-      employeeMarkers.forEach(m => m.remove());
-      employeeMarkers = [];
-    }
-
-    async function fetchAndShowEmployeeLocations() {
-      document.getElementById('employeeMapStatus').textContent = 'Loading employee locations...';
-      try {
-        const res = await fetch(EMPLOYEE_LOCATION_ENDPOINT);
-        if (!res.ok) throw new Error('Failed to fetch employee locations');
-        const data = await res.json();
-        clearEmployeeMarkers();
-        if (data.locations && data.locations.length) {
-          data.locations.forEach(loc => {
-            const marker = new mapboxgl.Marker({ color: '#06b6d4' })
-              .setLngLat([loc.lng, loc.lat])
-              .setPopup(new mapboxgl.Popup().setText(`${loc.name} @ ${new Date(loc.timestamp).toLocaleTimeString()}`))
-              .addTo(map);
-            employeeMarkers.push(marker);
-          });
-          document.getElementById('employeeMapStatus').textContent = 'Showing ' + data.locations.length + ' employee(s).';
-        } else {
-          document.getElementById('employeeMapStatus').textContent = 'No employee locations found.';
-        }
-      } catch (err) {
-        document.getElementById('employeeMapStatus').textContent = 'Error: ' + err.message;
-      }
-    }
-
-    // Refresh employee locations every 2 minutes
-    setInterval(fetchAndShowEmployeeLocations, 2 * 60 * 1000);
-
-    // Initialize map after DOM loaded
-    window.addEventListener('DOMContentLoaded', initEmployeeMap);
     const BACKEND_STATE_ENDPOINT = 'https://locations-seven.vercel.app/api/state';
-    const EMPLOYEE_LOCATION_ENDPOINT = 'https://locations-seven.vercel.app/api/employee-location'; // Change to your actual endpoint
+  const EMPLOYEE_LOCATION_ENDPOINT = 'https://locations-seven.vercel.app/api/employee-location'; // Vercel deployment endpoint
 
     let locationInterval = null;
     let employeeName = '';
