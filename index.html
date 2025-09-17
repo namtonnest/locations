@@ -339,7 +339,38 @@
     </div>
 </div>
 <script>
-    mapboxgl.accessToken = "pk.eyJ1IjoicHVycGhhY3RzIiwiYSI6ImNsdzY1bzVvNzFwb3IyamxyOG1vY3oyM2gifQ.2LikTeWKwlWsAcEneBXW0Q";
+        mapboxgl.accessToken = "pk.eyJ1IjoicHVycGhhY3RzIiwiYSI6ImNsdzY1bzVvNzFwb3IyamxyOG1vY3oyM2gifQ.2LikTeWKwlWsAcEneBXW0Q";
+
+        // --- Employee location markers ---
+        const EMPLOYEE_LOCATION_ENDPOINT = '/api/employee-location';
+        let employeeMarkers = [];
+
+        async function fetchAndDisplayEmployeeLocations() {
+            // Remove old markers
+            employeeMarkers.forEach(m => { try { m.remove(); } catch (e) {} });
+            employeeMarkers = [];
+            try {
+                const res = await fetch(EMPLOYEE_LOCATION_ENDPOINT);
+                if (!res.ok) throw new Error('Failed to fetch employee locations');
+                const data = await res.json();
+                const locations = data.locations || [];
+                locations.forEach(emp => {
+                    if (typeof emp.lat === 'number' && typeof emp.lng === 'number') {
+                        const marker = new mapboxgl.Marker({ color: '#16a34a' })
+                            .setLngLat([emp.lng, emp.lat])
+                            .setPopup(new mapboxgl.Popup().setText(`${emp.name} @ ${new Date(emp.timestamp).toLocaleTimeString()}`))
+                            .addTo(map);
+                        employeeMarkers.push(marker);
+                    }
+                });
+            } catch (e) {
+                console.warn('Error displaying employee locations:', e);
+            }
+        }
+
+        // Initial fetch and periodic update every 10 minutes
+        fetchAndDisplayEmployeeLocations();
+        setInterval(fetchAndDisplayEmployeeLocations, 10 * 60 * 1000);
     const map = new mapboxgl.Map({
         container: 'map',
     // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
