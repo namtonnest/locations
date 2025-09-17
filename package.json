@@ -1,0 +1,16 @@
+{
+  "name": "1more",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@upstash/redis": "^1.35.3",
+    "nanoid": "^5.1.5"
+  }
+}

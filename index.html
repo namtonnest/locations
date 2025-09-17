@@ -1,0 +1,3048 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Location Locations</title>
+<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.14.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.14.0/mapbox-gl.js"></script>
+<style>
+    :root{
+        --bg: #0f1724;
+    --card: #ffffff;
+    --muted: #6b7280;
+        --accent: #06b6d4;
+        --ui-text: #ff6a00; /* primary orange for UI text on white backgrounds */
+        --glass: rgba(255,255,255,0.06);
+        --shadow: 0 6px 18px rgba(2,6,23,0.3);
+    }
+    html,body{height:100%;}
+    body { margin: 0; padding: 0; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; background: var(--bg); color: #111827; }
+    #map { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+    /* Topbar */
+    .topbar{
+        position: absolute; left: 16px; right: 16px; top: 12px; z-index: 6; display:flex; justify-content:space-between; gap:12px;
+        pointer-events: auto;
+        padding-right: 72px; /* reserve space for the absolute hamburger on the right */
+    }
+    .controls-right{display:flex;gap:8px;align-items:center}
+    /* style menu (hamburger) */
+    /* place hamburger flush against the top-right margin */
+    #style-hamburger{
+        position: absolute;
+        top: 12px; /* match topbar offset */
+    right: 12px; /* slightly inset on desktop */
+    z-index: 14;
+    font-size: 14px; /* slightly smaller */
+    padding: 6px 8px;
+    margin: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    }
+    /* Locate button: compact padding and fixed size so the icon isn't surrounded by excess space */
+    #locate-btn{
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        z-index: 30;
+        padding: 6px; /* small, balanced padding */
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+    }
+    /* Admin button (small square under locate) */
+    #admin-btn{
+        position: absolute;
+        top: 56px;
+        right: 12px;
+        z-index: 30;
+        width: 36px;
+        height: 36px;
+        display:flex;align-items:center;justify-content:center;padding:6px;border-radius:8px
+    }
+    /* Save button placed under Admin on desktop */
+    #save-btn{
+        position: absolute;
+        top: 96px;
+        right: 12px;
+        z-index: 30;
+        width: 36px;
+        height: 36px;
+        display:flex;align-items:center;justify-content:center;padding:6px;border-radius:8px;
+    }
+    /* ensure the menu drops down below the button */
+    .style-menu{position: absolute; right: 16px; top: 56px; background: rgba(255,255,255,0.98); padding:8px; border-radius:8px; box-shadow:var(--shadow); z-index:13; min-width:160px}
+    .style-menu.hidden{display:none}
+    .style-menu button{display:block;width:100%;text-align:left;padding:8px;border:none;background:transparent;cursor:pointer;border-radius:6px}
+    .style-menu button:hover{background:rgba(15,23,36,0.04)}
+    .controls-left{display:flex; gap:8px; align-items:center}
+    .topbar .btn{background: linear-gradient(180deg, #ffffff, #f8fafc); border: 1px solid rgba(2,6,23,0.06); padding:8px 12px; border-radius:10px; cursor:pointer; color:#0f1724; font-weight:700; box-shadow: var(--shadow); transition: transform .08s ease, box-shadow .08s ease}
+    .topbar .btn:hover{transform: translateY(-1px);}
+    /* Make secondary buttons visually consistent and sleeker: subtle gradient, white text, and soft shadow */
+    .btn.secondary{
+        background: linear-gradient(90deg, rgba(6,182,212,0.14), rgba(124,58,237,0.14));
+        border: 1px solid rgba(255,255,255,0.08);
+        color: #0f1724; /* darker text for better readability */
+        box-shadow: 0 8px 20px rgba(2,6,23,0.14);
+        backdrop-filter: blur(6px);
+    }
+    /* Make all buttons use bold text for better legibility */
+    .btn { font-weight: 700; }
+    .btn.secondary:hover{ transform: translateY(-1px) scale(1.02); }
+    .topbar .brand{font-weight:700; color:#fff; padding:8px 12px; border-radius:10px; background:linear-gradient(90deg,var(--accent),#7c3aed); box-shadow:var(--shadow); letter-spacing:0.2px}
+    .topbar .btn { min-width: 68px; }
+
+    /* Note */
+    /* Position the map note on the right to avoid overlapping left-side controls */
+    #map-note{position:absolute; top:56px; right:18px; left:auto; z-index:6; background: rgba(255,255,255,0.95); padding:8px 10px; border-radius:8px; display:none; font-size:13px; box-shadow:0 6px 18px rgba(15,23,36,0.14)}
+
+    /* Sidebar (centered window like the model library) */
+    #sidebar{
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        top: 72px;
+        z-index: 72;
+        width: min(92%, 360px);
+        max-height: 70vh;
+        background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(250,250,250,0.98));
+        padding: 14px;
+        overflow: auto;
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+        border: 1px solid rgba(2,6,23,0.04);
+    }
+    #sidebar.hidden{display:none}
+    #sidebar h3{margin:0 0 8px 0; font-size:16px; color:var(--ui-text)}
+    .model-row{padding:10px; border-radius:8px; display:flex; justify-content:space-between; gap:8px; align-items:flex-start}
+    .model-row + .model-row{margin-top:8px}
+    .model-row.selected{background:#eef9ff}
+    .model-row .label{font-weight:600; color:var(--ui-text)}
+    .model-row .info{font-size:12px; color:rgba(255,106,0,0.85); margin-top:6px}
+    .model-row button{background:transparent; border:none; color:var(--ui-text); cursor:pointer; font-weight:600}
+    .model-left{display:flex;flex-direction:column}
+    .model-actions{display:flex;gap:8px;align-items:center}
+    .rename-input{width:140px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)}
+
+    /* Library panel */
+    #library{position:absolute; left:50%; transform:translateX(-50%); top:72px; z-index:6; background:rgba(255,255,255,0.98); padding:12px; border-radius:12px; box-shadow:var(--shadow); min-width:360px; display:none}
+    #library h4{margin:0 0 8px 0; color:var(--ui-text)}
+    #library-list{display:flex;flex-direction:column;gap:8px;max-height:260px;overflow:auto}
+    .lib-item{display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;border:1px solid rgba(2,6,23,0.04)}
+    .lib-item .url{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+    .lib-item button{background:transparent;border:none;color:var(--ui-text);cursor:pointer;font-weight:600}
+    #add-model-url{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(2,6,23,0.06);margin-top:8px}
+    .lib-item img.thumb{width:120px;height:80px;object-fit:cover;border-radius:6px;border:1px solid rgba(2,6,23,0.04);margin-right:8px}
+
+    /* ensure thumbnails have a white background for better contrast */
+    .lib-item img.thumb { background: #ffffff; }
+
+    /* Model controls */
+    #model-controls{position:absolute; right:18px; top:12px; z-index:12; background:rgba(255,255,255,0.98); padding:12px; border-radius:12px; box-shadow:var(--shadow); min-width:220px; pointer-events:auto}
+    #model-controls label{display:block; font-size:13px; color:var(--ui-text)}
+    #model-controls input[type=number]{width:86px; padding:6px; margin-left:8px; border-radius:6px; border:1px solid rgba(2,6,23,0.06)}
+
+    @media(max-width:640px){
+        /* place the info/sidebar near the bottom so it isn't covered by top overlays */
+        #sidebar{
+            position: fixed !important;
+            left: 8px !important;
+            right: 8px !important;
+            bottom: 12px !important;
+            top: auto !important;
+            width: auto !important;
+            height: 260px;
+            transform: none !important; /* opt out of parent scaling */
+            z-index: 71;
+        }
+        .topbar{left:8px; right:8px}
+        #model-controls{right:8px; left:8px; top:auto; bottom:12px}
+        /* hide controls by default on mobile; a toggle button will open them */
+        #model-controls{display:none}
+        #controls-toggle-btn{display:block}
+        /* ensure the style/hamburger button is flush to the viewport corner on mobile */
+        #style-hamburger {
+            position: fixed !important;
+            top: 8px !important;
+            right: 0 !important; /* flush to the viewport right edge */
+            margin: 0 !important;
+            transform: none !important; /* opt out of parent scaling */
+            z-index: 60;
+            font-size: 14px !important;
+            padding: 6px !important;
+            width: 36px !important;
+            height: 36px !important;
+            border-radius: 6px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        /* make locate button flush to the viewport top-right on mobile */
+        #locate-btn {
+            position: fixed !important;
+            top: 3px !important; /* raised 5px */
+            right: -80px !important; /* moved off-screen to the right by 80px on mobile */
+            margin: 0 !important;
+            z-index: 62 !important;
+            border-radius: 6px !important;
+        }
+        /* admin button on mobile: place slightly below the locate button, inset from right edge */
+        #admin-btn {
+            position: fixed !important;
+            top: 40px !important;
+            right: -80px !important; /* moved off-screen to the right by 80px on mobile */
+            z-index: 62 !important;
+            width: 34px !important;
+            height: 34px !important;
+            border-radius: 6px !important;
+        }
+        /* save button on mobile: same off-screen behavior and placed below admin */
+        #save-btn {
+            position: fixed !important;
+            top: 80px !important;
+            right: -155px !important; /* nudged to -155px per request */
+            z-index: 62 !important;
+            width: 34px !important;
+            height: 34px !important;
+            border-radius: 6px !important;
+        }
+        /* Right-side stacked container for small screens: groups action buttons */
+        #right-stack{
+            position: fixed !important;
+            right: 12px !important;
+            top: 8px !important;
+            z-index: 80 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+            align-items: flex-end !important;
+            pointer-events: auto !important;
+        }
+        /* when buttons are inside the stack, make them compact and remove absolute offsets */
+        #right-stack .btn{ position: static !important; right: auto !important; top: auto !important; width:36px !important; height:36px !important; display:flex !important; align-items:center !important; justify-content:center !important }
+    }
+
+    /* Additional mobile compacting: slightly scale down UI and reduce paddings/font-sizes
+       so more controls fit on small screens without changing layout logic. */
+    @media (max-width: 640px) {
+        :root { --ui-scale: 0.88; }
+        /* Apply a subtle visual scale to primary overlay containers except panels that we pin to viewport */
+        .topbar, #model-controls, #sidebar, #draw-panel, #address-bar, .controls, .controls-left, .controls-right {
+            transform: scale(var(--ui-scale));
+            transform-origin: top left;
+        }
+        /* Keep library panel pinned to viewport center and opt out of scaling so it stays visible */
+        #library {
+            position: fixed !important;
+            left: 50% !important;
+            top: 72px !important;
+            transform: translateX(-50%) !important;
+            transform-origin: top center !important;
+            width: min(92%, 340px) !important;
+            min-width: 0 !important;
+            padding: 8px !important;
+            z-index: 72;
+            background: rgba(255,255,255,0.98);
+        }
+        /* Tighten button padding and reduce font sizes slightly */
+        .topbar .btn, .btn {
+            padding: 6px 8px;
+            font-size: 13px;
+        }
+        /* Make panels slightly narrower and reduce internal padding */
+        #draw-panel { width: 180px !important; padding: 8px !important; font-size: 13px; }
+        #draw-panel input, #draw-panel button, #model-controls input, #model-controls button, #sidebar .model-row { font-size: 13px; }
+        /* Nudge address bar sizing to fit better */
+        #address-bar { min-width: 260px; padding: 6px; font-size: 13px; bottom: 10px; }
+        /* Slightly smaller thumbnails */
+        .lib-item img.thumb { width: 100px; height: 68px; }
+    }
+
+    /* Controls toggle (default hidden on desktop) - positioned below the topbar */
+    #controls-toggle-btn{position:absolute; right:18px; top:56px; z-index:7; display:none;}
+
+    /* Address/search bar at bottom */
+    #address-bar{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;z-index:9;background:rgba(255,255,255,0.98);padding:8px;border-radius:10px;box-shadow:var(--shadow);display:flex;gap:8px;align-items:center;min-width:320px;max-width:90%}
+    #address-bar input{flex:1;padding:8px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)}
+    #address-bar button{padding:8px 10px;border-radius:8px}
+
+</style>
+</head>
+<body>
+<script src="https://unpkg.com/three@0.126.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.126.0/examples/js/loaders/GLTFLoader.js"></script>
+<!-- Load font and text geometry helpers so we can generate 3D text at runtime -->
+<script src="https://unpkg.com/three@0.126.0/examples/js/loaders/FontLoader.js"></script>
+<script src="https://unpkg.com/three@0.126.0/examples/js/geometries/TextGeometry.js"></script>
+<!-- Topbar markup: buttons are defined in HTML so JS doesn't inline-style them -->
+<div class="topbar">
+    <div class="controls-left">
+        <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start;margin-right:6px">
+            <div style="display:flex;align-items:center;gap:8px">
+                <div class="brand">Location</div>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <button id="open-library-btn" class="btn secondary">Models</button>
+                    <button id="open-models-btn" class="btn secondary">Info</button>
+                    <button id="share-btn" class="btn secondary">Share</button>
+                    <button id="save-btn" class="btn secondary" title="Save state to server">Save</button>
+                </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+                <!-- Add image button removed from main UI; available in Draw panel -->
+                <button id="add-model-btn" class="btn" style="padding:6px 10px;">Add model</button>
+                <button id="desktop-controls-btn" class="btn" style="padding:6px 10px;display:none">Controls</button>
+            </div>
+        </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+        <!-- placeholder for future search / account -->
+    </div>
+    <div class="controls-right">
+        <button id="style-hamburger" class="btn secondary">☰</button>
+        <button id="locate-btn" class="btn" title="Center on your location" aria-label="Locate me">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 2v2"></path>
+                <path d="M12 20v2"></path>
+                <path d="M2 12h2"></path>
+                <path d="M20 12h2"></path>
+            </svg>
+        </button>
+        <button id="admin-btn" class="btn secondary" title="Admin: view saved states" aria-label="Admin" style="position:absolute; top:56px; right:12px; z-index:30; width:36px; height:36px; display:flex;align-items:center;justify-content:center;padding:6px;">A</button>
+    </div>
+</div>
+
+<!-- Style menu container (hidden by default) -->
+<div id="style-menu" class="style-menu hidden" aria-hidden="true">
+    <!-- populated by JS -->
+</div>
+
+<div id="map-note">Click on the map to place the model, or click the button again to cancel.</div>
+<div id="map"></div>
+<!-- Model library panel -->
+<div id="library" aria-hidden="true">
+    <h4>Model library</h4>
+    <button id="auto-save-btn" class="btn secondary" style="margin-bottom:8px;width:100%">Auto-save OFF</button>
+    <div id="library-list"></div>
+    <input id="add-model-url" placeholder="Paste GLB url and press Add" />
+    <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="add-model-to-lib" class="btn">Add</button>
+        <button id="close-library" class="btn secondary">Close</button>
+    </div>
+</div>
+<script>
+    mapboxgl.accessToken = "pk.eyJ1IjoicHVycGhhY3RzIiwiYSI6ImNsdzY1bzVvNzFwb3IyamxyOG1vY3oyM2gifQ.2LikTeWKwlWsAcEneBXW0Q";
+    const map = new mapboxgl.Map({
+        container: 'map',
+    // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
+    // Default to Mapbox Light per user request
+    style: 'mapbox://styles/mapbox/light-v10',
+        config: {
+            basemap: {
+                theme: 'monochrome'
+            }
+        },
+    zoom: 18,
+    center: [-79.3875, 43.6426],
+        pitch: 60,
+        antialias: true // create the gl context with MSAA antialiasing, so custom layers are antialiased
+    });
+
+    // Backend endpoint that stores state and returns an 8-character id.
+    // Deploy the server code (README in repo) and set this to your deployed URL, e.g.
+    // const BACKEND_STATE_ENDPOINT = 'https://your-deployment.example.com/api/state';
+        const BACKEND_STATE_ENDPOINT = 'https://locations-seven.vercel.app/api/state';
+
+    // Prepare to allow adding a GLTF model interactively.
+    // Raw URL for the provided GitHub model (encoded for spaces)
+    const defaultModelUrl = 'https://raw.githubusercontent.com/namtonnest/3dmodels/main/food_truck.glb';
+
+    // Detect small/mobile viewports and adapt heavy work accordingly.
+    const isMobile = window.matchMedia && window.matchMedia('(max-width:640px)').matches;
+    // On low-memory/older mobile devices, generating thumbnails and doing
+    // complex WebGL work can cause the page to crash. We'll be defensive:
+    // - Avoid running expensive thumbnail rendering on mobile; use SVG fallback.
+    // - Make the custom three.js layer tolerate renderer creation failures.
+
+    // Mobile safety limits
+    // Removed hard model cap on mobile per user request. Keep lower concurrency on mobile.
+    const LOAD_CONCURRENCY = isMobile ? 1 : 3; // limit concurrent GLTF loads on mobile
+    let loaderQueue = [];
+    let activeLoads = 0;
+
+    function enqueueLoad(loader, url, onLoad, onProgress, onError) {
+        loaderQueue.push({ loader, url, onLoad, onProgress, onError });
+        processQueue();
+    }
+    function processQueue() {
+        if (!loaderQueue.length) return;
+        if (activeLoads >= LOAD_CONCURRENCY) return;
+        const item = loaderQueue.shift();
+        activeLoads++;
+        try {
+            item.loader.load(item.url, (gltf) => {
+                try { item.onLoad(gltf); } catch (e) { console.warn('onLoad handler error', e); }
+                activeLoads--; processQueue();
+            }, item.onProgress, (err) => { try { item.onError(err); } catch (e) {} activeLoads--; processQueue(); });
+        } catch (e) {
+            try { item.onError(e); } catch (ee) {}
+            activeLoads--; processQueue();
+        }
+    }
+
+
+    // UI: reference existing markup buttons
+    const addBtn = document.getElementById('add-model-btn');
+    addBtn.type = 'button';
+    addBtn.setAttribute('aria-pressed', 'false');
+
+    const modelsBtn = document.getElementById('open-models-btn');
+
+    // make the top-left brand act as a quick "reset to empty" action
+    const brandBtn = document.querySelector('.brand');
+    if (brandBtn) {
+        brandBtn.style.cursor = 'pointer';
+        brandBtn.title = 'Reload page without any placed models';
+        brandBtn.addEventListener('click', () => {
+            // remove all placed models from the scene
+            try {
+                placedModels.slice().forEach(p => removeModel(p.id));
+            } catch (e) { /* ignore if not ready */ }
+            // reload cleanly
+            // reload without query string or hash
+            const base = window.location.origin + window.location.pathname;
+            window.location.href = base;
+        });
+    }
+
+    // topbar buttons exist in DOM; just reference them
+    // share button removed; sharing handled via Save/Admin pages if needed
+
+    const note = document.getElementById('map-note');
+    const locateBtn = document.getElementById('locate-btn');
+    const adminBtn = document.getElementById('admin-btn');
+
+    // Library panel elements
+    const libraryPanel = document.getElementById('library');
+    const openLibraryBtn = document.getElementById('open-library-btn');
+    const libraryList = document.getElementById('library-list');
+    const addModelUrlInput = document.getElementById('add-model-url');
+    const addModelToLibBtn = document.getElementById('add-model-to-lib');
+    const closeLibraryBtn = document.getElementById('close-library');
+
+    // model library persistence key
+    const LIB_KEY = 'model_library_v1';
+    // default library items
+    const defaultLibrary = [
+        { id: 'jeep', name: 'Jeep', url: 'https://raw.githubusercontent.com/namtonnest/3dmodels/main/jeep.glb' },
+        { id: 'foodtruck', name: 'Food truck', url: 'https://raw.githubusercontent.com/namtonnest/3dmodels/main/food_truck.glb' }
+    ];
+
+
+    function loadLibrary() {
+        try {
+            const raw = localStorage.getItem(LIB_KEY);
+            if (!raw) return defaultLibrary.slice();
+            return JSON.parse(raw);
+        } catch (e) { return defaultLibrary.slice(); }
+    }
+
+    function saveLibrary(items) {
+        localStorage.setItem(LIB_KEY, JSON.stringify(items));
+    }
+
+    let modelLibrary = loadLibrary();
+
+    // helper to add a model URL into the library if not already present
+    function addModelToLibraryUrl(url, name) {
+        if (!url) return;
+        if (modelLibrary.some(i => i.url === url)) return;
+        const id = 'm_' + Date.now();
+        modelLibrary.unshift({ id, name: name || url.split('/').pop(), url });
+        saveLibrary(modelLibrary);
+    }
+
+    // helper to add a 3D-text entry into the library (type: '3dtext')
+    function addTextModelToLibrary(name) {
+        if (modelLibrary.some(i => i.type === '3dtext' && i.name === name)) return;
+        const id = 'm_' + Date.now();
+        modelLibrary.unshift({ id, name: name || '3D Text', type: '3dtext' });
+        saveLibrary(modelLibrary);
+    }
+
+    // ensure any previously-added Car entry is removed (user requested removal)
+    modelLibrary = modelLibrary.filter(i => i.url !== 'https://raw.githubusercontent.com/namtonnest/LocationLocations/main/car.glb');
+    saveLibrary(modelLibrary);
+
+    // Add traffic cone model requested by user (idempotent)
+    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/3dmodels/main/traffic_cone.glb', 'Traffic cone');
+
+    // Add police car model requested by user (idempotent)
+    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/3dmodels/main/cop_sedan_90_-_low_poly_model.glb', 'Police car');
+
+    // Add truck model requested by user (idempotent) and set a default scale
+    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/truck.glb', 'truck');
+    // Add restrooms model requested by user (idempotent)
+    addModelToLibraryUrl('https://raw.githubusercontent.com/namtonnest/locations/main/restroom_model.glb', 'Restrooms');
+    // Ensure default scales for some models (truck, jeep)
+    (function attachDefaultScales(){
+        try {
+            const truck = modelLibrary.find(i => i.url && i.url.includes('truck.glb'));
+            if (truck) truck.defaultScale = 0.6;
+            const jeep = modelLibrary.find(i => i.id === 'jeep' || (i.url && i.url.includes('jeep.glb')));
+            if (jeep) jeep.defaultScale = 0.5;
+            const police = modelLibrary.find(i => (i.name && i.name.toLowerCase().includes('police')) || (i.url && i.url.includes('cop_sedan')));
+            if (police) police.defaultScale = 0.55;
+            const restrooms = modelLibrary.find(i => i.url && i.url.includes('restroom_model.glb'));
+            if (restrooms) restrooms.defaultScale = 3;
+            saveLibrary(modelLibrary);
+        } catch (e) {}
+    })();
+
+    // Add a 3D Text helper entry so users can add custom 3D text from the library
+    addTextModelToLibrary('3D Text');
+
+    // thumbnail cache key
+    const THUMB_KEY = 'model_thumbs_v1';
+    let thumbCache = {};
+    try { thumbCache = JSON.parse(localStorage.getItem(THUMB_KEY) || '{}'); } catch (e) { thumbCache = {}; }
+
+    // small helper to save thumbnail cache (try/catch to avoid quota errors)
+    function saveThumbCache() {
+        try { localStorage.setItem(THUMB_KEY, JSON.stringify(thumbCache)); } catch (e) { /* ignore quota errors */ }
+    }
+
+    // fallback svg data url
+    function fallbackThumb(name) {
+        const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='240' height='160'><rect width='100%' height='100%' fill='#ffffff'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#ff6a00' font-family='Arial' font-size='18'>${name}</text></svg>`;
+        return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+    }
+
+    // generate thumbnail: load model with GLTFLoader into an offscreen renderer and capture
+    async function generateThumbnail(url, id) {
+    // Attempt to generate thumbnails on mobile too; use smaller canvas to
+    // reduce memory and GPU pressure. If WebGL or loading fails, we'll
+    // gracefully fall back to an SVG image (see try/catch below).
+
+    // already cached
+    if (thumbCache[url]) return thumbCache[url];
+        return new Promise((resolve) => {
+            try {
+                const loader = new THREE.GLTFLoader();
+                // offscreen canvas - smaller on mobile to reduce resource use
+                const canvas = document.createElement('canvas');
+                const canvasWidth = isMobile ? 180 : 240;
+                const canvasHeight = isMobile ? 120 : 160;
+                canvas.width = canvasWidth; canvas.height = canvasHeight;
+                let renderer;
+                try {
+                    // Request an opaque canvas so the rendered thumbnail has a white background
+                    renderer = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true, alpha: false });
+                } catch (err) {
+                    // If renderer creation fails (common on some mobile browsers),
+                    // bail out and return the SVG fallback.
+                    console.warn('Thumbnail renderer creation failed, returning SVG fallback', err);
+                    resolve(fallbackThumb(id || 'Model'));
+                    return;
+                }
+                renderer.setSize(canvas.width, canvas.height);
+                // draw with a white clear color so thumbnails have white background
+                try { if (renderer.setClearColor) renderer.setClearColor(0xffffff, 1); } catch (e) {}
+                // paint 2D canvas white as an additional safety (some browsers composite differently)
+                try { const ctx2d = canvas.getContext('2d'); if (ctx2d) { ctx2d.fillStyle = '#ffffff'; ctx2d.fillRect(0,0,canvas.width,canvas.height); } } catch(e) {}
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(45, canvas.width / canvas.height, 0.1, 1000);
+                const light = new THREE.DirectionalLight(0xffffff, 1);
+                light.position.set(10,10,10); scene.add(light);
+                const ambient = new THREE.AmbientLight(0xffffff, 0.6); scene.add(ambient);
+                loader.load(url, (gltf) => {
+                    const obj = gltf.scene || gltf.scenes[0];
+                    // normalize and position
+                    const box = new THREE.Box3().setFromObject(obj);
+                    const size = box.getSize(new THREE.Vector3());
+                    const center = box.getCenter(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    obj.position.x -= center.x; obj.position.y -= center.y; obj.position.z -= center.z;
+                    scene.add(obj);
+                    camera.position.set(0, maxDim * 0.7, maxDim * 1.8);
+                    camera.lookAt(new THREE.Vector3(0,0,0));
+                    renderer.render(scene, camera);
+                    // Composite onto a white 2D canvas to avoid transparent/black backgrounds
+                    try {
+                        const out = document.createElement('canvas');
+                        out.width = canvas.width; out.height = canvas.height;
+                        const outCtx = out.getContext('2d');
+                        if (outCtx) {
+                            outCtx.fillStyle = '#ffffff';
+                            outCtx.fillRect(0, 0, out.width, out.height);
+                            outCtx.drawImage(canvas, 0, 0);
+                            const dataUrl = out.toDataURL('image/png');
+                            thumbCache[url] = dataUrl;
+                            saveThumbCache();
+                            // cleanup
+                            renderer.dispose();
+                            try { scene.remove(obj); } catch (e) {}
+                            resolve(dataUrl);
+                            return;
+                        }
+                    } catch (err) {
+                        console.warn('Composite canvas failed, falling back to raw canvas', err);
+                    }
+                    // fallback if composite failed
+                    const dataUrl = canvas.toDataURL('image/png');
+                    thumbCache[url] = dataUrl;
+                    saveThumbCache();
+                    renderer.dispose();
+                    try { scene.remove(obj); } catch (e) {}
+                    resolve(dataUrl);
+                }, undefined, (err) => {
+                    resolve(fallbackThumb(id || 'Model'));
+                });
+                // safety timeout: if loader doesn't respond in 6s, return fallback
+                setTimeout(() => { if (!thumbCache[url]) resolve(fallbackThumb(id || 'Model')); }, 6000);
+            } catch (e) { resolve(fallbackThumb(id || 'Model')); }
+        });
+    }
+
+    function renderLibrary() {
+        libraryList.innerHTML = '';
+        modelLibrary.forEach(item => {
+            const row = document.createElement('div');
+            row.className = 'lib-item';
+            const info = document.createElement('div');
+            info.style.flex = '1';
+            // thumbnail
+            const thumbImg = document.createElement('img');
+            thumbImg.className = 'thumb';
+            thumbImg.alt = item.name || 'model';
+            // if cached thumb available, show it; otherwise start generation and use fallback
+            if (thumbCache[item.url]) {
+                thumbImg.src = thumbCache[item.url];
+            } else {
+                thumbImg.src = fallbackThumb(item.name || 'Model');
+                // async generate and update when ready
+                generateThumbnail(item.url, item.name).then(dataUrl => { thumbImg.src = dataUrl; });
+            }
+            const title = document.createElement('div');
+            title.textContent = item.name || 'Model';
+            info.appendChild(title);
+            const actions = document.createElement('div');
+            const selectBtn = document.createElement('button');
+            selectBtn.textContent = 'Use';
+            selectBtn.addEventListener('click', () => {
+                if (item.type === '3dtext') {
+                    // prompt for text and enable text placement mode
+                    const txt = prompt('Enter text to place');
+                    if (!txt) return;
+                    placingText = { text: txt };
+                    placingModel = true; addBtn.setAttribute('aria-pressed', 'true'); addBtn.textContent = 'Cancel';
+                    note.textContent = 'Click on map to place 3D text';
+                    note.style.display = 'block';
+                    libraryPanel.style.display = 'none';
+                    return;
+                }
+                modelUrl = item.url;
+                // if this library item defines a defaultScale, apply it for the next placement
+                modelScaleOverride = item.defaultScale || 1;
+                // open placement mode for convenience
+                placingModel = true; addBtn.setAttribute('aria-pressed', 'true'); addBtn.textContent = 'Cancel';
+                note.style.display = 'block';
+                libraryPanel.style.display = 'none';
+            });
+            const removeBtn = document.createElement('button');
+            removeBtn.textContent = 'Remove';
+            removeBtn.addEventListener('click', () => {
+                modelLibrary = modelLibrary.filter(i => i.id !== item.id);
+                saveLibrary(modelLibrary);
+                renderLibrary();
+            });
+            actions.appendChild(selectBtn);
+            actions.appendChild(removeBtn);
+            row.appendChild(thumbImg);
+            row.appendChild(info);
+            row.appendChild(actions);
+            libraryList.appendChild(row);
+        });
+    }
+
+    openLibraryBtn.addEventListener('click', () => {
+        const showing = libraryPanel.style.display === 'block';
+        libraryPanel.style.display = showing ? 'none' : 'block';
+        if (!showing) renderLibrary();
+    });
+
+    closeLibraryBtn.addEventListener('click', () => { libraryPanel.style.display = 'none'; });
+
+    addModelToLibBtn.addEventListener('click', () => {
+        const url = (addModelUrlInput.value || '').trim();
+        if (!url) return alert('Paste a GLB URL');
+        const id = 'm_' + Date.now();
+        modelLibrary.unshift({ id, name: url.split('/').pop(), url });
+        saveLibrary(modelLibrary);
+        addModelUrlInput.value = '';
+        renderLibrary();
+    });
+
+
+    let placingModel = false;
+    let modelUrl = defaultModelUrl;
+    // drawing state for user-drawn features
+    let drawing = false;
+    let currentDraw = null; // Feature being drawn (LineString)
+    let drawnFeatures = []; // array of GeoJSON Features
+    // multiplier to apply to computed mercator scale when placing a model
+    let modelScaleOverride = 1;
+    // state for placing 3D text: { text: '...' } when awaiting a click
+    let placingText = null;
+
+    addBtn.addEventListener('click', () => {
+        placingModel = !placingModel;
+        addBtn.setAttribute('aria-pressed', String(placingModel));
+        addBtn.textContent = placingModel ? 'Cancel' : 'Add model';
+        note.style.display = placingModel ? 'block' : 'none';
+    });
+
+    // Helper to create and place 3D text into the three.js scene.
+    // Usage: add3DText('Hello', [lng, lat], { size: 2, height: 0.4, color: 0xff6a00 })
+    async function add3DText(text, lngLat, options = {}) {
+        if (!modelLayerRef || !modelLayerRef.scene) {
+            alert('3D layer not ready');
+            return null;
+        }
+        const opt = Object.assign({ size: 1.5, height: 0.3, color: 0xff6a00, fontUrl: 'https://threejs.org/examples/fonts/helvetiker_regular.typeface.json' }, options);
+        return new Promise((resolve, reject) => {
+            try {
+                const loader = new THREE.FontLoader();
+                loader.load(opt.fontUrl, (font) => {
+                    // Create geometry with a unit size and center it. The custom layer
+                    // render loop will apply the mercator-based transform so the mesh
+                    // itself should remain at the origin.
+                    const geom = new THREE.TextGeometry(text, { font, size: 1, height: opt.height, curveSegments: 8 });
+                    geom.computeBoundingBox();
+                    geom.center();
+                    const mat = new THREE.MeshBasicMaterial({ color: opt.color });
+                    const mesh = new THREE.Mesh(geom, mat);
+                    // compute mercator reference and scale multiplier
+                    const mc = mapboxgl.MercatorCoordinate.fromLngLat(lngLat, 0);
+                    const mcScale = mc.meterInMercatorCoordinateUnits();
+                    // create transform that the 3D layer's render() will apply
+                    const id = 'text_' + Date.now();
+                    const transform = {
+                        translateX: mc.x,
+                        translateY: mc.y,
+                        translateZ: mc.z,
+                        rotateX: Math.PI / 2,
+                        rotateY: 0,
+                        rotateZ: 0,
+                        scale: mcScale * (opt.size || 1)
+                    };
+                    // mark this entry as a 3D text model so it can be serialized/restored
+                    const entry = { id, name: text, text: text, type: '3dtext', transform: Object.assign({}, transform), original: Object.assign({}, transform), meterScale: mcScale, object: mesh, url: null, geo: { lng: lngLat[0], lat: lngLat[1], alt: 0 } };
+                    // keep the mesh at origin; the layer render will position it via transform
+                    mesh.position.set(0, 0, 0);
+                    mesh.scale.set(1, 1, 1);
+                    placedModels.push(entry);
+                    modelLayerRef.scene.add(mesh);
+                    renderSidebar();
+                    if (map) map.triggerRepaint();
+                    resolve(entry.id);
+                }, undefined, (err) => { console.warn('Font load failed', err); reject(err); });
+            } catch (e) { reject(e); }
+        });
+    }
+
+    // UX: allow Shift+click on map when placingModel is active to create 3D text via prompt
+    map.on('click', async (e) => {
+        if (!placingModel) return; // handled elsewhere for models
+        if (!e.originalEvent) return; // safety
+        const isShift = e.originalEvent.shiftKey;
+        if (!isShift) return; // normal model placement handled elsewhere
+        const txt = prompt('Enter text for 3D label');
+        if (!txt) return;
+        const coords = [e.lngLat.lng, e.lngLat.lat];
+        try {
+            await add3DText(txt, coords, { size: 1.5, height: 0.2, color: 0xff6a00 });
+            alert('3D text added');
+        } catch (err) {
+            console.warn('Failed to add 3D text', err);
+            alert('Failed to add 3D text');
+        }
+    });
+
+    // helper to toggle overlays so they don't block map clicks during placement
+    function setOverlayBlocking(block) {
+        // block=true => overlays accept pointer events (normal)
+        // block=false => overlays ignore pointer events so map can receive clicks
+        // keep the control buttons clickable (addBtn, modelsBtn)
+        try {
+            sidebar.style.pointerEvents = block ? 'auto' : 'none';
+            controls.style.pointerEvents = block ? 'auto' : 'none';
+            note.style.pointerEvents = block ? 'auto' : 'none';
+        } catch (e) { /* ignore */ }
+        // ensure the Add and Models buttons remain clickable
+        addBtn.style.pointerEvents = 'auto';
+        const mb = document.getElementById('open-models-btn');
+        if (mb) mb.style.pointerEvents = 'auto';
+        // cursor on the map
+        if (map && map.getCanvas()) map.getCanvas().style.cursor = block ? '' : 'crosshair';
+    }
+
+    // wire overlay toggling into the add button behavior
+    (function patchAddBtn() {
+        const orig = addBtn.onclick;
+        // also listen for changes to placingModel
+        addBtn.addEventListener('click', () => {
+            setOverlayBlocking(!placingModel); // when placingModel true, we disable overlays
+        });
+    })();
+
+        // --- control panel for manipulating the model after placement ---
+        const controls = document.createElement('div');
+        controls.id = 'model-controls';
+        controls.innerHTML = `
+                <div style="font-weight:600;margin-bottom:6px;">Model controls</div>
+                <button id="auto-save-btn" class="btn secondary" style="margin-bottom:8px;width:100%">Auto-save OFF</button>
+                <label style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">Rotate (deg):
+                    <button id="rot-dec" type="button" class="btn secondary" style="padding:4px 8px;min-width:36px">◀</button>
+                    <input id="rot" type="number" value="0" step="1" style="width:88px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
+                    <button id="rot-inc" type="button" class="btn secondary" style="padding:4px 8px;min-width:36px">▶</button>
+                    <span style="font-size:12px;color:var(--muted);margin-left:6px">Step:</span>
+                    <input id="rotStep" type="number" value="15" step="1" style="width:64px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
+                </label>
+                <label>Scale: <input id="scale" type="number" step="0.1" value="1"></label>
+                <div style="margin-top:8px;font-size:12px">Nudge (meters): <input id="nudgeStep" type="number" value="1" style="width:60px"> </div>
+                <div style="margin-top:6px">
+                    <button id="nudgeN">N</button>
+                    <button id="nudgeW">W</button>
+                    <button id="nudgeE">E</button>
+                    <button id="nudgeS">S</button>
+                </div>
+                <div style="margin-top:8px">
+                    <button id="resetModel">Reset</button>
+                    <button id="removeModel" style="margin-left:8px;background:#fee2e2;border:1px solid #fecaca;color:#7f1d1d;border-radius:6px;padding:6px 8px;">Remove</button>
+                </div>
+                <div style="margin-top:8px">
+                    <label style="font-size:13px">Altitude (m): <input id="altitude" type="number" value="0" style="width:80px;margin-left:8px"></label>
+                    <label style="font-size:13px;margin-left:8px">Step: <input id="altStep" type="number" value="1" style="width:60px;margin-left:6px"></label>
+                    <button id="altUp" style="margin-left:8px">Up</button>
+                    <button id="altDown" style="margin-left:4px">Down</button>
+                </div>
+                <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+                    <button id="animateBtn" type="button" class="btn secondary" style="padding:6px 10px">Toggle animate</button>
+                    <label style="font-size:13px;display:flex;align-items:center;gap:6px">Speed:
+                        <input id="spinSpeed" type="number" value="0.2" step="0.005" style="width:86px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
+                    </label>
+                </div>
+        `;
+        document.body.appendChild(controls);
+        // Move the style menu button into the Controls panel and relabel it 'Map Styles'
+        try {
+            const styleBtn = document.getElementById('style-hamburger');
+            if (styleBtn) {
+                styleBtn.textContent = 'Map Styles';
+                // remove absolute positioning used in topbar so it flows inside controls
+                styleBtn.style.position = 'static';
+                styleBtn.style.right = '';
+                styleBtn.style.top = '';
+                styleBtn.style.marginBottom = '8px';
+                // insert at top of the controls panel
+                const first = controls.firstChild;
+                controls.insertBefore(styleBtn, first);
+            }
+        } catch (e) { /* ignore if DOM not ready */ }
+
+    // add a toggle button to show/hide controls on small screens
+    const controlsToggle = document.createElement('button');
+    controlsToggle.id = 'controls-toggle-btn';
+    controlsToggle.className = 'btn secondary';
+    controlsToggle.textContent = 'Controls';
+    controlsToggle.style.display = 'none';
+    // place the toggle inside the left topbar column so it sits under the brand and buttons
+    const leftColumn = document.querySelector('.controls-left > div') || document.querySelector('.controls-left') || document.body;
+    // remove absolute positioning so it participates in the layout
+    controlsToggle.style.position = 'static';
+    controlsToggle.style.right = '';
+    controlsToggle.style.top = '';
+    controlsToggle.style.marginTop = '6px';
+    leftColumn.appendChild(controlsToggle);
+
+    // style menu (hamburger) population and wiring
+    try {
+        const styles = [
+            { id: 'streets', url: 'mapbox://styles/mapbox/streets-v11', label: 'Streets' },
+            { id: 'light', url: 'mapbox://styles/mapbox/light-v10', label: 'Light' },
+            { id: 'outdoors', url: 'mapbox://styles/mapbox/outdoors-v11', label: 'Outdoors' },
+            { id: 'satellite', url: 'mapbox://styles/mapbox/satellite-streets-v11', label: 'Satellite' }
+        ];
+        const menu = document.getElementById('style-menu');
+        styles.forEach(s => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = s.label;
+            btn.dataset.styleUrl = s.url;
+            btn.addEventListener('click', () => {
+                try { map.setStyle(s.url); } catch (e) { console.warn('Failed to set style', e); }
+                // hide menu after selection
+                menu.classList.add('hidden');
+            });
+            menu.appendChild(btn);
+        });
+
+        const ham = document.getElementById('style-hamburger');
+        if (ham) {
+            ham.addEventListener('click', () => {
+                const menu = document.getElementById('style-menu');
+                if (!menu) return;
+                const isHidden = menu.classList.contains('hidden');
+                if (isHidden) menu.classList.remove('hidden'); else menu.classList.add('hidden');
+            });
+        }
+    } catch (e) { console.warn('Style menu init failed', e); }
+
+        // wire toggle behavior
+        controlsToggle.addEventListener('click', () => {
+            const showing = controls.style.display === 'block';
+            controls.style.display = showing ? 'none' : 'block';
+            controlsToggle.textContent = showing ? 'Controls' : 'Close';
+            // when controls are open, make sure overlays accept pointer events
+            setOverlayBlocking(!showing);
+        });
+
+        // show toggle if on mobile-sized viewport
+        function refreshControlsToggleVisibility() {
+            const isMobile = window.matchMedia && window.matchMedia('(max-width:640px)').matches;
+            controlsToggle.style.display = isMobile ? 'block' : 'none';
+            // do not auto-open the controls panel on load; user can open it explicitly
+            if (!isMobile) controls.style.display = 'none';
+        }
+        window.addEventListener('resize', refreshControlsToggleVisibility);
+        refreshControlsToggleVisibility();
+
+        // Desktop controls button (visible only on non-mobile) - wire to same toggle logic
+        const desktopControlsBtn = document.getElementById('desktop-controls-btn');
+        function refreshDesktopControlsVisibility() {
+            const isMobile = window.matchMedia && window.matchMedia('(max-width:640px)').matches;
+            if (desktopControlsBtn) desktopControlsBtn.style.display = isMobile ? 'none' : 'block';
+        }
+        if (desktopControlsBtn) {
+            desktopControlsBtn.addEventListener('click', () => {
+                const showing = controls.style.display === 'block';
+                controls.style.display = showing ? 'none' : 'block';
+                // when controls are open, ensure overlays accept pointer events
+                setOverlayBlocking(!showing);
+                desktopControlsBtn.textContent = showing ? 'Controls' : 'Close';
+            });
+        }
+        window.addEventListener('resize', refreshDesktopControlsVisibility);
+        refreshDesktopControlsVisibility();
+
+    // --- Simple drawing tools (polyline) ---
+    const DRAW_KEY = 'map_drawn_v1';
+    function saveDraws() {
+    // Intentionally no-op: drawings are not persisted locally by default.
+    // Drawings will be included in the shared server state when the user clicks Share.
+    return;
+    }
+    function loadDraws() {
+    // Local loading disabled: start with no drawings. Shared drawings will be restored
+    // via restoreSavedState(parsed) when loading a shared state from the server.
+    return [];
+    }
+    // compact draw launcher + panel (saves space)
+    const drawLauncher = document.createElement('button');
+    drawLauncher.id = 'draw-launcher';
+    drawLauncher.className = 'btn';
+    drawLauncher.textContent = 'Draw';
+    // place the launcher inside the same controls column as the Controls toggle
+    // so it visually stacks under the Controls button and shares the same CSS
+    try {
+        // leftColumn is defined earlier where the controls toggle is appended
+        if (typeof leftColumn !== 'undefined' && leftColumn) {
+            drawLauncher.style.position = 'static';
+            drawLauncher.style.marginTop = '6px';
+            leftColumn.appendChild(drawLauncher);
+        } else {
+            // fallback: append to body
+            drawLauncher.style.position = 'absolute';
+            drawLauncher.style.left = '12px';
+            drawLauncher.style.top = '120px';
+            drawLauncher.style.zIndex = '50';
+            document.body.appendChild(drawLauncher);
+        }
+    } catch (e) { document.body.appendChild(drawLauncher); }
+
+    // hidden panel with draw controls and color palette
+    const drawPanel = document.createElement('div');
+    drawPanel.id = 'draw-panel';
+    // panel will be positioned dynamically beneath the controls column when opened
+    drawPanel.style.position = 'absolute';
+    drawPanel.style.zIndex = '60';
+    drawPanel.style.width = '220px';
+    drawPanel.style.padding = '10px';
+    drawPanel.style.background = '#fff';
+    drawPanel.style.border = '1px solid rgba(0,0,0,0.08)';
+    drawPanel.style.borderRadius = '8px';
+    drawPanel.style.boxShadow = '0 6px 18px rgba(14,20,36,0.12)';
+    drawPanel.style.display = 'none';
+    drawPanel.innerHTML = `
+        <div style="font-weight:600;margin-bottom:8px">Draw tools</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button id="draw-toggle" class="btn">Draw</button>
+            <button id="draw-finish" class="btn secondary">Finish</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button id="draw-clear" class="btn secondary">Clear</button>
+            <button id="draw-save" class="btn">Save</button>
+            <button id="draw-add-image" class="btn">Add image</button>
+        </div>
+        <button id="draw-refresh" class="btn" style="background:#f59e0b;color:white;border-radius:6px;padding:6px 12px;font-size:13px;margin-bottom:6px;width:100%">Refresh Draw Models</button>
+        <div style="margin-top:6px;font-size:13px;font-weight:600">Color</div>
+        <div id="draw-colors" style="display:flex;gap:8px;margin-top:6px"></div>
+        <div style="margin-top:10px;font-size:13px;font-weight:600">Label</div>
+        <div style="display:flex;gap:8px;margin-top:6px;align-items:center">
+            <input id="draw-label-input" placeholder="Label text" style="flex:1;padding:6px;border-radius:6px;border:1px solid rgba(0,0,0,0.08)" />
+            <button id="draw-place-label" class="btn">Place</button>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+            <label style="font-size:13px;min-width:44px">Size</label>
+            <input id="draw-text-size" type="number" min="8" max="48" value="12" style="width:70px;padding:6px;border-radius:6px;border:1px solid rgba(0,0,0,0.08)" />
+            <input id="draw-text-size-range" type="range" min="8" max="48" value="12" style="flex:1" />
+        </div>
+    `;
+    document.body.appendChild(drawPanel);
+
+    const drawToggle = drawPanel.querySelector('#draw-toggle');
+    const drawFinish = drawPanel.querySelector('#draw-finish');
+    const drawClear = drawPanel.querySelector('#draw-clear');
+    const drawSave = drawPanel.querySelector('#draw-save');
+    const drawColors = drawPanel.querySelector('#draw-colors');
+    const drawLabelInput = drawPanel.querySelector('#draw-label-input');
+    const drawPlaceLabelBtn = drawPanel.querySelector('#draw-place-label');
+    const drawTextSizeInput = drawPanel.querySelector('#draw-text-size');
+    const drawTextSizeRange = drawPanel.querySelector('#draw-text-size-range');
+    const drawRefreshBtn = drawPanel.querySelector('#draw-refresh');
+    if (drawRefreshBtn) drawRefreshBtn.addEventListener('click', () => {
+        try {
+            ensureDrawSourceAndLayers();
+            if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
+            refreshDrawSource();
+            if (map && map.triggerRepaint) map.triggerRepaint();
+            nudgeDrawLayers();
+        } catch (e) { alert('Failed to refresh draw models: ' + e); }
+    });
+    let selectedTextSize = Number((drawTextSizeInput && drawTextSizeInput.value) || 12);
+
+    // available colors
+    const PALETTE = ['#ff6a00','#1f8ef1','#16a34a','#ef4444','#8b5cf6','#f59e0b'];
+    let selectedDrawColor = PALETTE[0];
+    // render palette
+    PALETTE.forEach(c => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.style.width = '28px'; b.style.height = '28px'; b.style.borderRadius = '6px'; b.style.border = '2px solid transparent';
+        b.style.background = c;
+        b.title = c;
+        if (c === selectedDrawColor) b.style.borderColor = '#111827';
+        b.addEventListener('click', () => {
+            selectedDrawColor = c;
+            // highlight
+            drawColors.querySelectorAll('button').forEach(x => x.style.borderColor = 'transparent');
+            b.style.borderColor = '#111827';
+        });
+        drawColors.appendChild(b);
+    });
+
+    function ensureDrawSourceAndLayers() {
+        try {
+            // ensure style is loaded first; if not, wait for the next style.load event
+            try {
+                if (typeof map.isStyleLoaded === 'function' && !map.isStyleLoaded()) {
+                    map.once('style.load', ensureDrawSourceAndLayers);
+                    return;
+                }
+            } catch (e) { /* ignore */ }
+
+            const hasSource = map.getSource && map.getSource('draw-source');
+            if (!hasSource) {
+                map.addSource('draw-source', { type: 'geojson', data: { type: 'FeatureCollection', features: drawnFeatures } });
+            } else {
+                map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
+            }
+            if (!map.getLayer('draw-lines')) {
+                // only render LineString features with the line layer
+                map.addLayer({ id: 'draw-lines', type: 'line', source: 'draw-source', paint: { 'line-color': ['coalesce', ['get', 'color'], '#ff6a00'], 'line-width': 4 }, filter: ['==', '$type', 'LineString'] });
+            }
+            if (!map.getLayer('draw-points')) {
+                map.addLayer({ id: 'draw-points', type: 'circle', source: 'draw-source', paint: { 'circle-radius': 6, 'circle-color': ['coalesce', ['get', 'color'], '#ff6a00'] }, filter: ['==', '$type', 'Point'] });
+            }
+            // polygon fills (interiors)
+            if (!map.getLayer('draw-fills')) {
+                map.addLayer({ id: 'draw-fills', type: 'fill', source: 'draw-source', paint: { 'fill-color': ['coalesce', ['get', 'color'], '#ff6a00'], 'fill-opacity': 0.18 }, filter: ['==', '$type', 'Polygon'] });
+            }
+            // polygon outlines
+            if (!map.getLayer('draw-polygon-outlines')) {
+                map.addLayer({ id: 'draw-polygon-outlines', type: 'line', source: 'draw-source', paint: { 'line-color': ['coalesce', ['get', 'color'], '#ff6a00'], 'line-width': 2 }, filter: ['==', '$type', 'Polygon'] });
+            }
+            if (!map.getLayer('draw-labels')) {
+                // symbol layer to render point labels (use properties.text and properties.color)
+                map.addLayer({
+                    id: 'draw-labels',
+                    type: 'symbol',
+                    source: 'draw-source',
+                    layout: {
+                        'text-field': ['coalesce', ['get', 'text'], ''],
+                        // prefer per-feature size (properties.size), fallback to the currently selectedTextSize
+                        'text-size': ['coalesce', ['get', 'size'], Number(selectedTextSize) || 12],
+                        'text-offset': [0, -1.2],
+                        'text-anchor': 'bottom'
+                    },
+                    paint: {
+                        // use a larger white halo so the text appears to have a background box
+                        'text-color': ['coalesce', ['get', 'color'], '#ff6a00'],
+                        'text-halo-color': '#ffffff',
+                        'text-halo-width': 6,
+                        'text-halo-blur': 0.75
+                    },
+                    filter: ['all', ['==', '$type', 'Point'], ['has', 'text']]
+                });
+            }
+        } catch (e) { console.warn('ensureDrawSourceAndLayers error', e); }
+    }
+
+    function refreshDrawSource() {
+        try {
+            ensureDrawSourceAndLayers();
+            if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
+        } catch (e) {}
+    }
+
+    // Force a quick visibility toggle on draw layers to nudge Mapbox to re-render them.
+    function nudgeDrawLayers() {
+        try {
+            const ids = ['draw-labels','draw-fills','draw-lines','draw-polygon-outlines','draw-points'];
+            ids.forEach(id => {
+                try {
+                    if (map && map.getLayer && map.getLayer(id)) {
+                        try { map.setLayoutProperty(id, 'visibility', 'none'); } catch (e) {}
+                        setTimeout(() => { try { map.setLayoutProperty(id, 'visibility', 'visible'); } catch (e) {} }, 80);
+                    }
+                } catch (e) {}
+            });
+        } catch (e) { }
+    }
+
+    // wire toolbar buttons
+    // launcher toggles the panel
+    drawLauncher.addEventListener('click', () => {
+        // compute left/top so the panel appears beneath the controls column / draw button
+        try {
+            const parent = (typeof leftColumn !== 'undefined' && leftColumn) ? leftColumn : drawLauncher.parentElement || document.body;
+            const rect = parent.getBoundingClientRect();
+            // position the panel left aligned with the parent and just below it
+            drawPanel.style.left = Math.max(8, rect.left + window.scrollX) + 'px';
+            drawPanel.style.top = Math.max(8, rect.bottom + window.scrollY + 6) + 'px';
+            // ensure panel width fits within viewport
+            const maxW = Math.min(320, window.innerWidth - 24);
+            drawPanel.style.width = Math.min(220, maxW) + 'px';
+        } catch (e) {}
+        const showing = drawPanel.style.display === 'block';
+        drawPanel.style.display = showing ? 'none' : 'block';
+    });
+
+    // toggle between drawing mode and polygon mode by holding Alt (or use click to toggle polygon mode)
+    let polygonMode = false; // false = LineString, true = Polygon
+    drawToggle.addEventListener('click', (ev) => {
+        // Shift+click toggles polygon mode
+        if (ev && ev.shiftKey) {
+            polygonMode = !polygonMode;
+            drawToggle.textContent = polygonMode ? 'Polygon' : 'Draw';
+            return;
+        }
+        // short click toggles drawing; Shift+click toggles polygon mode
+        drawing = !drawing;
+        drawToggle.textContent = drawing ? (polygonMode ? 'Drawing polygon...' : 'Drawing...') : (polygonMode ? 'Polygon' : 'Draw');
+        if (drawing) {
+            currentDraw = { type: 'Feature', geometry: { type: polygonMode ? 'Polygon' : 'LineString', coordinates: polygonMode ? [[]] : [] }, properties: { color: selectedDrawColor } };
+            // disable map interactions while drawing so clicks place points
+            try { if (map.dragPan) map.dragPan.disable(); } catch (e) {}
+            try { if (map.scrollZoom) map.scrollZoom.disable(); } catch (e) {}
+            try { if (map.doubleClickZoom) map.doubleClickZoom.disable(); } catch (e) {}
+            try { if (map.touchZoomRotate) map.touchZoomRotate.disable(); } catch (e) {}
+            try { if (map.boxZoom) map.boxZoom.disable(); } catch (e) {}
+            try { const c = map.getCanvas && map.getCanvas(); if (c) c.style.cursor = 'crosshair'; } catch (e) {}
+    } else {
+            currentDraw = null;
+            // re-enable interactions
+            try { if (map.dragPan) map.dragPan.enable(); } catch (e) {}
+            try { if (map.scrollZoom) map.scrollZoom.enable(); } catch (e) {}
+            try { if (map.doubleClickZoom) map.doubleClickZoom.enable(); } catch (e) {}
+            try { if (map.touchZoomRotate) map.touchZoomRotate.enable(); } catch (e) {}
+            try { if (map.boxZoom) map.boxZoom.enable(); } catch (e) {}
+            try { const c = map.getCanvas && map.getCanvas(); if (c) c.style.cursor = ''; } catch (e) {}
+        }
+    ensureDrawSourceAndLayers();
+    });
+    // labeling state: when true, the next map click will place a point feature with properties.text
+    let placingLabel = false;
+    drawPlaceLabelBtn.addEventListener('click', () => {
+        const txt = (drawLabelInput && drawLabelInput.value || '').trim();
+        if (!txt) { alert('Enter label text first'); return; }
+        placingLabel = !placingLabel;
+        drawPlaceLabelBtn.textContent = placingLabel ? 'Cancel' : 'Place';
+        // when entering label mode, ensure overlays are not blocking the map
+        setOverlayBlocking(!placingLabel);
+    });
+
+    // text size controls: sync number and range inputs and apply to existing layer if present
+    function applyTextSizeToLayer(size) {
+        try {
+            if (map && map.getLayer && map.getLayer('draw-labels')) {
+                // use an expression so per-feature `properties.size` is honored, falling back to the provided size
+                const expr = ['coalesce', ['get', 'size'], Number(size) || 12];
+                map.setLayoutProperty('draw-labels', 'text-size', expr);
+            }
+        } catch (e) { /* ignore */ }
+    }
+    if (drawTextSizeInput) drawTextSizeInput.addEventListener('input', (e) => {
+        selectedTextSize = Number(e.target.value) || 12;
+        if (drawTextSizeRange) drawTextSizeRange.value = selectedTextSize;
+        applyTextSizeToLayer(selectedTextSize);
+    });
+    if (drawTextSizeRange) drawTextSizeRange.addEventListener('input', (e) => {
+        selectedTextSize = Number(e.target.value) || 12;
+        if (drawTextSizeInput) drawTextSizeInput.value = selectedTextSize;
+        applyTextSizeToLayer(selectedTextSize);
+    });
+    drawFinish.addEventListener('click', () => {
+        if (!currentDraw || !currentDraw.geometry) return;
+        // for Polygon mode, ensure ring is closed and coordinates exist
+        if (currentDraw.geometry.type === 'Polygon') {
+            const rings = currentDraw.geometry.coordinates;
+            if (!rings || !rings.length || !rings[0].length) return;
+            const ring = rings[0];
+            // close the ring
+            if (ring.length >= 3) {
+                const first = ring[0];
+                const last = ring[ring.length - 1];
+                if (first[0] !== last[0] || first[1] !== last[1]) ring.push(first.slice());
+            } else {
+                return; // not enough points for polygon
+            }
+        } else {
+            if (!currentDraw.geometry.coordinates || !currentDraw.geometry.coordinates.length) return;
+        }
+        // ensure color property on finished feature
+        currentDraw.properties = currentDraw.properties || {};
+        currentDraw.properties.color = currentDraw.properties.color || selectedDrawColor;
+        drawnFeatures.push(currentDraw);
+        currentDraw = null;
+        drawing = false;
+        drawToggle.textContent = 'Draw';
+        // re-enable interactions
+        try { if (map.dragPan) map.dragPan.enable(); } catch (e) {}
+        try { if (map.scrollZoom) map.scrollZoom.enable(); } catch (e) {}
+        try { if (map.doubleClickZoom) map.doubleClickZoom.enable(); } catch (e) {}
+        try { if (map.touchZoomRotate) map.touchZoomRotate.enable(); } catch (e) {}
+        try { if (map.boxZoom) map.boxZoom.enable(); } catch (e) {}
+        try { const c = map.getCanvas && map.getCanvas(); if (c) c.style.cursor = ''; } catch (e) {}
+        refreshDrawSource();
+        saveDraws();
+    });
+    drawClear.addEventListener('click', () => {
+        drawnFeatures = [];
+        currentDraw = null;
+        drawing = false;
+        drawToggle.textContent = 'Draw';
+        // re-enable interactions
+        try { if (map.dragPan) map.dragPan.enable(); } catch (e) {}
+        try { if (map.scrollZoom) map.scrollZoom.enable(); } catch (e) {}
+        try { if (map.doubleClickZoom) map.doubleClickZoom.enable(); } catch (e) {}
+        try { if (map.touchZoomRotate) map.touchZoomRotate.enable(); } catch (e) {}
+        try { if (map.boxZoom) map.boxZoom.enable(); } catch (e) {}
+        try { const c = map.getCanvas && map.getCanvas(); if (c) c.style.cursor = ''; } catch (e) {}
+        refreshDrawSource();
+        saveDraws();
+    });
+    drawSave.addEventListener('click', () => {
+        saveDraws();
+        alert('Drawn features saved locally');
+    });
+
+    // restore saved draws on init
+    drawnFeatures = loadDraws();
+    // ensure layers present now and after style changes
+    ensureDrawSourceAndLayers();
+    map.on('style.load', () => { try { ensureDrawSourceAndLayers(); } catch (e) {} });
+
+    // Locate me button: use Geolocation API to add a Point feature and center map
+    if (locateBtn) locateBtn.addEventListener('click', () => {
+        if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
+        locateBtn.disabled = true;
+        navigator.geolocation.getCurrentPosition((pos) => {
+            const lng = pos.coords.longitude;
+            const lat = pos.coords.latitude;
+            // add as a Point feature to drawnFeatures
+            const feat = { type: 'Feature', geometry: { type: 'Point', coordinates: [lng, lat] }, properties: { color: '#ff6a00', text: 'You are here' } };
+            drawnFeatures.push(feat);
+            try { ensureDrawSourceAndLayers(); } catch (e) {}
+            try { if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures }); } catch (e) {}
+            try { refreshDrawSource(); } catch (e) {}
+            try { map.flyTo({ center: [lng, lat], zoom: 16 }); } catch (e) { map.setCenter([lng, lat]); }
+            try { nudgeDrawLayers(); } catch (e) {}
+            locateBtn.disabled = false;
+            saveDraws();
+        }, (err) => { alert('Failed to get location: ' + (err && err.message)); locateBtn.disabled = false; }, { enableHighAccuracy: true, timeout: 10000 });
+    });
+
+    // open admin page in new tab
+    if (adminBtn) {
+        adminBtn.addEventListener('click', () => {
+            // Always open admin.html in the same directory as index.html
+            const base = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
+            window.open(base + 'admin.html', '_blank');
+        });
+    }
+    // control elements
+    const rot = document.getElementById('rot');
+    const rotInc = document.getElementById('rot-inc');
+    const rotDec = document.getElementById('rot-dec');
+    const rotStepInput = document.getElementById('rotStep');
+    const scaleInput = document.getElementById('scale');
+    const nudgeStep = document.getElementById('nudgeStep');
+    const nudgeN = document.getElementById('nudgeN');
+    const nudgeS = document.getElementById('nudgeS');
+    const nudgeE = document.getElementById('nudgeE');
+    const nudgeW = document.getElementById('nudgeW');
+    const resetModelBtn = document.getElementById('resetModel');
+    const removeModelBtn = document.getElementById('removeModel');
+    const altitudeInput = document.getElementById('altitude');
+    const altStepInput = document.getElementById('altStep');
+    const altUpBtn = document.getElementById('altUp');
+    const altDownBtn = document.getElementById('altDown');
+
+    // disabled until a model is placed
+    function setControlsDisabled(disabled) {
+        [rot, rotInc, rotDec, rotStepInput, scaleInput, nudgeStep, nudgeN, nudgeS, nudgeE, nudgeW, resetModelBtn, removeModelBtn, altitudeInput, altStepInput, altUpBtn, altDownBtn].forEach(el => { if (el) el.disabled = disabled; });
+    }
+    setControlsDisabled(true);
+
+    // helpers
+    const degToRad = (d) => (d * Math.PI) / 180;
+
+    function applyTransformsFromInputs() {
+        if (!selectedModelId) return;
+        const entry = placedModels.find(p => p.id === selectedModelId);
+        if (!entry) return;
+        // Only allow yaw (Y) rotation from the UI. Keep X/Z rotations at their stored values.
+        entry.transform.rotateY = degToRad(Number(rot.value || 0));
+        // scaleInput is a multiplier on the stored meterScale
+        if (entry.meterScale) {
+            entry.transform.scale = entry.meterScale * Number(scaleInput.value || 1);
+        }
+    // update geographic coords shown in the sidebar
+    updateEntryGeo(entry);
+    renderSidebar();
+    if (map) map.triggerRepaint();
+    }
+    // debounce helper so rapid input changes (mobile) don't trigger excessive map repaints
+    function debounce(fn, wait) {
+        let t = null;
+        return function (...args) {
+            if (t) clearTimeout(t);
+            t = setTimeout(() => { t = null; fn.apply(this, args); }, wait);
+        };
+    }
+
+    const debouncedApply = debounce(applyTransformsFromInputs, 120);
+    if (rot) rot.addEventListener('input', debouncedApply);
+
+    // step buttons to change yaw by rotStep degrees for easier mobile use
+    if (rotInc) rotInc.addEventListener('click', () => {
+        const step = Number(rotStepInput && rotStepInput.value) || 15;
+        rot.value = Number(rot.value || 0) + step;
+        applyTransformsFromInputs();
+    });
+    if (rotDec) rotDec.addEventListener('click', () => {
+        const step = Number(rotStepInput && rotStepInput.value) || 15;
+        rot.value = Number(rot.value || 0) - step;
+        applyTransformsFromInputs();
+    });
+    scaleInput.addEventListener('input', applyTransformsFromInputs);
+
+    // animate button wiring (toggle animation state on selected model)
+    const animateBtn = document.getElementById('animateBtn');
+    if (animateBtn) {
+        animateBtn.addEventListener('click', () => {
+            if (!selectedModelId) return alert('Select a model first');
+            const entry = placedModels.find(p => p.id === selectedModelId);
+            if (!entry) return;
+            entry.animated = !entry.animated;
+            renderSidebar();
+            if (map) map.triggerRepaint();
+        });
+    }
+
+    // spin speed input wiring
+    const spinSpeedInput = document.getElementById('spinSpeed');
+    if (spinSpeedInput) {
+        spinSpeedInput.addEventListener('change', () => {
+            if (!selectedModelId) return alert('Select a model first');
+            const entry = placedModels.find(p => p.id === selectedModelId);
+            if (!entry) return;
+            const v = Number(spinSpeedInput.value) || 0.2;
+            entry.spinSpeed = v;
+            renderSidebar();
+            if (map) map.triggerRepaint();
+        });
+    }
+
+    function nudge(direction) {
+        if (!selectedModelId) return;
+        const entry = placedModels.find(p => p.id === selectedModelId);
+        if (!entry || !entry.meterScale) return;
+        const stepMeters = Number(nudgeStep.value) || 1;
+        const delta = stepMeters * entry.meterScale; // convert meters to mercator units
+        switch (direction) {
+            case 'N':
+                entry.transform.translateY += delta; break;
+            case 'S':
+                entry.transform.translateY -= delta; break;
+            case 'E':
+                entry.transform.translateX += delta; break;
+            case 'W':
+                entry.transform.translateX -= delta; break;
+        }
+    // update geographic coords shown in the sidebar
+    updateEntryGeo(entry);
+    renderSidebar();
+    if (map) map.triggerRepaint();
+    }
+
+    nudgeN.addEventListener('click', () => nudge('N'));
+    nudgeS.addEventListener('click', () => nudge('S'));
+    nudgeE.addEventListener('click', () => nudge('E'));
+    nudgeW.addEventListener('click', () => nudge('W'));
+
+    resetModelBtn.addEventListener('click', () => {
+        if (!selectedModelId) return;
+        const entry = placedModels.find(p => p.id === selectedModelId);
+        if (!entry || !entry.original) return;
+        // restore original transform
+        entry.transform.translateX = entry.original.translateX;
+        entry.transform.translateY = entry.original.translateY;
+        entry.transform.translateZ = entry.original.translateZ;
+    // preserve original X/Z rotations, but restore yaw (Y) from original
+    entry.transform.rotateY = entry.original.rotateY;
+        if (entry.meterScale) entry.transform.scale = entry.meterScale;
+        // update UI
+    if (rot) rot.value = Math.round((entry.transform.rotateY * 180 / Math.PI) * 100) / 100;
+        scaleInput.value = 1;
+        // update coords/rotation shown in sidebar
+        updateEntryGeo(entry);
+        renderSidebar();
+        if (map) map.triggerRepaint();
+    });
+
+    // remove selected model
+    if (removeModelBtn) {
+        removeModelBtn.addEventListener('click', () => {
+            if (!selectedModelId) return;
+            removeModel(selectedModelId);
+        });
+    }
+
+    // altitude helpers
+    function changeAltitudeByMeters(deltaMeters) {
+        if (!selectedModelId) return;
+        const entry = placedModels.find(p => p.id === selectedModelId);
+        if (!entry) return;
+        // need meter->mercator conversion using entry.meterScale (mercator units per meter)
+        const scale = entry.meterScale || 1;
+        const deltaMerc = deltaMeters * scale;
+        entry.transform.translateZ = (entry.transform.translateZ || 0) + deltaMerc;
+        // update geo.alt (store altitude in meters)
+        entry.geo = entry.geo || { lng: 0, lat: 0, alt: 0 };
+        entry.geo.alt = (entry.geo.alt || 0) + deltaMeters;
+        // reflect in the altitude input
+        if (altitudeInput) altitudeInput.value = Math.round(entry.geo.alt * 100) / 100;
+        renderSidebar();
+        if (map) map.triggerRepaint();
+    }
+
+    if (altUpBtn) altUpBtn.addEventListener('click', () => {
+        const step = Number(altStepInput && altStepInput.value) || 1;
+        changeAltitudeByMeters(step);
+    });
+    if (altDownBtn) altDownBtn.addEventListener('click', () => {
+        const step = Number(altStepInput && altStepInput.value) || 1;
+        changeAltitudeByMeters(-step);
+    });
+
+    if (altitudeInput) {
+        altitudeInput.addEventListener('change', () => {
+            if (!selectedModelId) return;
+            const entry = placedModels.find(p => p.id === selectedModelId);
+            if (!entry) return;
+            const newAlt = Number(altitudeInput.value) || 0;
+            const currentAlt = (entry.geo && entry.geo.alt) ? entry.geo.alt : 0;
+            const delta = newAlt - currentAlt;
+            changeAltitudeByMeters(delta);
+        });
+    }
+
+    // --- Serialize placed models ---
+    function serializePlacedModels() {
+        return placedModels.map(p => {
+            // For 3D text entries, serialize the text and type instead of url
+            if (p.type === '3dtext') {
+                return {
+                    id: p.id,
+                    type: '3dtext',
+                    text: p.text || p.name,
+                    name: p.name,
+                    transform: Object.assign({}, p.transform),
+                    original: Object.assign({}, p.original),
+                    meterScale: p.meterScale,
+                    geo: p.geo ? { lng: p.geo.lng, lat: p.geo.lat, alt: p.geo.alt } : null,
+                    animated: !!p.animated,
+                    spinSpeed: (p.spinSpeed || 0.2),
+                    originalGeoLat: p.originalGeoLat,
+                    originalGeoLng: p.originalGeoLng
+                };
+            }
+            return {
+                id: p.id,
+                url: p.url || defaultModelUrl,
+                name: p.name,
+                transform: Object.assign({}, p.transform),
+                original: Object.assign({}, p.original),
+                meterScale: p.meterScale,
+                geo: p.geo ? { lng: p.geo.lng, lat: p.geo.lat, alt: p.geo.alt } : null,
+                animated: !!p.animated,
+                spinSpeed: (p.spinSpeed || 0.2),
+                originalGeoLat: p.originalGeoLat,
+                originalGeoLng: p.originalGeoLng
+            };
+        });
+    }
+    // helper to restore parsed state object (used by URL restore)
+    function restoreSavedState(parsed) {
+        try {
+            if (parsed.mapCenter) map.setCenter(parsed.mapCenter);
+            if (parsed.zoom) map.setZoom(parsed.zoom);
+            if (parsed.pitch) map.setPitch(parsed.pitch);
+            if (parsed.bearing) map.setBearing(parsed.bearing);
+            // clear existing models
+            placedModels.slice().forEach(p => removeModel(p.id));
+            // LOG: print the models array being restored
+            console.log('[restoreSavedState] models:', parsed.models);
+            // restore saved models
+            (parsed.models || []).forEach((m, idx) => {
+                const item = Object.assign({}, m);
+                console.log(`[restoreSavedState] Restoring model #${idx}:`, item);
+                // If the custom layer is ready, restore immediately; otherwise queue it
+                if (item.type === '3dtext') {
+                    if (modelLayerRef && modelLayerRef.load3DText) {
+                        try {
+                            const transform = Object.assign({}, item.transform);
+                            if (item.animated) transform.animated = true;
+                            const geo = item.geo ? [item.geo.lng, item.geo.lat, item.geo.alt || 0] : null;
+                            console.log('[restoreSavedState] Loading 3dtext:', item.text, transform, geo, item.id, item.name);
+                            modelLayerRef.load3DText(item.text || item.name || 'Text', transform, geo, item.id, item.name);
+                        } catch (e) { console.warn('Failed to restore 3dtext immediately', e); }
+                    } else {
+                        console.log('[restoreSavedState] Queueing 3dtext for later:', item);
+                        _restoreQueue.push(item);
+                    }
+                    return;
+                }
+                // regular model entry
+                if (modelLayerRef && modelLayerRef.loadModel) {
+                    try {
+                        const url = (item.url && item.url.length) ? item.url : defaultModelUrl;
+                        const transform = Object.assign({}, item.transform);
+                        if (item.animated) transform.animated = true;
+                        const geo = item.geo ? [item.geo.lng, item.geo.lat, item.geo.alt || 0] : null;
+                        console.log('[restoreSavedState] Loading model:', url, transform, geo, item.id, item.name);
+                        modelLayerRef.loadModel(encodeURI(url), transform, geo, item.id, item.name);
+                    } catch (e) { console.warn('Failed to restore model immediately', e); }
+                } else {
+                    console.log('[restoreSavedState] Queueing model for later:', item);
+                    _restoreQueue.push(item);
+                }
+            });
+            // restore drawn features if present in shared state
+            try {
+                if (parsed.draws && Array.isArray(parsed.draws)) {
+                    drawnFeatures = parsed.draws.slice();
+                    // Always apply draw features immediately, regardless of draw tool state
+                    const applyDraws = () => {
+                        try { ensureDrawSourceAndLayers(); } catch (e) { console.warn('ensureDrawSourceAndLayers failed', e); }
+                        try {
+                            if (map.getSource && map.getSource('draw-source')) {
+                                map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
+                            }
+                        } catch (e) { console.warn('Failed to set draw-source data', e); }
+                        try { console.debug && console.debug('applyDraws: drawnFeatures count', drawnFeatures && drawnFeatures.length, 'layers:', !!map.getLayer && !!map.getLayer('draw-labels'), !!map.getLayer && !!map.getLayer('draw-lines')); } catch (e) {}
+                        try { refreshDrawSource(); } catch (e) {}
+                        try { if (map && map.triggerRepaint) map.triggerRepaint(); } catch (e) {}
+                        try { nudgeDrawLayers(); } catch (e) {}
+                    };
+                    if (typeof map.isStyleLoaded === 'function' && !map.isStyleLoaded()) {
+                        console.debug && console.debug('restoreSavedState: style not loaded, waiting for style.load to apply draws');
+                        map.once('style.load', applyDraws);
+                    } else {
+                        console.debug && console.debug('restoreSavedState: applying draws immediately');
+                        applyDraws();
+                    }
+                }
+            } catch (e) { console.warn('Failed to restore draws from shared state', e); }
+            try { applyTextSizeToLayer && applyTextSizeToLayer(selectedTextSize); } catch (e) {}
+            renderSidebar();
+            // LOG: print the restore queue after initial restore
+            console.log('[restoreSavedState] _restoreQueue after initial restore:', _restoreQueue);
+            // Attempt to process any queued restores after we finish initial restore steps.
+            try { setTimeout(() => { console.log('[restoreSavedState] Processing restore queue...'); processRestoreQueue(); }, 250); } catch (e) {}
+            // Extra safety: repeatedly nudge and re-apply draw layers after restore
+            try { forceDrawVisibility(6, 300); } catch (e) {}
+        } catch (e) { console.warn('Failed to restore parsed state', e); }
+    }
+
+    // share functionality removed
+
+    // Save button: POST current state to backend and show returned id (for admin listing)
+    const saveBtn = document.getElementById('save-btn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', async () => {
+            try {
+                const data = serializePlacedModels();
+                const payload = { mapCenter: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), models: data, draws: drawnFeatures };
+                // Prompt user for an optional name for this saved map
+                let name = null;
+                try { name = prompt('Enter a name for this map (optional)'); } catch (e) { name = null; }
+                if (name !== null) name = (String(name).trim() || null);
+
+                if (BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
+                    saveBtn.disabled = true;
+                    // include name alongside state; backend may ignore unknown fields but will receive it if supported
+                    const body = JSON.stringify({ state: payload, name });
+                    const res = await fetch(BACKEND_STATE_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+                    if (!res.ok) throw new Error('Save failed: ' + res.status);
+                    const j = await res.json();
+                    const id = j && j.id;
+                    if (id) {
+                        alert('Saved state id: ' + id + '\nYou can view it in the admin page.');
+                        console.debug('Saved state id', id, j);
+                        // Always update localStorage id list and name mapping
+                        try {
+                            const key = 'admin_known_state_ids_v1';
+                            let arr = [];
+                            try { arr = JSON.parse(localStorage.getItem(key) || '[]'); } catch (e) { arr = []; }
+                            if (!arr.includes(id)) { arr.unshift(id); arr = arr.slice(0, 200); }
+                            localStorage.setItem(key, JSON.stringify(arr));
+                        } catch (e) {}
+                        try {
+                            const namesKey = 'admin_known_state_names_v1';
+                            let map = {};
+                            try { map = JSON.parse(localStorage.getItem(namesKey) || '{}'); } catch (e) { map = {}; }
+                            map[id] = name || '';
+                            localStorage.setItem(namesKey, JSON.stringify(map));
+                        } catch (e) {}
+                    } else {
+                        alert('Saved but server returned no id');
+                    }
+                    saveBtn.disabled = false;
+                } else {
+                    alert('No backend endpoint configured');
+                }
+            } catch (e) { alert('Save failed: ' + (e && e.message)); saveBtn.disabled = false; }
+        });
+    }
+
+    // Share button: create a short share URL by saving current state to the backend
+    const shareBtn = document.getElementById('share-btn');
+    async function shareCurrentState() {
+        try {
+            const data = serializePlacedModels();
+            const payload = { mapCenter: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), models: data, draws: drawnFeatures };
+            if (BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
+                shareBtn.disabled = true;
+                const res = await fetch(BACKEND_STATE_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: payload }) });
+                if (!res.ok) throw new Error('Backend save failed: ' + res.status);
+                const j = await res.json();
+                const id = j && j.id;
+                if (!id) throw new Error('Invalid response from backend');
+                const url = location.origin + location.pathname + '?state_id=' + encodeURIComponent(id);
+                try {
+                    if (navigator.share) { await navigator.share({ url }); return; }
+                } catch (e) { console.warn('navigator.share failed', e); }
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(url); alert('Share URL copied to clipboard'); return; }
+                } catch (e) { console.warn('clipboard write failed', e); }
+                try { window.prompt('Copy this URL', url); } catch (e) { alert(url); }
+            } else {
+                alert('No backend configured for sharing');
+            }
+        } catch (e) { alert('Failed to create share URL: ' + (e && e.message)); }
+        finally { try { if (shareBtn) shareBtn.disabled = false; } catch (e) {} }
+    }
+    if (shareBtn) shareBtn.addEventListener('click', shareCurrentState);
+
+    // Try to restore state from URL params on load: prefer short ?state_id= when backend is used
+    (function tryRestoreFromUrl(){
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const localId = params.get('local_state_id');
+            const id = params.get('state_id');
+            const s = params.get('state');
+            if (localId) {
+                // load from localStorage
+                setTimeout(() => {
+                    const parsed = loadStateLocally(localId);
+                    if (parsed) {
+                        restoreSavedState(parsed);
+                    } else {
+                        console.warn('No local state found for id', localId);
+                    }
+                }, 300);
+                return;
+            }
+            if (id && BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
+                setTimeout(async () => {
+                    try {
+                        const url = BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id);
+                        const res = await fetch(url);
+                        if (!res.ok) throw new Error('Failed to fetch state: ' + res.status);
+                        const j = await res.json();
+                        console.log('[DEBUG] Loaded state from backend:', j);
+                        if (j && j.state) {
+                            restoreSavedState(j.state);
+                        } else if (j && j.models) {
+                            // fallback: some older backend versions may return models at top level
+                            restoreSavedState(j);
+                        } else {
+                            console.warn('No state found in backend response', j);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to restore from backend', e);
+                    }
+                }, 500);
+                return;
+            }
+            if (!s) return;
+            const json = decodeURIComponent(atob(s));
+            const parsed = JSON.parse(json);
+            setTimeout(() => { restoreSavedState(parsed); }, 500);
+        } catch (e) { console.warn('Failed to restore from URL', e); }
+    })();
+
+    // helpers to convert mercator deltas to lat/lng deltas
+    function metersPerDegreeAtLat(latDeg) {
+        const lat = latDeg * Math.PI / 180;
+        // approximate constants
+        const mPerDegLat = 111132.92 - 559.82 * Math.cos(2 * lat) + 1.175 * Math.cos(4 * lat);
+        const mPerDegLng = 111412.84 * Math.cos(lat) - 93.5 * Math.cos(3 * lat);
+        return { mPerDegLat, mPerDegLng };
+    }
+
+    function updateEntryGeo(entry) {
+        if (!entry || !entry.original || !entry.geo || !entry.meterScale) return;
+        // compute mercator delta from original transform
+        const dx = entry.transform.translateX - entry.original.translateX;
+        const dy = entry.transform.translateY - entry.original.translateY;
+        // convert mercator units to meters using stored meterScale
+        const deltaEastMeters = dx / entry.meterScale;
+        const deltaNorthMeters = dy / entry.meterScale;
+        // compute degrees per meter approx at original latitude
+        const origLat = entry.originalGeoLat !== undefined && entry.originalGeoLat !== null ? entry.originalGeoLat : entry.geo.lat;
+        const { mPerDegLat, mPerDegLng } = metersPerDegreeAtLat(origLat);
+        const deltaLatDeg = deltaNorthMeters / mPerDegLat;
+        const deltaLngDeg = deltaEastMeters / mPerDegLng;
+        entry.geo.lat = (entry.originalGeoLat !== undefined && entry.originalGeoLat !== null) ? (entry.originalGeoLat + deltaLatDeg) : (entry.geo.lat + deltaLatDeg);
+        entry.geo.lng = (entry.originalGeoLng !== undefined && entry.originalGeoLng !== null) ? (entry.originalGeoLng + deltaLngDeg) : (entry.geo.lng + deltaLngDeg);
+    }
+
+    // store placed models (support multiple models)
+    // each entry: { id, name, transform, original, meterScale, object }
+    const placedModels = [];
+    let selectedModelId = null; // id of the model currently controlled
+
+    // --- sidebar for placed models ---
+    const sidebar = document.createElement('div');
+    sidebar.id = 'sidebar';
+    sidebar.className = 'hidden';
+    sidebar.innerHTML = '<div style="font-weight:700;margin-bottom:8px">Placed models</div><div id="models-list"></div>';
+    sidebar.innerHTML = '<div style="font-weight:700;margin-bottom:8px">Placed models</div>' +
+        '<button id="auto-save-btn" class="btn secondary" style="margin-bottom:8px;width:100%">Auto-save OFF</button>' +
+        '<div id="models-list"></div>';
+    document.body.appendChild(sidebar);
+
+    // toggle sidebar open/close
+    modelsBtn.addEventListener('click', () => {
+        const wasHidden = sidebar.classList.contains('hidden');
+        sidebar.classList.toggle('hidden');
+        modelsBtn.textContent = wasHidden ? 'Close' : 'Info';
+        if (wasHidden) renderSidebar();
+    });
+
+    function renderSidebar() {
+        const list = document.getElementById('models-list');
+        list.innerHTML = '';
+        placedModels.forEach((entry, idx) => {
+            const row = document.createElement('div');
+            row.className = 'model-row' + (entry.id === selectedModelId ? ' selected' : '');
+            row.dataset.id = entry.id;
+
+            const label = document.createElement('span');
+            label.className = 'label';
+            label.textContent = entry.name || ('Model ' + (idx + 1));
+            label.style.cursor = 'pointer';
+            label.addEventListener('click', () => selectModel(entry.id));
+
+            // info: coordinates and rotation
+            const info = document.createElement('div');
+            info.className = 'info';
+            const coordText = entry.geo ? `Lng: ${entry.geo.lng.toFixed(6)}, Lat: ${entry.geo.lat.toFixed(6)}, Alt: ${entry.geo.alt}` : '';
+            const rotDeg = `R:${((entry.transform.rotateY*180/Math.PI)||0).toFixed(1)}°`;
+            info.textContent = (coordText ? coordText + ' • ' : '') + rotDeg;
+
+            const leftCol = document.createElement('div');
+            leftCol.className = 'model-left';
+            leftCol.appendChild(label);
+            leftCol.appendChild(info);
+
+            const actions = document.createElement('div');
+            actions.className = 'model-actions';
+
+            const renameBtn = document.createElement('button');
+            renameBtn.textContent = 'Rename';
+            renameBtn.addEventListener('click', () => {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = entry.name || '';
+                input.className = 'rename-input';
+                input.addEventListener('blur', () => { entry.name = input.value || entry.name; renderSidebar(); });
+                input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+                leftCol.replaceChild(input, label);
+                input.focus();
+            });
+            actions.appendChild(renameBtn);
+
+            // Show name toggle: persistently show/hide model name on map
+            const tooltipBtn = document.createElement('button');
+            tooltipBtn.textContent = (entry && entry._nameMarker) ? 'Hide name' : 'Show name';
+            tooltipBtn.addEventListener('click', () => {
+                try {
+                    toggleModelName(entry.id);
+                    // update button label after toggling
+                    tooltipBtn.textContent = (entry && entry._nameMarker) ? 'Hide name' : 'Show name';
+                } catch (e) { console.warn('toggleModelName failed', e); }
+            });
+            actions.appendChild(tooltipBtn);
+
+            const delBtn = document.createElement('button');
+            delBtn.textContent = 'Remove';
+            delBtn.addEventListener('click', () => removeModel(entry.id));
+            actions.appendChild(delBtn);
+
+            row.appendChild(leftCol);
+            row.appendChild(actions);
+            list.appendChild(row);
+        });
+    }
+
+    function selectModel(id) {
+        selectedModelId = id;
+        const entry = placedModels.find(p => p.id === id);
+        if (!entry) return;
+        setControlsDisabled(false);
+    if (rot) rot.value = Math.round((entry.transform.rotateY * 180 / Math.PI) * 100) / 100;
+        scaleInput.value = Math.round((entry.transform.scale / (entry.meterScale || 1)) * 100) / 100;
+        // sync animate button text to reflect entry state
+        try {
+            const animateBtn = document.getElementById('animateBtn');
+            if (animateBtn) animateBtn.textContent = entry.animated ? 'Stop animation' : 'Animate';
+        } catch (e) {}
+        // sync spinSpeed input
+        try {
+            const spinInput = document.getElementById('spinSpeed');
+            if (spinInput) spinInput.value = (entry.spinSpeed !== undefined) ? entry.spinSpeed : 0.2;
+        } catch (e) {}
+        renderSidebar();
+        if (map) map.triggerRepaint();
+    }
+
+    function removeModel(id) {
+        const idx = placedModels.findIndex(p => p.id === id);
+        if (idx === -1) return;
+        const entry = placedModels[idx];
+        if (modelLayerRef && entry.object) {
+            try { modelLayerRef.scene.remove(entry.object); } catch (e) { console.warn(e); }
+        }
+        // remove any persistent name marker
+        try {
+            if (entry && entry._nameMarker) { try { entry._nameMarker.remove(); } catch (e) {} }
+            if (_modelNameMarkers[id]) { try { _modelNameMarkers[id].remove(); } catch (e) {} delete _modelNameMarkers[id]; }
+        } catch (e) {}
+        placedModels.splice(idx, 1);
+        if (selectedModelId === id) {
+            selectedModelId = null;
+            setControlsDisabled(true);
+        }
+        renderSidebar();
+        if (map) map.triggerRepaint();
+    }
+
+    // Map of persistent name markers by model id
+    const _modelNameMarkers = {};
+    function createNameMarker(entry) {
+        if (!entry || !entry.geo) return null;
+        try {
+            const el = document.createElement('div');
+            el.className = 'model-name-marker';
+            // compact styling: smaller padding, thinner border-radius, lighter shadow
+            el.style.padding = '4px 6px';
+            el.style.background = 'white';
+            el.style.borderRadius = '4px';
+            el.style.boxShadow = '0 4px 10px rgba(2,6,23,0.08)';
+            el.style.fontWeight = '600';
+            el.style.fontSize = '12px';
+            el.style.lineHeight = '1';
+            el.style.border = '1px solid rgba(2,6,23,0.12)';
+            el.style.whiteSpace = 'nowrap';
+            el.style.overflow = 'hidden';
+            el.style.textOverflow = 'ellipsis';
+            el.textContent = entry.name || 'Model';
+            // offset the marker upward so it doesn't get visually overlapped by tall 3D models
+            const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom', offset: [0, -20] })
+                .setLngLat([entry.geo.lng, entry.geo.lat])
+                .addTo(map);
+            return marker;
+        } catch (e) { console.warn('createNameMarker failed', e); return null; }
+    }
+
+    function toggleModelName(id) {
+        const entry = placedModels.find(p => p.id === id);
+        if (!entry) return;
+        // if a marker exists, remove it
+        if (entry._nameMarker) {
+            try { entry._nameMarker.remove(); } catch (e) {}
+            delete entry._nameMarker;
+            if (_modelNameMarkers[id]) { try { _modelNameMarkers[id].remove(); } catch (e) {} delete _modelNameMarkers[id]; }
+            return;
+        }
+        // otherwise create and persist one
+        const marker = createNameMarker(entry);
+        if (marker) {
+            entry._nameMarker = marker;
+            _modelNameMarkers[id] = marker;
+        }
+    }
+
+
+    // variables used by the custom three.js layer
+    let modelLayerRef = null; // set in onAdd
+    // queue for restoring models when the custom layer isn't ready yet
+    const _restoreQueue = [];
+
+    function processRestoreQueue() {
+        if (!modelLayerRef) return;
+        while (_restoreQueue.length) {
+            const item = _restoreQueue.shift();
+            try {
+                console.debug && console.debug('processRestoreQueue: restoring item', item && (item.id || item.name || item.type));
+                if (item.type === '3dtext' && modelLayerRef.load3DText) {
+                    modelLayerRef.load3DText(item.text || item.name || 'Text', Object.assign({}, item.transform), item.geo ? [item.geo.lng, item.geo.lat, item.geo.alt || 0] : null, item.id, item.name);
+                } else if (modelLayerRef.loadModel) {
+                    const url = (item.url && item.url.length) ? item.url : defaultModelUrl;
+                    modelLayerRef.loadModel(encodeURI(url), Object.assign({}, item.transform), item.geo ? [item.geo.lng, item.geo.lat, item.geo.alt || 0] : null, item.id, item.name);
+                }
+                // After requesting load, also ensure drawn features are applied so symbols/lines appear
+                try {
+                    ensureDrawSourceAndLayers();
+                    if (map.getSource && map.getSource('draw-source')) map.getSource('draw-source').setData({ type: 'FeatureCollection', features: drawnFeatures });
+                    try { refreshDrawSource(); } catch (e) {}
+                    try { if (map && map.triggerRepaint) map.triggerRepaint(); } catch (e) {}
+                    try { nudgeDrawLayers(); } catch (e) {}
+                } catch (e) { console.warn('Failed to re-apply draws during restore queue', e); }
+            } catch (e) { console.warn('processRestoreQueue item failed', e); }
+        }
+    }
+
+    // create the custom layer (empty scene initially)
+    const customLayer = {
+        id: '3d-model',
+        type: 'custom',
+        renderingMode: '3d',
+        onAdd: function (map, gl) {
+            this.camera = new THREE.Camera();
+            this.scene = new THREE.Scene();
+            this.loader = new THREE.GLTFLoader();
+
+            // use an ambient light so the model is uniformly lit
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
+            this.scene.add(ambientLight);
+
+            this.map = map;
+            // Creating a WebGLRenderer using the map's GL context can fail on
+            // some mobile browsers or low-resource environments. Wrap in try/catch
+            // and gracefully disable the 3D layer when unavailable.
+            try {
+                this.renderer = new THREE.WebGLRenderer({
+                    canvas: map.getCanvas(),
+                    context: gl,
+                    antialias: true
+                });
+                this.renderer.autoClear = false;
+            } catch (err) {
+                console.warn('Three.js renderer creation failed; disabling 3D layer', err);
+                // mark layer as disabled so render() is a no-op
+                this._disabled = true;
+                modelLayerRef = null;
+                return;
+            }
+
+            // expose ref so outer code can call loadModel
+            modelLayerRef = this;
+            // process any queued restore items now that the layer is ready
+            try { processRestoreQueue(); } catch (e) { console.warn('processRestoreQueue failed on onAdd', e); }
+            // After custom layer is ready, force draw visibility again
+            setTimeout(() => {
+                try { console.debug('Custom layer ready, forcing draw visibility'); forceDrawVisibility(6, 300); } catch (e) {}
+            }, 400);
+
+            // helper to create a 3D text entry (used when restoring serialized state)
+            this.load3DText = (text, transform, geo, preferredId, preferredName) => {
+                try {
+                    const loader = new THREE.FontLoader();
+                    const id = preferredId || ('text_' + Date.now());
+                    loader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', (font) => {
+                        const geom = new THREE.TextGeometry(text, { font, size: 1, height: 0.3, curveSegments: 8 });
+                        geom.computeBoundingBox();
+                        geom.center();
+                        const mat = new THREE.MeshBasicMaterial({ color: 0xff6a00 });
+                        const mesh = new THREE.Mesh(geom, mat);
+                        mesh.position.set(0,0,0);
+                        mesh.scale.set(1,1,1);
+                        const entry = {
+                            id,
+                            name: preferredName || text,
+                            text: text,
+                            type: '3dtext',
+                            transform: Object.assign({}, transform),
+                            original: Object.assign({}, transform),
+                            meterScale: transform.scale,
+                            object: mesh,
+                            animated: !!transform.animated,
+                            spinSpeed: transform.spinSpeed || 0.2,
+                            url: null,
+                            geo: geo ? { lng: geo[0], lat: geo[1], alt: geo[2] || 0 } : null,
+                            originalGeoLat: geo ? geo[1] : null,
+                            originalGeoLng: geo ? geo[0] : null
+                        };
+                        placedModels.push(entry);
+                        this.scene.add(mesh);
+                        try { renderSidebar(); } catch (e) {}
+                        try { if (this.map && this.map.triggerRepaint) this.map.triggerRepaint(); } catch (e) {}
+                        try { nudgeDrawLayers(); } catch (e) {}
+                    }, undefined, (err) => { console.warn('Font load failed for load3DText', err); });
+                    return id;
+                } catch (e) { console.warn('load3DText failed', e); }
+            };
+
+            // helper to load a GLTF into the scene without clearing previous models
+            // accepts (url, transform) and returns an id for the placed model
+        // loadModel(url, transform, geo, preferredId, preferredName)
+        // Accept optional preferredId and preferredName so restored states can keep original ids and names
+        this.loadModel = (url, transform, geo, preferredId, preferredName) => {
+                const id = preferredId || (String(Date.now()) + '-' + Math.floor(Math.random() * 10000));
+        const entry = {
+            id,
+            name: preferredName || ('Model ' + (placedModels.length + 1)),
+        transform: Object.assign({}, transform),
+            original: Object.assign({}, transform),
+            meterScale: transform.scale,
+    object: null,
+    animated: !!(transform && transform.animated),
+    spinSpeed: (transform && transform.spinSpeed) ? transform.spinSpeed : 0.2,
+        // persist the original URL so serializePlacedModels can save it
+        url: url,
+        geo: geo ? { lng: geo[0], lat: geo[1], alt: geo[2] || 0 } : null,
+        originalGeoLat: geo ? geo[1] : null,
+        originalGeoLng: geo ? geo[0] : null
+        };
+                placedModels.push(entry);
+                renderSidebar();
+                // load new gltf and attach to scene when ready
+                try {
+                // Queue the load to avoid too many concurrent requests on mobile
+                enqueueLoad(this.loader, url,
+                    (gltf) => {
+                        // convert materials to MeshBasicMaterial for uniform lighting
+                        // If this is the restroom model, force an orange color for visibility
+                        const isRestroom = (url && url.includes('restroom_model.glb')) || (preferredName && String(preferredName).toLowerCase().includes('restroom'));
+                        gltf.scene.traverse(function (child) {
+                            if (child.isMesh) {
+                                try {
+                                    const oldMat = child.material || {};
+                                    const params = {};
+                                    // for non-restroom models, preserve texture maps where available
+                                    if (!isRestroom && oldMat.map) params.map = oldMat.map;
+                                    // set color: force orange for restroom, otherwise preserve existing color if present
+                                    if (isRestroom) {
+                                        params.color = new THREE.Color(0xff6a00);
+                                    } else if (oldMat.color) {
+                                        params.color = oldMat.color.clone();
+                                    }
+                                    if (oldMat.opacity !== undefined) {
+                                        params.opacity = oldMat.opacity;
+                                        params.transparent = oldMat.transparent;
+                                    }
+                                    child.material = new THREE.MeshBasicMaterial(params);
+                                    if (isRestroom) {
+                                        // ensure any previous texture references don't interfere
+                                        try { child.material.map = null; } catch (e) {}
+                                        child.material.needsUpdate = true;
+                                    }
+                                } catch (e) {
+                                    console.warn('Failed to convert material to MeshBasicMaterial', e);
+                                }
+                            }
+                        });
+                        // center the model geometry so rotations occur around its center
+                        try {
+                            const obj = gltf.scene || gltf.scenes[0];
+                            const box = new THREE.Box3().setFromObject(obj);
+                            const center = box.getCenter(new THREE.Vector3());
+                            // move the model so its center is at the origin (pivot)
+                            obj.position.x -= center.x;
+                            obj.position.y -= center.y;
+                            obj.position.z -= center.z;
+                        } catch (e) {
+                            console.warn('Failed to center model', e);
+                        }
+                        entry.object = gltf.scene;
+                        this.scene.add(gltf.scene);
+                        try { renderSidebar(); } catch (e) {}
+                        try { if (this.map && this.map.triggerRepaint) this.map.triggerRepaint(); } catch (e) {}
+                        try { nudgeDrawLayers(); } catch (e) {}
+                    },
+                    undefined,
+                    (err) => {
+                        console.error('Error loading GLTF:', err);
+                        alert('Failed to load model. See console for details.');
+                    }
+                );
+                } catch (e) {
+                    console.error('Loader error', e);
+                }
+                return id;
+            };
+        },
+        render: function (gl, matrix) {
+            // no-op when layer disabled due to missing WebGL support
+            if (this._disabled) return;
+
+            if (!placedModels.length) return;
+
+            const m = new THREE.Matrix4().fromArray(matrix);
+
+            // render each placed model separately
+            for (let i = 0; i < placedModels.length; i++) {
+                const entry = placedModels[i];
+                if (!entry.object) continue; // not loaded yet
+
+                // if entry is animated, apply a Y-axis spin using its spinSpeed
+                if (entry.animated) {
+                    const speed = (entry.spinSpeed !== undefined) ? entry.spinSpeed : 0.2;
+                    entry.transform.rotateY = (entry.transform.rotateY || 0) + speed;
+                }
+
+                const rotationX = new THREE.Matrix4().makeRotationAxis(
+                    new THREE.Vector3(1, 0, 0),
+                    entry.transform.rotateX
+                );
+                const rotationY = new THREE.Matrix4().makeRotationAxis(
+                    new THREE.Vector3(0, 1, 0),
+                    entry.transform.rotateY
+                );
+                const rotationZ = new THREE.Matrix4().makeRotationAxis(
+                    new THREE.Vector3(0, 0, 1),
+                    entry.transform.rotateZ
+                );
+
+                const l = new THREE.Matrix4()
+                    .makeTranslation(
+                        entry.transform.translateX,
+                        entry.transform.translateY,
+                        entry.transform.translateZ
+                    )
+                    .scale(
+                        new THREE.Vector3(
+                            entry.transform.scale,
+                            -entry.transform.scale,
+                            entry.transform.scale
+                        )
+                    )
+                    .multiply(rotationX)
+                    .multiply(rotationY)
+                    .multiply(rotationZ);
+
+                // hide all model objects except the one we're rendering
+                for (let c = 0; c < this.scene.children.length; c++) {
+                    const child = this.scene.children[c];
+                    if (child.type === 'AmbientLight') continue;
+                    child.visible = (child === entry.object) || (child.type === 'AmbientLight');
+                }
+
+                const cameraMatrix = new THREE.Matrix4().copy(m).multiply(l);
+                this.camera.projectionMatrix = cameraMatrix;
+                this.renderer.resetState();
+                this.renderer.render(this.scene, this.camera);
+            }
+
+            // ensure all children visible again
+            for (let c = 0; c < this.scene.children.length; c++) {
+                this.scene.children[c].visible = true;
+            }
+
+            this.map.triggerRepaint();
+        }
+    };
+
+    // add the custom layer at startup so the three.js scene is ready
+    // Provide a helper to hide any fill-extrusion / building layers. Some styles add these layers
+    // asynchronously, so we run this on style.load and again on style/data events.
+    function hideBuildings() {
+        try {
+            const style = map.getStyle();
+            if (style && style.layers && Array.isArray(style.layers)) {
+                style.layers.forEach(l => {
+                    try {
+                        const id = l && l.id;
+                        const type = l && l.type;
+                        const lname = String(id || '').toLowerCase();
+                        if (type === 'fill-extrusion' || lname.includes('building') || lname.includes('extrusion')) {
+                            try { map.setLayoutProperty(id, 'visibility', 'none'); } catch (e) {}
+                            try { map.setPaintProperty(id, 'fill-extrusion-opacity', 0); } catch (e) {}
+                            try { map.setPaintProperty(id, 'fill-extrusion-color', '#000000'); } catch (e) {}
+                        }
+                    } catch (e) { /* ignore per-layer */ }
+                });
+            }
+        } catch (e) { /* ignore style introspection errors */ }
+    }
+
+    // helper to ensure our custom layer exists exactly once
+    function ensureCustomLayerPresent() {
+        try {
+            const existing = map.getStyle && map.getStyle().layers && map.getStyle().layers.find(l => l.id === customLayer.id);
+            // If the layer isn't present, add it. If the layer is present but the
+            // runtime modelLayerRef is not set (possible when onAdd failed), remove
+            // and re-add the layer to trigger onAdd again.
+            if (!existing) {
+                try { map.addLayer(customLayer); } catch (e) { console.warn('Failed to add customLayer', e); }
+            } else if (!modelLayerRef) {
+                try {
+                    console.debug && console.debug('Custom layer exists but modelLayerRef is null — re-adding layer to re-run onAdd');
+                    try { map.removeLayer(customLayer.id); } catch (e) { /* ignore remove error */ }
+                    try { map.addLayer(customLayer); } catch (e) { console.warn('Failed to re-add customLayer', e); }
+                } catch (e) { console.warn('ensureCustomLayerPresent re-add failed', e); }
+            }
+        } catch (e) { console.warn('ensureCustomLayerPresent error', e); }
+    }
+
+    map.on('style.load', () => {
+        // run hideBuildings immediately and a couple times after load to catch dynamic additions
+        hideBuildings();
+        setTimeout(hideBuildings, 300);
+        setTimeout(hideBuildings, 1200);
+        // ensure our custom three.js layer is present after the new style is applied
+        ensureCustomLayerPresent();
+        // also (re)attach style/data listeners which may add layers after style.load
+        try { map.off && map.off('styledata', hideBuildings); } catch (e) {}
+        try { map.off && map.off('sourcedata', hideBuildings); } catch (e) {}
+        try { map.off && map.off('data', hideBuildings); } catch (e) {}
+        try { map.on('styledata', hideBuildings); } catch (e) {}
+        try { map.on('sourcedata', hideBuildings); } catch (e) {}
+        try { map.on('data', hideBuildings); } catch (e) {}
+    });
+
+    // convert the GitHub blob URL to a raw.githubusercontent.com URL
+    function githubBlobToRaw(url) {
+        try {
+            const u = new URL(url);
+            // expects: https://github.com/{owner}/{repo}/blob/{branch}/{path}
+            const parts = u.pathname.split('/');
+            const blobIndex = parts.indexOf('blob');
+            if (u.hostname === 'github.com' && blobIndex > -1) {
+                const owner = parts[1];
+                const repo = parts[2];
+                const branch = parts[blobIndex + 1];
+                const path = parts.slice(blobIndex + 2).join('/');
+                return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
+            }
+        } catch (e) {
+            // fall through
+        }
+        return url;
+    }
+
+    // support clicking on the map to place the model when in placingModel mode
+    map.on('click', async (e) => {
+        const lngLat = [e.lngLat.lng, e.lngLat.lat];
+
+        if (!placingModel) {
+            // selection flow: find nearest placed model to click and select it
+            if (placedModels.length) {
+                const clicked = mapboxgl.MercatorCoordinate.fromLngLat(lngLat, 0);
+                let best = null;
+                let bestDist = Infinity;
+                for (const p of placedModels) {
+                    const dx = p.transform.translateX - clicked.x;
+                    const dy = p.transform.translateY - clicked.y;
+                    const dz = p.transform.translateZ - clicked.z;
+                    const d2 = dx*dx + dy*dy + dz*dz;
+                    if (d2 < bestDist) {
+                        bestDist = d2;
+                        best = p;
+                    }
+                }
+                if (best) {
+                    const threshold = Math.pow(50 * (best.meterScale || 1), 2); // ~50 meters
+                    if (bestDist < threshold) {
+                        selectedModelId = best.id;
+                        if (rot) rot.value = Math.round((best.transform.rotateY * 180 / Math.PI) * 100) / 100;
+                        scaleInput.value = Math.round((best.transform.scale / (best.meterScale || 1)) * 100) / 100;
+                        setControlsDisabled(false);
+                    }
+                }
+            }
+            return;
+        }
+
+        // placing flow
+        if (placingText && placingText.text) {
+            // place 3D text at click location
+            try {
+                await add3DText(placingText.text, lngLat, { size: 1.5, height: 0.25, color: 0xff6a00 });
+                placingText = null;
+                note.textContent = 'Click on the map to place the model, or click the button again to cancel.';
+                note.style.display = 'none';
+            } catch (e) {
+                console.warn('Failed to place 3D text', e);
+                alert('Failed to place 3D text');
+            }
+            if (map) map.triggerRepaint();
+            return;
+        }
+
+        const altitude = 0;
+        const modelAsMercatorCoordinate = mapboxgl.MercatorCoordinate.fromLngLat(
+            lngLat,
+            altitude
+        );
+
+        // build a transform for the new model
+            const transform = {
+            translateX: modelAsMercatorCoordinate.x,
+            translateY: modelAsMercatorCoordinate.y,
+            translateZ: modelAsMercatorCoordinate.z,
+            rotateX: Math.PI / 2,
+            rotateY: 0,
+            rotateZ: 0,
+            // apply any per-model override (e.g., truck defaultScale)
+            scale: modelAsMercatorCoordinate.meterInMercatorCoordinateUnits() * (modelScaleOverride || 1)
+        };
+
+    // load the model into the three.js scene
+    const rawUrl = githubBlobToRaw(modelUrl);
+    if (modelLayerRef && modelLayerRef.loadModel) {
+            const id = modelLayerRef.loadModel(encodeURI(rawUrl), transform, lngLat.concat([0]));
+            selectedModelId = id;
+
+            // find the placed model entry and enable controls for it
+            const entry = placedModels.find(p => p.id === id);
+            if (entry) {
+                entry.meterScale = entry.meterScale || modelAsMercatorCoordinate.meterInMercatorCoordinateUnits();
+                entry.original = Object.assign({}, entry.transform);
+
+                setControlsDisabled(false);
+                if (rot) rot.value = Math.round((entry.transform.rotateY * 180 / Math.PI) * 100) / 100;
+                scaleInput.value = 1;
+            }
+        }
+
+    // keep placingMode active so multiple models can be placed
+    // (user can click Add model again to cancel)
+        if (map) map.triggerRepaint();
+    });
+
+    // --- Model hover tooltip (show model name when cursor is near a placed model) ---
+    const modelTooltip = document.createElement('div');
+    modelTooltip.id = 'model-tooltip';
+    modelTooltip.style.position = 'absolute';
+    modelTooltip.style.pointerEvents = 'none';
+    modelTooltip.style.padding = '6px 8px';
+    modelTooltip.style.background = 'rgba(255,255,255,0.95)';
+    modelTooltip.style.border = '1px solid rgba(0,0,0,0.08)';
+    modelTooltip.style.borderRadius = '6px';
+    modelTooltip.style.fontFamily = 'sans-serif';
+    modelTooltip.style.fontSize = '13px';
+    modelTooltip.style.color = '#0f1724';
+    modelTooltip.style.zIndex = '10';
+    modelTooltip.style.display = 'none';
+    document.body.appendChild(modelTooltip);
+
+    let hoveredModelId = null;
+
+    function hideModelTooltip() {
+        hoveredModelId = null;
+        modelTooltip.style.display = 'none';
+    }
+
+    // Use pixel-distance hover detection: project each model's geo to screen and compare to mouse point
+    map.on('mousemove', (e) => {
+        if (!placedModels || !placedModels.length) { hideModelTooltip(); return; }
+        const mousePoint = e.point; // pixel coords relative to map container
+        let bestEntry = null;
+        let bestProj = null;
+        let bestDist2 = Infinity;
+        for (const p of placedModels) {
+            if (!p.geo || p.geo.lng === undefined || p.geo.lat === undefined) continue;
+            const proj = map.project([p.geo.lng, p.geo.lat]);
+            const dx = proj.x - mousePoint.x;
+            const dy = proj.y - mousePoint.y;
+            const d2 = dx*dx + dy*dy;
+            if (d2 < bestDist2) { bestDist2 = d2; bestEntry = p; bestProj = proj; }
+        }
+        if (!bestEntry) { hideModelTooltip(); return; }
+        const pixelThreshold = 40; // hover radius in pixels
+        if (bestDist2 <= (pixelThreshold * pixelThreshold)) {
+            if (hoveredModelId !== bestEntry.id) {
+                hoveredModelId = bestEntry.id;
+                modelTooltip.textContent = bestEntry.name || ('Model ' + bestEntry.id);
+            }
+            // position tooltip near mouse pointer using absolute page coords
+            const canvasRect = map.getCanvas().getBoundingClientRect();
+            const absLeft = canvasRect.left + mousePoint.x;
+            const absTop = canvasRect.top + mousePoint.y;
+            modelTooltip.style.left = (absLeft + 12) + 'px';
+            modelTooltip.style.top = (absTop + 12) + 'px';
+            modelTooltip.style.display = 'block';
+        } else {
+            hideModelTooltip();
+        }
+    });
+
+    // hide tooltip when mouse leaves the map canvas
+    const canvas = map.getCanvas && map.getCanvas();
+    if (canvas) canvas.addEventListener('mouseleave', hideModelTooltip);
+
+// --- Address / location bar (bottom) ---
+const addressBar = document.createElement('div');
+addressBar.id = 'address-bar';
+addressBar.innerHTML = `
+    <input id="address-input" placeholder="Enter address or lng,lat (e.g. -79.3875,43.6426)" />
+    <button id="address-go" class="btn">Go</button>
+    <button id="address-clear" class="btn secondary">Clear</button>
+`;
+document.body.appendChild(addressBar);
+
+const addressInput = document.getElementById('address-input');
+const addressGo = document.getElementById('address-go');
+const addressClear = document.getElementById('address-clear');
+let addressMarker = null;
+
+function clearAddressMarker() {
+    if (addressMarker) {
+        try { addressMarker.remove(); } catch (e) {}
+        addressMarker = null;
+    }
+}
+
+addressClear.addEventListener('click', () => {
+    clearAddressMarker();
+});
+
+// --- Address suggestions and POI search ---
+// small, editable local POI directory (can be extended or loaded from a remote source)
+const localPOIs = [
+    { id: 'poi_airport', name: 'Pearson International Airport', coords: [-79.611, 43.677], desc: 'Airport' },
+    { id: 'poi_cn_tower', name: 'CN Tower', coords: [-79.3875, 43.6426], desc: 'Landmark' },
+    { id: 'poi_union', name: 'Union Station', coords: [-79.3792, 43.6452], desc: 'Transit' },
+    { id: 'poi_scotia', name: 'Scotiabank Arena', coords: [-79.3789, 43.6435], desc: 'Sports/Events' },
+    { id: 'poi_rogers', name: 'Rogers Centre', coords: [-79.3906, 43.6416], desc: 'Stadium' }
+];
+
+// Create a suggestions container attached to the address bar
+const suggestions = document.createElement('div');
+suggestions.id = 'address-suggestions';
+suggestions.className = 'hidden';
+suggestions.style.boxSizing = 'border-box';
+suggestions.style.width = '100%';
+suggestions.style.maxHeight = '220px';
+suggestions.style.overflowY = 'auto';
+suggestions.style.background = '#ffffff';
+suggestions.style.border = '1px solid rgba(0,0,0,0.08)';
+suggestions.style.borderRadius = '6px';
+suggestions.style.marginTop = '6px';
+suggestions.style.padding = '6px 0';
+suggestions.style.zIndex = '40';
+addressBar.appendChild(suggestions);
+
+let suggestionItems = [];
+let suggestionSelected = -1; // index for keyboard nav
+
+// small helper to render suggestion list
+function renderSuggestions(items) {
+    suggestionItems = items || [];
+    suggestionSelected = -1;
+    suggestions.innerHTML = '';
+    if (!items || !items.length) {
+        suggestions.classList.add('hidden');
+        return;
+    }
+    suggestions.classList.remove('hidden');
+    items.forEach((it, idx) => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'suggestion-row';
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '8px';
+        row.style.width = '100%';
+        row.style.border = 'none';
+        row.style.background = 'transparent';
+        row.style.padding = '8px 12px';
+        row.style.textAlign = 'left';
+        row.style.cursor = 'pointer';
+        row.onmouseover = () => { highlightSuggestion(idx); };
+        row.onmouseout = () => { highlightSuggestion(-1); };
+        row.onclick = () => { selectSuggestion(it); };
+
+        const title = document.createElement('div');
+        title.textContent = it.title || it.name || '';
+        title.style.fontSize = '14px';
+        title.style.color = '#0f1724';
+        const sub = document.createElement('div');
+        sub.textContent = it.subtitle || (it.desc || (it.source === 'mapbox' && it.place_name) || '');
+        sub.style.fontSize = '12px';
+        sub.style.color = '#6b7280';
+        const col = document.createElement('div');
+        col.style.display = 'flex';
+        col.style.flexDirection = 'column';
+        col.appendChild(title);
+        col.appendChild(sub);
+        row.appendChild(col);
+
+        suggestions.appendChild(row);
+    });
+}
+
+function highlightSuggestion(idx) {
+    const rows = suggestions.querySelectorAll('.suggestion-row');
+    rows.forEach((r, i) => {
+        r.style.background = (i === idx) ? 'rgba(15,23,36,0.06)' : 'transparent';
+    });
+    suggestionSelected = idx;
+}
+
+function selectSuggestion(item) {
+    try { suggestions.classList.add('hidden'); } catch (e) {}
+    if (!item) return;
+    // item may be local POI: { name, coords } or Mapbox feature: { center: [lng,lat], place_name }
+    let coords = null;
+    if (item.coords) coords = item.coords;
+    else if (item.center) coords = item.center;
+    else if (item.lng !== undefined && item.lat !== undefined) coords = [item.lng, item.lat];
+    else if (item.geometry && item.geometry.coordinates) coords = item.geometry.coordinates;
+    if (coords) {
+        addressInput.value = item.name || item.place_name || `${coords[0].toFixed(6)},${coords[1].toFixed(6)}`;
+        map.flyTo({ center: coords, zoom: 18, essential: true });
+        clearAddressMarker();
+        addressMarker = new mapboxgl.Marker({ color: '#ff6a00' }).setLngLat(coords).addTo(map);
+    } else {
+        // fallback to filling input
+        addressInput.value = item.title || item.name || '';
+    }
+}
+
+// Mapbox forward-suggest (returns array of features)
+async function geocodeSuggest(query) {
+    try {
+        const token = mapboxgl.accessToken;
+        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&autocomplete=true&limit=6`;
+        const res = await fetch(url);
+        if (!res.ok) return [];
+        const j = await res.json();
+        if (j && j.features) return j.features.map(f => ({ source: 'mapbox', place_name: f.place_name, center: f.center, geometry: f.geometry }));
+    } catch (e) { console.warn('Suggest failed', e); }
+    return [];
+}
+
+// debounce the suggestion lookup to avoid spamming the API
+const debouncedSuggest = debounce(async (txt) => {
+    if (!txt || txt.length < 2) {
+        renderSuggestions([]);
+        return;
+    }
+    const q = txt.trim();
+    // local matches first
+    const local = localPOIs.filter(p => p.name.toLowerCase().includes(q.toLowerCase())).map(p => ({ title: p.name, coords: p.coords, subtitle: p.desc, source: 'local' }));
+    // remote suggestions
+    let remote = [];
+    try { remote = await geocodeSuggest(q); } catch (e) { remote = []; }
+    // merge, avoid duplicates by place_name/coords
+    const merged = [];
+    const seen = new Set();
+    local.concat(remote).forEach(it => {
+        const key = (it.place_name || it.title || (it.coords || '').join(','));
+        if (!seen.has(key)) { seen.add(key); merged.push(it); }
+    });
+    renderSuggestions(merged);
+}, 220);
+
+// wire input events for suggestions
+addressInput.addEventListener('input', (e) => {
+    debouncedSuggest(addressInput.value || '');
+});
+
+addressInput.addEventListener('keydown', (e) => {
+    const rows = suggestions.querySelectorAll('.suggestion-row');
+    if (!rows || rows.length === 0) return;
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const next = (suggestionSelected + 1) < rows.length ? suggestionSelected + 1 : 0;
+        highlightSuggestion(next);
+        rows[next].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prev = (suggestionSelected - 1) >= 0 ? suggestionSelected - 1 : (rows.length - 1);
+        highlightSuggestion(prev);
+        rows[prev].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (suggestionSelected >= 0 && suggestionSelected < suggestionItems.length) {
+            selectSuggestion(suggestionItems[suggestionSelected]);
+        } else if (suggestionItems.length === 1) {
+            selectSuggestion(suggestionItems[0]);
+        } else {
+            // fallback to existing flow: try parse or geocode first result
+            const txt = (addressInput.value || '').trim();
+            (async () => {
+                let coords = tryParseLngLat(txt);
+                if (!coords) {
+                    const remote = await forwardGeocode(txt);
+                    coords = remote;
+                }
+                if (coords) {
+                    map.flyTo({ center: coords, zoom: 18, essential: true });
+                    clearAddressMarker();
+                    addressMarker = new mapboxgl.Marker({ color: '#ff6a00' }).setLngLat(coords).addTo(map);
+                } else {
+                    alert('Location not found');
+                }
+            })();
+        }
+    } else if (e.key === 'Escape') {
+        suggestions.classList.add('hidden');
+    }
+});
+
+
+// helper: parse lng,lat input (lng first) or fallback to geocoding
+function tryParseLngLat(text) {
+    const parts = text.split(',').map(s => s.trim());
+    if (parts.length === 2) {
+        const lng = Number(parts[0]);
+        const lat = Number(parts[1]);
+        if (!Number.isNaN(lat) && !Number.isNaN(lng)) return [lng, lat];
+    }
+    return null;
+}
+
+async function forwardGeocode(query) {
+    try {
+        const token = mapboxgl.accessToken;
+        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&limit=1`;
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const j = await res.json();
+        if (j && j.features && j.features.length) {
+            const f = j.features[0];
+            return [f.center[0], f.center[1]];
+        }
+    } catch (e) { console.warn('Geocode failed', e); }
+    return null;
+}
+
+addressGo.addEventListener('click', async () => {
+    const txt = (addressInput.value || '').trim();
+    if (!txt) return;
+    // try parse coords first (expect lng,lat)
+    let coords = tryParseLngLat(txt);
+    if (!coords) coords = await forwardGeocode(txt);
+    if (!coords) return alert('Location not found');
+    // fly to location
+    map.flyTo({ center: coords, zoom: 18, essential: true });
+    clearAddressMarker();
+    // add a temporary marker
+    addressMarker = new mapboxgl.Marker({ color: '#ff6a00' }).setLngLat(coords).addTo(map);
+});
+
+// --- Image placement + persistence using IndexedDB ---
+// Add hidden file input and wire Add image button
+const addImageBtn = document.getElementById('add-image-btn');
+const fileInput = document.createElement('input');
+fileInput.type = 'file';
+fileInput.accept = 'image/*';
+fileInput.style.display = 'none';
+document.body.appendChild(fileInput);
+
+// IndexedDB helpers
+const DB_NAME = 'map_images_db';
+const DB_STORE = 'images_v1';
+function openDb() {
+    return new Promise((resolve, reject) => {
+        const r = indexedDB.open(DB_NAME, 1);
+        r.onupgradeneeded = () => {
+            const db = r.result;
+            if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE, { keyPath: 'id' });
+        };
+        r.onsuccess = () => resolve(r.result);
+        r.onerror = () => reject(r.error);
+    });
+}
+
+async function saveImageRecord(rec) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readwrite');
+        const store = tx.objectStore(DB_STORE);
+        const req = store.put(rec);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function deleteImageRecord(id) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readwrite');
+        const store = tx.objectStore(DB_STORE);
+        const req = store.delete(id);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function listImageRecords() {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, 'readonly');
+        const store = tx.objectStore(DB_STORE);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+// UI state for placing an image
+let pendingImageDataUrl = null;
+
+if (addImageBtn) addImageBtn.addEventListener('click', () => { fileInput.click(); });
+
+// also allow adding images from the Draw panel
+try {
+    const drawAddImageBtn = document.getElementById('draw-add-image');
+    if (drawAddImageBtn) drawAddImageBtn.addEventListener('click', () => { fileInput.click(); });
+} catch (e) { /* ignore */ }
+
+fileInput.addEventListener('change', async (ev) => {
+    const f = ev.target.files && ev.target.files[0];
+    if (!f) return;
+    // read as data URL (suitable for small/medium images)
+    const reader = new FileReader();
+    reader.onload = () => {
+        pendingImageDataUrl = reader.result;
+        alert('Now click on the map to place the image');
+    };
+    reader.readAsDataURL(f);
+    // reset input
+    fileInput.value = '';
+});
+
+// place image on map when user clicks while pendingImageDataUrl set
+map.on('click', async (e) => {
+    if (!pendingImageDataUrl) return;
+    const lngLat = [e.lngLat.lng, e.lngLat.lat];
+    const id = 'img_' + Date.now();
+    // create marker element (thumbnail)
+    const img = document.createElement('img');
+    img.src = pendingImageDataUrl;
+    img.style.width = '120px';
+    img.style.height = '80px';
+    img.style.objectFit = 'cover';
+    img.style.borderRadius = '6px';
+
+    const marker = new mapboxgl.Marker({ element: img }).setLngLat(lngLat).addTo(map);
+
+    // popup with full image and delete button
+    const popupDiv = document.createElement('div');
+    const full = document.createElement('img');
+    full.src = pendingImageDataUrl;
+    full.style.maxWidth = '300px';
+    full.style.display = 'block';
+    full.style.marginBottom = '6px';
+    popupDiv.appendChild(full);
+    const delBtn = document.createElement('button');
+    delBtn.textContent = 'Remove image';
+    delBtn.className = 'btn secondary';
+    popupDiv.appendChild(delBtn);
+
+    const popup = new mapboxgl.Popup().setDOMContent(popupDiv).setMaxWidth('320px');
+    marker.setPopup(popup);
+
+    // save to IndexedDB
+    const rec = { id, dataUrl: pendingImageDataUrl, lng: lngLat[0], lat: lngLat[1], created: Date.now() };
+    try { await saveImageRecord(rec); } catch (e) { console.warn('Failed saving image to IndexedDB', e); }
+
+    // wire delete
+    delBtn.addEventListener('click', async () => {
+        try { await deleteImageRecord(id); marker.remove(); } catch (e) { console.warn(e); }
+    });
+
+    // clear pending
+    pendingImageDataUrl = null;
+});
+
+// load saved images on startup
+(async function restoreImages() {
+    try {
+        const rows = await listImageRecords();
+        for (const r of rows) {
+            try {
+                const img = document.createElement('img');
+                img.src = r.dataUrl;
+                img.style.width = '120px'; img.style.height = '80px'; img.style.objectFit = 'cover'; img.style.borderRadius = '6px';
+                const marker = new mapboxgl.Marker({ element: img }).setLngLat([r.lng, r.lat]).addTo(map);
+                const popupDiv = document.createElement('div');
+                const full = document.createElement('img'); full.src = r.dataUrl; full.style.maxWidth = '300px'; full.style.display = 'block'; full.style.marginBottom = '6px';
+                popupDiv.appendChild(full);
+                const delBtn = document.createElement('button'); delBtn.textContent = 'Remove image'; delBtn.className = 'btn secondary'; popupDiv.appendChild(delBtn);
+                const popup = new mapboxgl.Popup().setDOMContent(popupDiv).setMaxWidth('320px');
+                marker.setPopup(popup);
+                delBtn.addEventListener('click', async () => { try { await deleteImageRecord(r.id); marker.remove(); } catch (e) { console.warn(e); } });
+            } catch (e) { console.warn('Failed restoring image', e); }
+        }
+    } catch (e) { console.warn('Failed listing image records', e); }
+})();
+
+// capture map clicks for drawing (separate listener so we can short-circuit drawing behavior)
+map.on('click', (e) => {
+    // label placement takes priority if active
+    if (placingLabel) {
+    const coords = [e.lngLat.lng, e.lngLat.lat];
+    const txt = (drawLabelInput && drawLabelInput.value) ? drawLabelInput.value.trim() : '';
+    const feat = { type: 'Feature', geometry: { type: 'Point', coordinates: coords }, properties: { text: txt, color: selectedDrawColor, size: selectedTextSize } };
+        drawnFeatures.push(feat);
+        placingLabel = false;
+        if (drawPlaceLabelBtn) drawPlaceLabelBtn.textContent = 'Place';
+        // restore overlays
+        setOverlayBlocking(true);
+        try { saveDraws(); refreshDrawSource(); } catch (e) { console.warn('Failed to save label', e); }
+        return;
+    }
+    if (!drawing) return;
+    // add point to current draw (lng,lat)
+    const coords = [e.lngLat.lng, e.lngLat.lat];
+    if (!currentDraw) {
+        // default to LineString if not explicitly set
+        currentDraw = { type: 'Feature', geometry: { type: 'LineString', coordinates: [coords] }, properties: { color: selectedDrawColor } };
+    } else {
+        try {
+            const g = currentDraw.geometry;
+            if (g && g.type === 'Polygon') {
+                // ensure ring exists
+                if (!Array.isArray(g.coordinates) || !Array.isArray(g.coordinates[0])) g.coordinates = [[]];
+                g.coordinates[0].push(coords);
+            } else if (g && g.type === 'LineString') {
+                if (!Array.isArray(g.coordinates)) g.coordinates = [];
+                g.coordinates.push(coords);
+            } else {
+                // fallback
+                if (!Array.isArray(currentDraw.geometry.coordinates)) currentDraw.geometry.coordinates = [];
+                currentDraw.geometry.coordinates.push(coords);
+            }
+        } catch (e) { console.warn('Failed to append draw point', e); }
+    }
+    // update preview in drawnFeatures (not persisted until finish)
+    // create a shallow preview: combine drawnFeatures + currentDraw
+    try {
+        const preview = drawnFeatures.concat(currentDraw ? [currentDraw] : []);
+        ensureDrawSourceAndLayers();
+        if (map.getSource && map.getSource('draw-source')) {
+            map.getSource('draw-source').setData({ type: 'FeatureCollection', features: preview });
+        }
+    } catch (e) { console.warn('drawing click failed', e); }
+});
+
+// --- Right-stack layout handling: move action buttons into a stacked container on small screens ---
+(function setupRightStack() {
+    const STACK_ID = 'right-stack';
+    let stackElem = document.getElementById(STACK_ID);
+    const locate = document.getElementById('locate-btn');
+    const admin = document.getElementById('admin-btn');
+    const save = document.getElementById('save-btn');
+    // create stack container if missing
+    function ensureStack() {
+        stackElem = document.getElementById(STACK_ID) || document.createElement('div');
+        stackElem.id = STACK_ID;
+        document.body.appendChild(stackElem);
+        return stackElem;
+    }
+
+    function moveButtonsToStack() {
+        ensureStack();
+        // append in order: locate, admin, save
+        try { if (locate && !stackElem.contains(locate)) stackElem.appendChild(locate); } catch (e) {}
+        try { if (admin && !stackElem.contains(admin)) stackElem.appendChild(admin); } catch (e) {}
+        try { if (save && !stackElem.contains(save)) stackElem.appendChild(save); } catch (e) {}
+    }
+
+    function restoreButtons() {
+        try { if (locate) document.body.appendChild(locate); } catch (e) {}
+        try { if (admin) document.body.appendChild(admin); } catch (e) {}
+        try { if (save) document.body.appendChild(save); } catch (e) {}
+        // remove stack if empty
+        try { if (stackElem && stackElem.parentNode) stackElem.parentNode.removeChild(stackElem); } catch (e) {}
+    }
+
+    function refreshStackLayout() {
+        const isSmall = window.matchMedia && window.matchMedia('(max-width:640px)').matches;
+        if (isSmall) moveButtonsToStack(); else restoreButtons();
+    }
+
+    // run on load and resize
+    window.addEventListener('resize', refreshStackLayout);
+    setTimeout(refreshStackLayout, 50);
+})();
+</script>
+
+</body>
+<script>
+// --- Background location tracking and auto-save to admin states ---
+
+let autoSaveEnabled = false;
+let autoSaveIntervalId = null;
+const autoSaveBtn = document.getElementById('auto-save-btn');
+if (autoSaveBtn) {
+    function enableAutoSave() {
+        autoSaveEnabled = true;
+        autoSaveBtn.textContent = 'Auto-save ON';
+        autoSaveBtn.style.background = '#0077ff';
+        if (navigator.geolocation) {
+            autoTagLocationAndSave(); // run once immediately
+            autoSaveIntervalId = setInterval(() => {
+                navigator.geolocation.getCurrentPosition(
+                    autoTagLocationAndSave,
+                    (err) => { console.warn('Geolocation error for auto-tag', err); },
+                    { enableHighAccuracy: true, timeout: 10000 }
+                );
+            }, 10000);
+        }
+    }
+    function disableAutoSave() {
+        autoSaveEnabled = false;
+        autoSaveBtn.textContent = 'Auto-save OFF';
+        autoSaveBtn.style.background = '#6b7280';
+        if (autoSaveIntervalId !== null) {
+            clearInterval(autoSaveIntervalId);
+            autoSaveIntervalId = null;
+        }
+    }
+    autoSaveBtn.addEventListener('click', () => {
+        if (autoSaveEnabled) {
+            disableAutoSave();
+        } else {
+            enableAutoSave();
+        }
+    });
+    // Auto-save is OFF by default on page load
+    disableAutoSave();
+}
+
+async function autoTagLocationAndSave(pos) {
+    const lng = pos.coords.longitude;
+    const lat = pos.coords.latitude;
+    const accuracy = pos.coords.accuracy;
+    const markerId = 'auto-location-marker';
+    let marker = window[markerId];
+    if (marker) {
+        marker.setLngLat([lng, lat]);
+    } else {
+        marker = new mapboxgl.Marker({ color: '#0077ff' })
+            .setLngLat([lng, lat])
+            .addTo(map);
+        window[markerId] = marker;
+    }
+    let state = {};
+    try {
+        const data = serializePlacedModels();
+        state = {
+            mapCenter: map.getCenter(),
+            zoom: map.getZoom(),
+            pitch: map.getPitch(),
+            bearing: map.getBearing(),
+            models: data,
+            draws: drawnFeatures,
+            autoTaggedLocation: {
+                lng, lat, accuracy, timestamp: Date.now()
+            }
+        };
+        console.log('[AutoSave] Payload:', state);
+    } catch (e) {
+        console.warn('[AutoSave] Failed to serialize state for auto-save', e);
+    }
+    try {
+        if (typeof BACKEND_STATE_ENDPOINT !== 'string' || !BACKEND_STATE_ENDPOINT.length) {
+            console.warn('[AutoSave] No BACKEND_STATE_ENDPOINT configured for auto-save');
+            return;
+        }
+        const payload = {
+            state,
+            admin: true,
+            note: `Auto-tagged location at ${lng},${lat} (accuracy ${accuracy}m)`,
+            timestamp: Date.now()
+        };
+        console.log('[AutoSave] Sending POST to', BACKEND_STATE_ENDPOINT, payload);
+        const res = await fetch(BACKEND_STATE_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const text = await res.text();
+        if (!res.ok) {
+            console.warn('[AutoSave] Auto-save to admin states failed', text);
+        } else {
+            let json = null;
+            try { json = JSON.parse(text); } catch (e) {}
+            console.debug('[AutoSave] Success:', json || text);
+        }
+    } catch (e) {
+        console.warn('[AutoSave] Auto-save to admin states error', e);
+    }
+}
+</script>
+
+</body>
+</html>

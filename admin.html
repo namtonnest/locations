@@ -1,0 +1,341 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin — Saved Map States</title>
+  <style>
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:18px;background:#0f1724;color:#e6eef8}
+    .card{background:#0b1220;padding:16px;border-radius:8px;box-shadow:0 8px 24px rgba(2,6,23,.6);max-width:1100px;margin:12px auto}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.04);text-align:left;font-size:13px}
+    th{color:#9fb6c9;font-weight:600}
+    .muted{color:#9fb6c9}
+    .btn{background:#06b6d4;color:#071325;padding:6px 10px;border-radius:6px;border:none;cursor:pointer}
+    .small{font-size:12px;padding:4px 8px}
+    pre{background:#041018;padding:8px;border-radius:6px;overflow:auto;color:#dbeafe}
+    .row{display:flex;gap:8px;align-items:center}
+    input[type=text]{padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit}
+    .note{font-size:13px;color:#9fb6c9;margin-top:8px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Admin: Saved Map States</h2>
+    <div class="row">
+      <button id="refresh" class="btn">Refresh list</button>
+      <button id="deleteAll" class="btn" style="background:#ef4444;color:#fff">Delete All</button>
+      <label style="display:flex;align-items:center;gap:8px">
+        <input id="importFile" type="file" accept="application/json" style="display:none" />
+        <button id="importBtn" class="btn small">Import JSON</button>
+      </label>
+      <div style="flex:1"></div>
+      <input id="manualId" placeholder="Enter state id (8 chars)" type="text" />
+      <button id="fetchId" class="btn small">Fetch</button>
+    </div>
+    <div class="note">This page attempts to fetch a list of saved states from the server. If your backend does not expose a listing endpoint, paste a saved <code>state_id</code> above and click Fetch.</div>
+    <div id="status" class="note"></div>
+
+    <table id="results" style="display:none">
+      <thead>
+  <tr><th>Actions</th><th>ID</th><th>Name</th><th>Models</th><th>Draws</th><th>Center</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div id="detail" style="margin-top:12px"></div>
+  </div>
+
+  <script>
+    const BACKEND_STATE_ENDPOINT = 'https://locations-seven.vercel.app/api/state';
+
+    const statusEl = document.getElementById('status');
+    const resultsTbl = document.getElementById('results');
+    const tbody = resultsTbl.querySelector('tbody');
+    const detail = document.getElementById('detail');
+
+  // No admin token required
+    async function tryFetchList() {
+      statusEl.textContent = 'Looking for listing endpoints...';
+      // Add ?limit=10000 to endpoints that support query params
+      const candidates = [
+        BACKEND_STATE_ENDPOINT + '/list?limit=10000',
+        BACKEND_STATE_ENDPOINT + '/all?limit=10000',
+        BACKEND_STATE_ENDPOINT + '?limit=10000',
+        BACKEND_STATE_ENDPOINT + '/states?limit=10000',
+        BACKEND_STATE_ENDPOINT + '/list',
+        BACKEND_STATE_ENDPOINT + '/all',
+        BACKEND_STATE_ENDPOINT,
+        BACKEND_STATE_ENDPOINT + '/states'
+      ];
+      for (const url of candidates) {
+        try {
+          statusEl.textContent = 'Trying ' + url;
+          const res = await fetch(url, {
+            method: 'GET'
+          });
+          if (!res.ok) { continue; }
+          const text = await res.text();
+          console.log('[Admin] Raw response from', url, text);
+          let j;
+          try { j = JSON.parse(text); } catch (e) { j = text; }
+          // Accept either an array of ids, or array of full objects, or wrapper { states: [...] }
+          if (Array.isArray(j)) return { type: 'array', data: j, url };
+          if (Array.isArray(j.states)) return { type: 'array', data: j.states, url };
+          if (Array.isArray(j.items)) return { type: 'array', data: j.items, url };
+          // fallback: if object contains many keys, it might be a single state
+          if (j && j.state && (j.id || j._id)) return { type: 'single', data: j, url };
+        } catch (e) { /* ignore and try next */ }
+      }
+      return null;
+    }
+
+    async function fetchStateById(id) {
+      try {
+        const res = await fetch(BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id));
+        // Try to parse as JSON, but if it fails, show the raw text (for HTML error pages)
+        const txt = await res.text();
+        let parsed;
+        try {
+          parsed = JSON.parse(txt);
+        } catch (err) {
+          // If not JSON, return the raw text as an error
+          throw new Error('Non-JSON response: ' + txt);
+        }
+        if (!res.ok) throw new Error(parsed && parsed.error ? parsed.error : 'Not found');
+        return parsed;
+      } catch (e) { throw e; }
+    }
+
+    function renderTable(entries) {
+      // Filter out states with 0 models and 0 draws
+      const filtered = entries.filter(e => {
+        const state = e.state || e;
+        const models = state && state.models ? state.models.length : 0;
+        const draws = state && state.draws ? state.draws.length : 0;
+        return models > 0 || draws > 0;
+      });
+      tbody.innerHTML = '';
+      if (!filtered.length) {
+        resultsTbl.style.display = 'none';
+        statusEl.textContent = 'No entries found.';
+        return;
+      }
+      resultsTbl.style.display = '';
+      filtered.forEach(e => {
+        const tr = document.createElement('tr');
+        const id = e.id || e._id || (e.key || '');
+        const created = e.createdAt || e.created || '';
+        const state = e.state || e;
+        let displayName = '';
+        if (state && state.name) displayName = state.name;
+        else if (e && e.name) displayName = e.name;
+        else {
+          try {
+            const raw = localStorage.getItem('admin_known_state_names_v1');
+            const map = raw ? JSON.parse(raw) : {};
+            if (map && map[id]) displayName = map[id];
+          } catch (err) { displayName = ''; }
+        }
+        const models = state && state.models ? (state.models.length || 0) : (e.modelsCount || 0);
+        const draws = state && state.draws ? (state.draws.length || 0) : (e.drawsCount || 0);
+        const center = state && state.mapCenter ? (Array.isArray(state.mapCenter) ? state.mapCenter.join(',') : JSON.stringify(state.mapCenter)) : '';
+
+        tr.innerHTML = `<td><button class="btn small" data-id="${id}">Open</button> <button class="btn small" data-id="${id}" data-action="view">View JSON</button> <button class="btn small" data-id="${id}" data-action="delete" style="background:#ef4444;color:#fff">Delete</button></td><td><code>${id}</code></td><td>${escapeHtml(displayName)}</td><td>${models}</td><td>${draws}</td><td class="muted">${center}</td>`;
+        tbody.appendChild(tr);
+      });
+      // tiny helper to escape HTML when injecting displayName
+      function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/[&<>"']/g, function(m) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[m]; });
+      }
+      // wire buttons
+      tbody.querySelectorAll('button').forEach(b => b.addEventListener('click', async (ev) => {
+        const id = b.dataset.id;
+        const action = b.dataset.action;
+        if (!id) return;
+        if (action === 'view') {
+          try {
+            const j = await fetchStateById(id);
+            detail.innerHTML = `<h3>State ${id}</h3><pre>${JSON.stringify(j, null, 2)}</pre><div style="margin-top:8px"><button id="detail-delete" class="btn" style="background:#ef4444;color:#fff">Delete this state</button></div>`;
+            // wire delete in detail
+            document.getElementById('detail-delete').addEventListener('click', async () => {
+              if (!confirm('Delete state ' + id + '? This cannot be undone.')) return;
+              await deleteState(id);
+            });
+          } catch (e) { detail.innerHTML = '<div class="note">Failed to fetch: '+ e.message +'</div>'; }
+          return;
+        }
+        if (action === 'delete') {
+          if (!confirm('Delete state ' + id + '? This cannot be undone.')) return;
+          await deleteState(id);
+          return;
+        }
+  // Open in new tab using the main app page with state_id query param
+  // Compute the base path (strip the last path segment) and open the main map with the state_id
+  const base = location.pathname.replace(/[^/]*$/, '');
+  const target = location.origin + base + 'index.html?state_id=' + encodeURIComponent(id);
+  window.open(target, '_blank');
+      }));
+    }
+
+    async function refresh() {
+      detail.innerHTML = '';
+      statusEl.textContent = 'Refreshing...';
+      const found = await tryFetchList();
+      if (!found) {
+        statusEl.textContent = 'No listing endpoint found. Trying locally saved ids...';
+        // look for locally-saved ids added by the Save button
+        try {
+          const raw = localStorage.getItem('admin_known_state_ids_v1');
+          const list = raw ? JSON.parse(raw) : [];
+          if (list && list.length) {
+            const rows = [];
+            for (const id of list) {
+              try {
+                const res = await fetchStateById(id);
+                rows.push({ id, state: res && res.state ? res.state : res });
+              } catch (e) { rows.push({ id, error: true }); }
+            }
+            renderTable(rows);
+            statusEl.textContent = 'Loaded ' + rows.length + ' locally-saved entries.';
+            return;
+          }
+        } catch (e) { /* ignore */ }
+        statusEl.textContent = 'No listing endpoint found. Use manual fetch by ID.';
+        return;
+      }
+      statusEl.textContent = 'Parsing list from ' + found.url;
+      let items = found.data;
+      // If items are simple ids, fetch each
+      if (items.length && typeof items[0] === 'string') {
+        const rows = [];
+        statusEl.textContent = 'Fetching ' + items.length + ' states...';
+        await Promise.all(items.map(async (id) => {
+          try {
+            const res = await fetchStateById(id);
+            const obj = res && res.state ? Object.assign({ id }, res.state) : Object.assign({ id }, res);
+            rows.push({ id, state: obj });
+          } catch (e) { rows.push({ id, error: true }); }
+        }));
+        renderTable(rows);
+        statusEl.textContent = 'Loaded ' + rows.length + ' entries.';
+        return;
+      }
+      // If items are objects that may include state or metrics
+      const normalized = items.map(it => {
+        if (it && (it.state || it.models || it.draws)) return it;
+        // if wrapper like { id, state }
+        if (it && it.id && it.state) return Object.assign({ id: it.id }, it);
+        return it;
+      });
+      renderTable(normalized);
+      statusEl.textContent = 'Loaded ' + normalized.length + ' entries.';
+    }
+
+    // helper to remove id from localStorage known list
+    function removeLocalKnownId(id) {
+      try {
+        const key = 'admin_known_state_ids_v1';
+        const raw = localStorage.getItem(key);
+        if (!raw) return;
+        let arr = [];
+        try { arr = JSON.parse(raw); } catch (e) { arr = []; }
+        arr = arr.filter(x => x !== id);
+        localStorage.setItem(key, JSON.stringify(arr));
+      } catch (e) { /* ignore */ }
+    }
+
+    async function deleteState(id) {
+      try {
+        statusEl.textContent = 'Deleting ' + id + '...';
+        const res = await fetch(BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error('Delete failed: ' + res.status + ' ' + txt);
+        }
+        // remove from local known ids too
+        removeLocalKnownId(id);
+        statusEl.textContent = 'Deleted ' + id;
+        // refresh list
+        await refresh();
+        detail.innerHTML = '';
+      } catch (e) {
+        statusEl.textContent = 'Delete failed: ' + (e && e.message);
+        alert('Delete failed: ' + (e && e.message));
+      }
+    }
+
+    document.getElementById('refresh').addEventListener('click', refresh);
+    document.getElementById('deleteAll').addEventListener('click', async () => {
+      if (!tbody || !tbody.children.length) { alert('No entries to delete.'); return; }
+      if (!confirm('Delete ALL listed states? This cannot be undone.')) return;
+      // Gather all ids from the current table
+      const ids = Array.from(tbody.children).map(tr => {
+        const btn = tr.querySelector('button[data-id]');
+        return btn ? btn.getAttribute('data-id') : null;
+      }).filter(Boolean);
+      statusEl.textContent = 'Deleting ' + ids.length + ' states...';
+      for (const id of ids) {
+        try {
+          await deleteState(id);
+        } catch (e) {
+          console.warn('Failed to delete', id, e);
+        }
+      }
+      statusEl.textContent = 'Delete all finished.';
+      await refresh();
+    });
+    document.getElementById('fetchId').addEventListener('click', async () => {
+      const id = document.getElementById('manualId').value.trim();
+      if (!id) { statusEl.textContent = 'Enter an id first'; return; }
+      statusEl.textContent = 'Fetching ' + id + '...';
+      try {
+        const res = await fetchStateById(id);
+        detail.innerHTML = `<h3>State ${id}</h3><pre>${JSON.stringify(res, null, 2)}</pre>`;
+        statusEl.textContent = 'Fetched ' + id;
+      } catch (e) { statusEl.textContent = 'Failed to fetch: ' + e.message; detail.innerHTML = ''; }
+    });
+
+    // Import JSON file (single state or array of states) and POST to backend
+    const importFile = document.getElementById('importFile');
+    const importBtn = document.getElementById('importBtn');
+    importBtn.addEventListener('click', () => importFile.click());
+    importFile.addEventListener('change', async (ev) => {
+      const f = ev.target.files && ev.target.files[0];
+      if (!f) return;
+      try {
+        statusEl.textContent = 'Reading file...';
+        const txt = await f.text();
+        const parsed = JSON.parse(txt);
+        const items = Array.isArray(parsed) ? parsed : [parsed];
+        statusEl.textContent = 'Importing ' + items.length + ' states...';
+        const results = [];
+        for (const s of items) {
+          try {
+            const payload = { state: s };
+            const res = await fetch(BACKEND_STATE_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!res.ok) { results.push({ ok: false, error: 'HTTP ' + res.status }); continue; }
+            const j = await res.json();
+            const id = j && j.id;
+            if (id) {
+              // save locally for admin fallback
+              try { const key = 'admin_known_state_ids_v1'; const raw = localStorage.getItem(key); let arr = raw ? JSON.parse(raw) : []; if (!arr.includes(id)) { arr.unshift(id); localStorage.setItem(key, JSON.stringify(arr)); } } catch (e) {}
+              results.push({ ok: true, id });
+            } else {
+              results.push({ ok: false, error: 'No id returned' });
+            }
+          } catch (e) { results.push({ ok: false, error: e && e.message }); }
+        }
+        detail.innerHTML = '<h3>Import results</h3><pre>' + JSON.stringify(results, null, 2) + '</pre>';
+        statusEl.textContent = 'Import finished';
+        await refresh();
+      } catch (e) { statusEl.textContent = 'Import failed: ' + (e && e.message); alert('Import failed: ' + (e && e.message)); }
+      importFile.value = '';
+    });
+
+    // auto-refresh on load
+    refresh();
+  </script>
+</body>
+</html>
