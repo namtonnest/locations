@@ -24,15 +24,21 @@
     <button id="saveMapBtn" class="btn" style="margin-top:16px;display:none">Save Map as Image</button>
   </div>
   <div id="map" style="display:none"></div>
+  <div class="card" style="margin-top:24px;max-width:600px;">
+    <h3>Tracked Points Log</h3>
+    <ul id="pointsLog" style="max-height:220px;overflow:auto;background:#071325;color:#e6eef8;padding:12px;border-radius:8px;font-size:13px"></ul>
+  </div>
   <script>
     mapboxgl.accessToken = "pk.eyJ1IjoicHVycGhhY3RzIiwiYSI6ImNsdzY1bzVvNzFwb3IyamxyOG1vY3oyM2gifQ.2LikTeWKwlWsAcEneBXW0Q";
-    let map, marker;
-    let employeeName = '';
-    let pathCoords = [];
-    let pathLine = null;
-    let markers = [];
+  let map, marker;
+  let employeeName = '';
+  let pathCoords = [];
+  let pathLine = null;
+  let markers = [];
+  let pointsLog = [];
 
     document.getElementById('signInBtn').addEventListener('click', () => {
+  const logEl = document.getElementById('pointsLog');
       const name = document.getElementById('employeeName').value.trim();
       if (!name) {
         document.getElementById('status').textContent = 'Please enter your name.';
@@ -47,6 +53,7 @@
         return;
       }
       navigator.geolocation.watchPosition(pos => {
+  const timestamp = new Date(pos.timestamp).toLocaleTimeString();
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         if (!map) {
@@ -63,6 +70,14 @@
           .addTo(map);
         markers.push(newMarker);
         pathCoords.push([lng, lat]);
+        // Add to log
+        pointsLog.push({ lat, lng, timestamp });
+        if (logEl) {
+          const li = document.createElement('li');
+          li.textContent = `#${pointsLog.length}: ${lat.toFixed(6)}, ${lng.toFixed(6)} @ ${timestamp}`;
+          logEl.appendChild(li);
+          logEl.scrollTop = logEl.scrollHeight;
+        }
         // Draw path line
         if (pathLine) {
           map.removeLayer('employee-path');
