@@ -21,12 +21,17 @@
     <input id="employeeName" type="text" placeholder="Enter your name" />
     <button id="signInBtn" class="btn">Sign In & Track Location</button>
     <div id="status" class="note"></div>
+    <button id="saveMapBtn" class="btn" style="margin-top:16px;display:none">Save Map as Image</button>
   </div>
   <div id="map" style="display:none"></div>
   <script>
     mapboxgl.accessToken = "pk.eyJ1IjoicHVycGhhY3RzIiwiYSI6ImNsdzY1bzVvNzFwb3IyamxyOG1vY3oyM2gifQ.2LikTeWKwlWsAcEneBXW0Q";
     let map, marker;
     let employeeName = '';
+    let pathCoords = [];
+    let pathLine = null;
+    let markers = [];
+
     document.getElementById('signInBtn').addEventListener('click', () => {
       const name = document.getElementById('employeeName').value.trim();
       if (!name) {
@@ -36,6 +41,7 @@
       employeeName = name;
       document.getElementById('status').textContent = 'Signed in as ' + employeeName + '. Tracking location...';
       document.getElementById('map').style.display = 'block';
+      document.getElementById('saveMapBtn').style.display = 'inline-block';
       if (!navigator.geolocation) {
         document.getElementById('status').textContent = 'Geolocation not supported.';
         return;
@@ -51,17 +57,54 @@
             zoom: 16
           });
         }
-        if (!marker) {
-          marker = new mapboxgl.Marker({ color: '#06b6d4' })
-            .setLngLat([lng, lat])
-            .addTo(map);
-        } else {
-          marker.setLngLat([lng, lat]);
+        // Add marker for each new position
+        const newMarker = new mapboxgl.Marker({ color: '#06b6d4' })
+          .setLngLat([lng, lat])
+          .addTo(map);
+        markers.push(newMarker);
+        pathCoords.push([lng, lat]);
+        // Draw path line
+        if (pathLine) {
+          map.removeLayer('employee-path');
+          map.removeSource('employee-path');
         }
+        map.addSource('employee-path', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: pathCoords
+            }
+          }
+        });
+        map.addLayer({
+          id: 'employee-path',
+          type: 'line',
+          source: 'employee-path',
+          layout: {},
+          paint: {
+            'line-color': '#ef4444',
+            'line-width': 4
+          }
+        });
+        pathLine = true;
         map.setCenter([lng, lat]);
       }, err => {
         document.getElementById('status').textContent = 'Error: ' + err.message;
       }, { enableHighAccuracy: true });
+    });
+
+    // Save map as image
+    document.getElementById('saveMapBtn').addEventListener('click', () => {
+      if (!map) return;
+      const canvas = map.getCanvas();
+      const image = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = image;
+      link.download = 'employee-path.png';
+      link.click();
+      // For PDF export, you can use jsPDF or similar libraries if needed
     });
   </script>
 </body>
