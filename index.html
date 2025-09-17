@@ -343,34 +343,39 @@
 
         // --- Employee location markers ---
         const EMPLOYEE_LOCATION_ENDPOINT = '/api/employee-location';
-        let employeeMarkers = [];
+        let employeeMarkers = {};
 
         async function fetchAndDisplayEmployeeLocations() {
-            // Remove old markers
-            employeeMarkers.forEach(m => { try { m.remove(); } catch (e) {} });
-            employeeMarkers = [];
             try {
                 const res = await fetch(EMPLOYEE_LOCATION_ENDPOINT);
-                if (!res.ok) throw new Error('Failed to fetch employee locations');
+                if (!res.ok) return;
                 const data = await res.json();
                 const locations = data.locations || [];
-                locations.forEach(emp => {
-                    if (typeof emp.lat === 'number' && typeof emp.lng === 'number') {
-                        const marker = new mapboxgl.Marker({ color: '#16a34a' })
-                            .setLngLat([emp.lng, emp.lat])
-                            .setPopup(new mapboxgl.Popup().setText(`${emp.name} @ ${new Date(emp.timestamp).toLocaleTimeString()}`))
-                            .addTo(map);
-                        employeeMarkers.push(marker);
-                    }
+                // Remove old markers
+                Object.values(employeeMarkers).forEach(marker => { try { marker.remove(); } catch (e) {} });
+                employeeMarkers = {};
+                // Add new markers
+                locations.forEach(loc => {
+                    if (typeof loc.lat !== 'number' || typeof loc.lng !== 'number') return;
+                    const el = document.createElement('div');
+                    el.style.background = '#06b6d4';
+                    el.style.color = '#fff';
+                    el.style.padding = '4px 8px';
+                    el.style.borderRadius = '6px';
+                    el.style.fontWeight = '600';
+                    el.style.fontSize = '13px';
+                    el.textContent = loc.name || 'Employee';
+                    const marker = new mapboxgl.Marker({ element: el })
+                        .setLngLat([loc.lng, loc.lat])
+                        .addTo(map);
+                    employeeMarkers[loc.name || Math.random()] = marker;
                 });
-            } catch (e) {
-                console.warn('Error displaying employee locations:', e);
-            }
+            } catch (e) { /* ignore */ }
         }
 
-        // Initial fetch and periodic update every 10 minutes
+        // Initial fetch and periodic refresh every minute
         fetchAndDisplayEmployeeLocations();
-        setInterval(fetchAndDisplayEmployeeLocations, 10 * 60 * 1000);
+        setInterval(fetchAndDisplayEmployeeLocations, 60 * 1000);
     const map = new mapboxgl.Map({
         container: 'map',
     // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
