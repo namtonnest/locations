@@ -21,8 +21,15 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true });
   }
   if (req.method === 'GET') {
-    // Return all tracked locations
-    return res.status(200).json({ locations });
+      // Return only the latest position for each employee
+      const latest = {};
+      for (const loc of locations) {
+        if (!loc.name) continue;
+        if (!latest[loc.name] || new Date(loc.timestamp) > new Date(latest[loc.name].timestamp)) {
+          latest[loc.name] = loc;
+        }
+      }
+      return res.status(200).json({ locations: Object.values(latest) });
   }
   res.status(405).json({ error: 'Method not allowed' });
 }
