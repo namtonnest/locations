@@ -426,6 +426,70 @@
         } catch (e) { console.warn('Failed to add 3D buildings layer', e); }
     });
 
+    // Drag & drop preview: show a thumbnail marker while dragging a library item over the map
+    (function enableMapDragPreview(){
+        try {
+            let dragPreviewMarker = null;
+            function removeDragPreview() {
+                if (dragPreviewMarker) {
+                    try { dragPreviewMarker.remove(); } catch (e) {}
+                    dragPreviewMarker = null;
+                }
+            }
+            const canvasContainer = map.getCanvasContainer && map.getCanvasContainer();
+            if (!canvasContainer) return;
+            canvasContainer.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                const url = window.__draggingModelUrl || (e.dataTransfer && e.dataTransfer.getData && e.dataTransfer.getData('text/plain'));
+                if (!url) return;
+                const rect = canvasContainer.getBoundingClientRect();
+                const point = [e.clientX - rect.left, e.clientY - rect.top];
+                const lngLat = map.unproject(point);
+                if (!dragPreviewMarker) {
+                    const el = document.createElement('div');
+                    el.style.pointerEvents = 'none';
+                    el.style.width = '64px'; el.style.height = '64px';
+                    const img = document.createElement('img');
+                    img.src = window.__draggingThumb || '';
+                    img.style.width = '64px'; img.style.height = '64px'; img.style.borderRadius = '6px'; img.style.opacity = '0.95';
+                    el.appendChild(img);
+                    dragPreviewMarker = new mapboxgl.Marker({ element: el, anchor: 'bottom' }).setLngLat(lngLat).addTo(map);
+                } else {
+                    try { dragPreviewMarker.setLngLat(lngLat); } catch (e) {}
+                }
+            });
+            canvasContainer.addEventListener('dragleave', (e) => { removeDragPreview(); });
+            canvasContainer.addEventListener('drop', (e) => {
+                try {
+                    e.preventDefault();
+                    const rect = canvasContainer.getBoundingClientRect();
+                    const point = [e.clientX - rect.left, e.clientY - rect.top];
+                    const lngLat = map.unproject(point);
+                    const url = window.__draggingModelUrl || (e.dataTransfer && e.dataTransfer.getData && e.dataTransfer.getData('text/plain'));
+                    removeDragPreview();
+                    try { window.__draggingModelUrl = null; window.__draggingThumb = null; } catch (e) {}
+                    if (!url) return;
+                    // create transform and load model (same as click placement)
+                    const modelAsMercatorCoordinate = mapboxgl.MercatorCoordinate.fromLngLat(lngLat, 0);
+                    const transform = {
+                        translateX: modelAsMercatorCoordinate.x,
+                        translateY: modelAsMercatorCoordinate.y,
+                        translateZ: modelAsMercatorCoordinate.z,
+                        rotateX: Math.PI / 2,
+                        rotateY: 0,
+                        rotateZ: 0,
+                        scale: modelAsMercatorCoordinate.meterInMercatorCoordinateUnits() * (modelScaleOverride || 1)
+                    };
+                    const rawUrl = githubBlobToRaw(url);
+                    if (modelLayerRef && modelLayerRef.loadModel) {
+                        modelLayerRef.loadModel(encodeURI(rawUrl), transform, [lngLat[0], lngLat[1], 0]);
+                        if (map && map.triggerRepaint) map.triggerRepaint();
+                    }
+                } catch (err) { console.warn('Drop handling failed', err); }
+            });
+        } catch (e) { console.warn('Drag preview init failed', e); }
+    })();
+
     // Backend endpoint that stores state and returns an 8-character id.
     // Deploy the server code (README in repo) and set this to your deployed URL, e.g.
     // const BACKEND_STATE_ENDPOINT = 'https://your-deployment.example.com/api/state';
@@ -699,6 +763,22 @@
             const thumbImg = document.createElement('img');
             thumbImg.className = 'thumb';
             thumbImg.alt = item.name || 'model';
+            // allow drag-and-drop from the library onto the map for preview placement
+            try {
+                thumbImg.draggable = true;
+                thumbImg.addEventListener('dragstart', (ev) => {
+                    try {
+                        window.__draggingModelUrl = item.url;
+                        window.__draggingThumb = thumbImg.src || '';
+                        ev.dataTransfer.setData('text/plain', item.url);
+                        // use the thumbnail as the drag image when possible
+                        const dragImg = new Image(); dragImg.src = thumbImg.src || ''; ev.dataTransfer.setDragImage(dragImg, 24, 24);
+                    } catch (e) { /* ignore */ }
+                });
+                thumbImg.addEventListener('dragend', () => {
+                    try { window.__draggingModelUrl = null; window.__draggingThumb = null; } catch (e) {}
+                });
+            } catch (e) { /* ignore */ }
             // if cached thumb available, show it; otherwise start generation and use fallback
             if (thumbCache[item.url]) {
                 thumbImg.src = thumbCache[item.url];
