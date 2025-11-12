@@ -87,13 +87,18 @@
                 }
               }
               if (!adminMap.getLayer('3d-buildings')) {
+                const show = (localStorage.getItem('show_3d_buildings') === '1');
                 adminMap.addLayer({
                   id: '3d-buildings',
                   source: 'composite',
                   'source-layer': 'building',
                   filter: ['==', 'extrude', 'true'],
                   type: 'fill-extrusion',
-                  minzoom: 15,
+                  // lower minzoom so buildings show earlier on admin map
+                  minzoom: 12,
+                  layout: {
+                    visibility: show ? 'visible' : 'none'
+                  },
                   paint: {
                     'fill-extrusion-color': '#aaa',
                     'fill-extrusion-height': ['coalesce', ['get', 'height'], 0],
@@ -101,10 +106,13 @@
                     'fill-extrusion-opacity': 0.6
                   }
                 }, labelLayerId);
+                console.debug && console.debug('admin: 3d-buildings layer added, visible=', show);
               }
             } catch (e) { console.warn('Failed to add 3D buildings to admin map', e); }
           });
       }
+  // nudge camera to a pitched view so extrusions are visible
+  try { adminMap.jumpTo({ pitch: 45 }); } catch (e) {}
       async function fetchAndShowEmployees() {
         try {
           const res = await fetch(EMPLOYEE_LOCATION_ENDPOINT);
