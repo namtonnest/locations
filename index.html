@@ -946,6 +946,56 @@
     controlsToggle.style.marginTop = '6px';
     leftColumn.appendChild(controlsToggle);
 
+    // Small 3D toggle button under the Save button (top-right)
+    (function add3DToggleButton(){
+        try {
+            const btn = document.createElement('button');
+            btn.id = 'toggle-3d-btn';
+            btn.type = 'button';
+            btn.className = 'btn secondary';
+            btn.textContent = '3D';
+            btn.title = 'Toggle 3D buildings';
+            // position under the Save button (which is at top:96px)
+            btn.style.position = 'absolute';
+            btn.style.top = '136px';
+            btn.style.right = '12px';
+            btn.style.zIndex = '30';
+            btn.style.width = '36px';
+            btn.style.height = '36px';
+            btn.style.display = 'flex';
+            btn.style.alignItems = 'center';
+            btn.style.justifyContent = 'center';
+            btn.style.padding = '6px';
+            document.body.appendChild(btn);
+            // state persisted in localStorage
+            window.__show3DBuildings = (localStorage.getItem('show_3d_buildings') === '1');
+            function update3DButtonVisual() {
+                if (!btn) return;
+                if (window.__show3DBuildings) {
+                    btn.style.background = '#06b6d4';
+                    btn.style.color = '#071325';
+                } else {
+                    btn.style.background = '';
+                    btn.style.color = '';
+                }
+            }
+            btn.addEventListener('click', () => {
+                window.__show3DBuildings = !window.__show3DBuildings;
+                localStorage.setItem('show_3d_buildings', window.__show3DBuildings ? '1' : '0');
+                // apply immediately if layer exists
+                try {
+                    if (map && map.getLayer && map.getLayer('3d-buildings')) {
+                        map.setLayoutProperty('3d-buildings', 'visibility', window.__show3DBuildings ? 'visible' : 'none');
+                        // trigger repaint
+                        if (map && map.triggerRepaint) map.triggerRepaint();
+                    }
+                } catch (e) { console.warn('Toggling 3d-buildings failed', e); }
+                update3DButtonVisual();
+            });
+            update3DButtonVisual();
+        } catch (e) { console.warn('Failed to create 3D toggle button', e); }
+    })();
+
     // style menu (hamburger) population and wiring
     try {
         const styles = [
