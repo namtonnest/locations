@@ -392,6 +392,36 @@
         antialias: true // create the gl context with MSAA antialiasing, so custom layers are antialiased
     });
 
+    // Add 3D buildings layer when the style is loaded (insert beneath labels)
+    map.on('style.load', () => {
+        try {
+            const layers = map.getStyle().layers || [];
+            let labelLayerId = null;
+            for (let i = 0; i < layers.length; i++) {
+                if (layers[i].type === 'symbol' && layers[i].layout && layers[i].layout['text-field']) {
+                    labelLayerId = layers[i].id;
+                    break;
+                }
+            }
+            if (!map.getLayer('3d-buildings')) {
+                map.addLayer({
+                    id: '3d-buildings',
+                    source: 'composite',
+                    'source-layer': 'building',
+                    filter: ['==', 'extrude', 'true'],
+                    type: 'fill-extrusion',
+                    minzoom: 15,
+                    paint: {
+                        'fill-extrusion-color': '#aaa',
+                        'fill-extrusion-height': ['coalesce', ['get', 'height'], 0],
+                        'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
+                        'fill-extrusion-opacity': 0.6
+                    }
+                }, labelLayerId);
+            }
+        } catch (e) { console.warn('Failed to add 3D buildings layer', e); }
+    });
+
     // Backend endpoint that stores state and returns an 8-character id.
     // Deploy the server code (README in repo) and set this to your deployed URL, e.g.
     // const BACKEND_STATE_ENDPOINT = 'https://your-deployment.example.com/api/state';

@@ -74,6 +74,36 @@
           center: [-79.3875, 43.6426],
           zoom: 14
         });
+          // Add 3D buildings layer when the style is loaded (works across style changes)
+          adminMap.on('style.load', () => {
+            try {
+              // find the first symbol layer to insert the 3D layer beneath labels
+              const layers = adminMap.getStyle().layers || [];
+              let labelLayerId = null;
+              for (let i = 0; i < layers.length; i++) {
+                if (layers[i].type === 'symbol' && layers[i].layout && layers[i].layout['text-field']) {
+                  labelLayerId = layers[i].id;
+                  break;
+                }
+              }
+              if (!adminMap.getLayer('3d-buildings')) {
+                adminMap.addLayer({
+                  id: '3d-buildings',
+                  source: 'composite',
+                  'source-layer': 'building',
+                  filter: ['==', 'extrude', 'true'],
+                  type: 'fill-extrusion',
+                  minzoom: 15,
+                  paint: {
+                    'fill-extrusion-color': '#aaa',
+                    'fill-extrusion-height': ['coalesce', ['get', 'height'], 0],
+                    'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
+                    'fill-extrusion-opacity': 0.6
+                  }
+                }, labelLayerId);
+              }
+            } catch (e) { console.warn('Failed to add 3D buildings to admin map', e); }
+          });
       }
       async function fetchAndShowEmployees() {
         try {
