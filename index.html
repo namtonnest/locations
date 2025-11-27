@@ -404,21 +404,22 @@
                 }
             }
             if (!map.getLayer('3d-buildings')) {
-                const show = (localStorage.getItem('show_3d_buildings') === '1');
+                // Default to visible (enable by default)
+                const show = localStorage.getItem('show_3d_buildings') !== '0';
                 map.addLayer({
                     id: '3d-buildings',
                     source: 'composite',
                     'source-layer': 'building',
                     filter: ['==', 'extrude', 'true'],
                     type: 'fill-extrusion',
-                    // lower minzoom slightly so buildings are visible earlier
-                    minzoom: 12,
-                    layout: { visibility: show ? 'visible' : 'none' },
+                    // lower minzoom so buildings show at most zoom levels
+                    minzoom: 10,
+                    layout: { visibility: 'visible' },
                     paint: {
-                        'fill-extrusion-color': '#aaa',
-                        'fill-extrusion-height': ['coalesce', ['get', 'height'], 0],
+                        'fill-extrusion-color': '#888',
+                        'fill-extrusion-height': ['coalesce', ['get', 'height'], 5],
                         'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
-                        'fill-extrusion-opacity': 0.6
+                        'fill-extrusion-opacity': 0.9
                     }
                 }, labelLayerId);
                 console.debug && console.debug('index: 3d-buildings layer added, visible=', show);
@@ -1051,8 +1052,13 @@
             btn.style.justifyContent = 'center';
             btn.style.padding = '6px';
             document.body.appendChild(btn);
-            // state persisted in localStorage
-            window.__show3DBuildings = (localStorage.getItem('show_3d_buildings') === '1');
+            // state persisted in localStorage (default to enabled)
+            window.__show3DBuildings = localStorage.getItem('show_3d_buildings') !== '0';
+            // Force enable if not set
+            if (localStorage.getItem('show_3d_buildings') === null) {
+                window.__show3DBuildings = true;
+                localStorage.setItem('show_3d_buildings', '1');
+            }
             function update3DButtonVisual() {
                 if (!btn) return;
                 if (window.__show3DBuildings) {

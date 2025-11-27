@@ -87,7 +87,6 @@
                 }
               }
               if (!adminMap.getLayer('3d-buildings')) {
-                const show = (localStorage.getItem('show_3d_buildings') === '1');
                 adminMap.addLayer({
                   id: '3d-buildings',
                   source: 'composite',
@@ -95,18 +94,18 @@
                   filter: ['==', 'extrude', 'true'],
                   type: 'fill-extrusion',
                   // lower minzoom so buildings show earlier on admin map
-                  minzoom: 12,
+                  minzoom: 10,
                   layout: {
-                    visibility: show ? 'visible' : 'none'
+                    visibility: 'visible'
                   },
                   paint: {
-                    'fill-extrusion-color': '#aaa',
-                    'fill-extrusion-height': ['coalesce', ['get', 'height'], 0],
+                    'fill-extrusion-color': '#666',
+                    'fill-extrusion-height': ['coalesce', ['get', 'height'], 8],
                     'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
-                    'fill-extrusion-opacity': 0.6
+                    'fill-extrusion-opacity': 0.85
                   }
                 }, labelLayerId);
-                console.debug && console.debug('admin: 3d-buildings layer added, visible=', show);
+                console.debug && console.debug('admin: 3d-buildings layer added, always visible');
               }
             } catch (e) { console.warn('Failed to add 3D buildings to admin map', e); }
           });
