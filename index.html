@@ -325,7 +325,7 @@
     <!-- populated by JS -->
 </div>
 
-<div id="map-note">Click on the map to place the model, or click the button again to cancel.</div>
+<div id="map-note">Click on the map to place the model, or click the button again to cancel.<br><small>Alt+click+drag a model to rotate | Ctrl+click+drag to move</small></div>
 <div id="map"></div>
 <!-- Model library panel -->
 <div id="library" aria-hidden="true">
@@ -2636,12 +2636,66 @@
         return url;
     }
 
+    // Variables for interactive model manipulation
+    let isDragging = false;
+    let dragMode = null; // 'rotate' or 'move'
+    let dragStartMouse = null;
+    let dragStartValue = null;
+    let dragModelId = null;
+
     // support clicking on the map to place the model when in placingModel mode
     map.on('click', async (e) => {
         const lngLat = [e.lngLat.lng, e.lngLat.lat];
 
         if (!placingModel) {
-            // selection flow: find nearest placed model to click and select it
+            // Check for Alt+click (rotation) or Ctrl+click (movement)
+            const isAlt = e.originalEvent && e.originalEvent.altKey;
+            const isCtrl = e.originalEvent && e.originalEvent.ctrlKey;
+            
+            if (isAlt || isCtrl) {
+                // Find the clicked model
+                if (placedModels.length) {
+                    const clicked = mapboxgl.MercatorCoordinate.fromLngLat(lngLat, 0);
+                    let best = null;
+                    let bestDist = Infinity;
+                    for (const p of placedModels) {
+                        const dx = p.transform.translateX - clicked.x;
+                        const dy = p.transform.translateY - clicked.y;
+                        const dz = p.transform.translateZ - clicked.z;
+                        const d2 = dx*dx + dy*dy + dz*dz;
+                        if (d2 < bestDist) {
+                            bestDist = d2;
+                            best = p;
+                        }
+                    }
+                    if (best) {
+                        const threshold = Math.pow(50 * (best.meterScale || 1), 2);
+                        if (bestDist < threshold) {
+                            // Start interactive manipulation
+                            selectedModelId = best.id;
+                            dragModelId = best.id;
+                            dragMode = isAlt ? 'rotate' : 'move';
+                            isDragging = true;
+                            dragStartMouse = { x: e.point.x, y: e.point.y };
+                            
+                            if (dragMode === 'rotate') {
+                                dragStartValue = best.transform.rotateY;
+                            } else {
+                                dragStartValue = { 
+                                    lng: best.geo.lng, 
+                                    lat: best.geo.lat 
+                                };
+                            }
+                            
+                            map.getCanvas().style.cursor = dragMode === 'rotate' ? 'grab' : 'move';
+                            e.originalEvent.preventDefault();
+                            return;
+                        }
+                    }
+                }
+            }
+            
+            // Normal selection flow: find nearest placed model to click and select it
             if (placedModels.length) {
                 const clicked = mapboxgl.MercatorCoordinate.fromLngLat(lngLat, 0);
                 let best = null;
@@ -2724,6 +2778,71 @@
     // keep placingMode active so multiple models can be placed
     // (user can click Add model again to cancel)
         if (map) map.triggerRepaint();
+    });
+
+    // Mouse move handler for interactive model manipulation
+    map.on('mousemove', (e) => {
+        if (!isDragging || !dragModelId) return;
+        
+        const entry = placedModels.find(p => p.id === dragModelId);
+        if (!entry) return;
+        
+        const currentMouse = { x: e.point.x, y: e.point.y };
+        const deltaX = currentMouse.x - dragStartMouse.x;
+        const deltaY = currentMouse.y - dragStartMouse.y;
+        
+        if (dragMode === 'rotate') {
+            // Rotation based on horizontal mouse movement
+            const rotationSensitivity = 0.01;
+            const deltaRotation = deltaX * rotationSensitivity;
+            const newRotation = dragStartValue + deltaRotation;
+            
+            entry.transform.rotateY = newRotation;
+            if (rot && selectedModelId === dragModelId) {
+                rot.value = Math.round((newRotation * 180 / Math.PI) * 100) / 100;
+            }
+        } else if (dragMode === 'move') {
+            // Movement based on mouse position
+            const currentLngLat = map.unproject(currentMouse);
+            entry.geo.lng = currentLngLat.lng;
+            entry.geo.lat = currentLngLat.lat;
+            
+            // Update mercator coordinates
+            const newMercator = mapboxgl.MercatorCoordinate.fromLngLat([currentLngLat.lng, currentLngLat.lat], 0);
+            entry.transform.translateX = newMercator.x;
+            entry.transform.translateY = newMercator.y;
+        }
+        
+        // Apply transforms and trigger repaint
+        try { applyTransformsFromInputs(); } catch (e) {}
+        if (map) map.triggerRepaint();
+    });
+
+    // Mouse up handler to end dragging
+    map.on('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            dragMode = null;
+            dragModelId = null;
+            dragStartMouse = null;
+            dragStartValue = null;
+            map.getCanvas().style.cursor = '';
+            
+            // Refresh sidebar to show updated values
+            try { renderSidebar(); } catch (e) {}
+        }
+    });
+
+    // Also handle mouse leave to end dragging if cursor leaves map
+    map.on('mouseleave', () => {
+        if (isDragging) {
+            isDragging = false;
+            dragMode = null;
+            dragModelId = null;
+            dragStartMouse = null;
+            dragStartValue = null;
+            map.getCanvas().style.cursor = '';
+        }
     });
 
     // --- Model hover tooltip (show model name when cursor is near a placed model) ---
