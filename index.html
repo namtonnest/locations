@@ -405,24 +405,37 @@
                 }
             }
             if (!map.getLayer('3d-buildings')) {
-                // Force buildings to be visible
+                console.log('Adding 3D buildings layer...');
+                
+                // Simple, aggressive 3D buildings configuration
                 map.addLayer({
                     id: '3d-buildings',
                     source: 'composite',
                     'source-layer': 'building',
                     filter: ['==', 'extrude', 'true'],
                     type: 'fill-extrusion',
-                    // much lower minzoom so buildings show at most zoom levels
-                    minzoom: 8,
+                    minzoom: 0, // Show at all zoom levels
                     layout: { visibility: 'visible' },
                     paint: {
-                        'fill-extrusion-color': ['case', ['boolean', ['get', 'underground'], false], '#666', '#aaa'],
-                        'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 8, 0, 10, ['*', 1.5, ['coalesce', ['get', 'height'], 8]]],
-                        'fill-extrusion-base': ['case', ['boolean', ['get', 'underground'], false], 0, ['coalesce', ['get', 'min_height'], 0]],
-                        'fill-extrusion-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0, 10, 0.8, 16, 0.9]
+                        'fill-extrusion-color': '#ff6a00', // Bright orange to make them obvious
+                        'fill-extrusion-height': ['max', ['get', 'height'], 20], // Minimum 20 meter height
+                        'fill-extrusion-base': ['get', 'min_height'],
+                        'fill-extrusion-opacity': 1.0 // Fully opaque
                     }
                 }, labelLayerId);
-                console.log('3D buildings layer added with enhanced visibility');
+                
+                console.log('3D buildings layer added with bright orange color');
+                
+                // Check if layer was actually added
+                setTimeout(() => {
+                    const layer = map.getLayer('3d-buildings');
+                    console.log('3D buildings layer check:', layer ? 'EXISTS' : 'NOT FOUND');
+                    if (layer) {
+                        console.log('Layer visibility:', map.getLayoutProperty('3d-buildings', 'visibility'));
+                        console.log('Current zoom:', map.getZoom());
+                        console.log('Current pitch:', map.getPitch());
+                    }
+                }, 100);
                 
                 // Force localStorage to enabled
                 localStorage.setItem('show_3d_buildings', '1');
@@ -2483,7 +2496,16 @@
                         const id = l && l.id;
                         const type = l && l.type;
                         const lname = String(id || '').toLowerCase();
+                        
+                        // Skip our intentional 3D buildings layer
+                        if (id === '3d-buildings') {
+                            console.log('Preserving our 3d-buildings layer');
+                            return;
+                        }
+                        
+                        // Hide other building/extrusion layers from map styles
                         if (type === 'fill-extrusion' || lname.includes('building') || lname.includes('extrusion')) {
+                            console.log('Hiding building layer:', id);
                             try { map.setLayoutProperty(id, 'visibility', 'none'); } catch (e) {}
                             try { map.setPaintProperty(id, 'fill-extrusion-opacity', 0); } catch (e) {}
                             try { map.setPaintProperty(id, 'fill-extrusion-color', '#000000'); } catch (e) {}
@@ -2492,6 +2514,18 @@
                 });
             }
         } catch (e) { /* ignore style introspection errors */ }
+    }
+
+    // Force our 3D buildings to stay visible
+    function ensure3DBuildingsVisible() {
+        try {
+            if (map.getLayer('3d-buildings')) {
+                map.setLayoutProperty('3d-buildings', 'visibility', 'visible');
+                console.log('Forced 3d-buildings layer to visible');
+            }
+        } catch (e) {
+            console.warn('Failed to ensure 3D buildings visible:', e);
+        }
     }
 
     // helper to ensure our custom layer exists exactly once
@@ -2523,6 +2557,12 @@
         hideBuildings();
         setTimeout(hideBuildings, 300);
         setTimeout(hideBuildings, 1200);
+        
+        // Force our 3D buildings to stay visible after hiding others
+        setTimeout(ensure3DBuildingsVisible, 100);
+        setTimeout(ensure3DBuildingsVisible, 400);
+        setTimeout(ensure3DBuildingsVisible, 1300);
+        
         // ensure our custom three.js layer is present after the new style is applied
         ensureCustomLayerPresent();
         
