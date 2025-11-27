@@ -968,11 +968,8 @@
                 <div style="font-weight:600;margin-bottom:6px;">Model controls</div>
                 <button id="auto-save-btn" class="btn secondary" style="margin-bottom:8px;width:100%">Auto-save OFF</button>
                 <label style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">Rotate (deg):
-                    <button id="rot-dec" type="button" class="btn secondary" style="padding:4px 8px;min-width:36px">◀</button>
                     <input id="rot" type="number" value="0" step="1" style="width:88px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
-                    <button id="rot-inc" type="button" class="btn secondary" style="padding:4px 8px;min-width:36px">▶</button>
-                    <span style="font-size:12px;color:var(--muted);margin-left:6px">Step:</span>
-                    <input id="rotStep" type="number" value="15" step="1" style="width:64px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
+                    <input id="rotSlider" type="range" min="-180" max="180" value="0" step="1" style="flex:1;min-width:120px;">
                 </label>
                 <label>Scale: <input id="scale" type="number" step="0.1" value="1"></label>
                 <div style="margin-top:8px;font-size:12px">Nudge (meters): <input id="nudgeStep" type="number" value="1" style="width:60px"> </div>
@@ -1101,6 +1098,8 @@
             btn.textContent = s.label;
             btn.dataset.styleUrl = s.url;
             btn.addEventListener('click', () => {
+                console.log('Changing map style to:', s.label, s.url);
+                console.log('Current models before style change:', placedModels.length, placedModels.map(p => p.name));
                 try { map.setStyle(s.url); } catch (e) { console.warn('Failed to set style', e); }
                 // hide menu after selection
                 menu.classList.add('hidden');
@@ -1524,9 +1523,7 @@
     }
     // control elements
     const rot = document.getElementById('rot');
-    const rotInc = document.getElementById('rot-inc');
-    const rotDec = document.getElementById('rot-dec');
-    const rotStepInput = document.getElementById('rotStep');
+    const rotSlider = document.getElementById('rotSlider');
     const scaleInput = document.getElementById('scale');
     const nudgeStep = document.getElementById('nudgeStep');
     const nudgeN = document.getElementById('nudgeN');
@@ -1542,7 +1539,7 @@
 
     // disabled until a model is placed
     function setControlsDisabled(disabled) {
-        [rot, rotInc, rotDec, rotStepInput, scaleInput, nudgeStep, nudgeN, nudgeS, nudgeE, nudgeW, resetModelBtn, removeModelBtn, altitudeInput, altStepInput, altUpBtn, altDownBtn].forEach(el => { if (el) el.disabled = disabled; });
+        [rot, rotSlider, scaleInput, nudgeStep, nudgeN, nudgeS, nudgeE, nudgeW, resetModelBtn, removeModelBtn, altitudeInput, altStepInput, altUpBtn, altDownBtn].forEach(el => { if (el) el.disabled = disabled; });
     }
     setControlsDisabled(true);
 
@@ -1576,17 +1573,19 @@
     const debouncedApply = debounce(applyTransformsFromInputs, 120);
     if (rot) rot.addEventListener('input', debouncedApply);
 
-    // step buttons to change yaw by rotStep degrees for easier mobile use
-    if (rotInc) rotInc.addEventListener('click', () => {
-        const step = Number(rotStepInput && rotStepInput.value) || 15;
-        rot.value = Number(rot.value || 0) + step;
-        applyTransformsFromInputs();
-    });
-    if (rotDec) rotDec.addEventListener('click', () => {
-        const step = Number(rotStepInput && rotStepInput.value) || 15;
-        rot.value = Number(rot.value || 0) - step;
-        applyTransformsFromInputs();
-    });
+    // Sync slider and number input for rotation
+    if (rotSlider) {
+        rotSlider.addEventListener('input', () => {
+            rot.value = rotSlider.value;
+            applyTransformsFromInputs();
+        });
+    }
+    if (rot) {
+        rot.addEventListener('input', () => {
+            if (rotSlider) rotSlider.value = rot.value;
+            debouncedApply();
+        });
+    }
     scaleInput.addEventListener('input', applyTransformsFromInputs);
 
     // animate button wiring (toggle animation state on selected model)
@@ -2166,11 +2165,12 @@
     const _restoreQueue = [];
 
     function processRestoreQueue() {
+        console.log('processRestoreQueue called with', _restoreQueue.length, 'items', 'modelLayerRef=', !!modelLayerRef);
         if (!modelLayerRef) return;
         while (_restoreQueue.length) {
             const item = _restoreQueue.shift();
             try {
-                console.debug && console.debug('processRestoreQueue: restoring item', item && (item.id || item.name || item.type));
+                console.log('processRestoreQueue: restoring item', item && (item.id || item.name || item.type));
                 if (item.type === '3dtext' && modelLayerRef.load3DText) {
                     modelLayerRef.load3DText(item.text || item.name || 'Text', Object.assign({}, item.transform), item.geo ? [item.geo.lng, item.geo.lat, item.geo.alt || 0] : null, item.id, item.name);
                 } else if (modelLayerRef.loadModel) {
@@ -2275,23 +2275,39 @@
         // loadModel(url, transform, geo, preferredId, preferredName)
         // Accept optional preferredId and preferredName so restored states can keep original ids and names
         this.loadModel = (url, transform, geo, preferredId, preferredName) => {
+            // Check if we're restoring an existing model (has preferredId and exists in placedModels)
+            let entry = null;
+            if (preferredId) {
+                const existingIndex = placedModels.findIndex(p => p.id === preferredId);
+                if (existingIndex >= 0) {
+                    // Update existing entry instead of creating duplicate
+                    entry = placedModels[existingIndex];
+                    entry.object = null; // Reset object since we're reloading
+                    console.log('Updating existing model entry:', preferredId);
+                }
+            }
+            
+            // Create new entry if not restoring
+            if (!entry) {
                 const id = preferredId || (String(Date.now()) + '-' + Math.floor(Math.random() * 10000));
-        const entry = {
-            id,
-            name: preferredName || ('Model ' + (placedModels.length + 1)),
-        transform: Object.assign({}, transform),
-            original: Object.assign({}, transform),
-            meterScale: transform.scale,
-    object: null,
-    animated: !!(transform && transform.animated),
-    spinSpeed: (transform && transform.spinSpeed) ? transform.spinSpeed : 0.2,
-        // persist the original URL so serializePlacedModels can save it
-        url: url,
-        geo: geo ? { lng: geo[0], lat: geo[1], alt: geo[2] || 0 } : null,
-        originalGeoLat: geo ? geo[1] : null,
-        originalGeoLng: geo ? geo[0] : null
-        };
+                entry = {
+                    id,
+                    name: preferredName || ('Model ' + (placedModels.length + 1)),
+                    transform: Object.assign({}, transform),
+                    original: Object.assign({}, transform),
+                    meterScale: transform.scale,
+                    object: null,
+                    animated: !!(transform && transform.animated),
+                    spinSpeed: (transform && transform.spinSpeed) ? transform.spinSpeed : 0.2,
+                    // persist the original URL so serializePlacedModels can save it
+                    url: url,
+                    geo: geo ? { lng: geo[0], lat: geo[1], alt: geo[2] || 0 } : null,
+                    originalGeoLat: geo ? geo[1] : null,
+                    originalGeoLng: geo ? geo[0] : null
+                };
                 placedModels.push(entry);
+                console.log('Created new model entry:', entry.id);
+            }
                 renderSidebar();
                 // load new gltf and attach to scene when ready
                 try {
@@ -2457,28 +2473,75 @@
     function ensureCustomLayerPresent() {
         try {
             const existing = map.getStyle && map.getStyle().layers && map.getStyle().layers.find(l => l.id === customLayer.id);
+            console.log('ensureCustomLayerPresent: existing layer=', !!existing, 'modelLayerRef=', !!modelLayerRef, 'models=', placedModels.length);
             // If the layer isn't present, add it. If the layer is present but the
             // runtime modelLayerRef is not set (possible when onAdd failed), remove
             // and re-add the layer to trigger onAdd again.
             if (!existing) {
+                console.log('Adding custom layer after style change');
                 try { map.addLayer(customLayer); } catch (e) { console.warn('Failed to add customLayer', e); }
             } else if (!modelLayerRef) {
                 try {
-                    console.debug && console.debug('Custom layer exists but modelLayerRef is null — re-adding layer to re-run onAdd');
+                    console.log('Custom layer exists but modelLayerRef is null — re-adding layer to re-run onAdd');
                     try { map.removeLayer(customLayer.id); } catch (e) { /* ignore remove error */ }
                     try { map.addLayer(customLayer); } catch (e) { console.warn('Failed to re-add customLayer', e); }
                 } catch (e) { console.warn('ensureCustomLayerPresent re-add failed', e); }
+            } else {
+                console.log('Custom layer and modelLayerRef both exist - models should be visible');
             }
         } catch (e) { console.warn('ensureCustomLayerPresent error', e); }
     }
 
     map.on('style.load', () => {
+        console.log('Style loaded - restoring 3D buildings and models');
         // run hideBuildings immediately and a couple times after load to catch dynamic additions
         hideBuildings();
         setTimeout(hideBuildings, 300);
         setTimeout(hideBuildings, 1200);
         // ensure our custom three.js layer is present after the new style is applied
         ensureCustomLayerPresent();
+        
+        // Comprehensive model restoration system
+        setTimeout(() => {
+            const modelCount = placedModels.length;
+            console.log('Checking model restoration 1 second after style load. Total models:', modelCount);
+            
+            if (modelCount > 0) {
+                console.log('Models found, ensuring they are restored...');
+                
+                // Clear any existing objects from models that may have been lost during style change
+                placedModels.forEach(entry => {
+                    if (entry.object) {
+                        try {
+                            // Remove the old object from scene if it exists
+                            if (modelLayerRef && modelLayerRef.scene) {
+                                modelLayerRef.scene.remove(entry.object);
+                            }
+                            entry.object = null;
+                        } catch (e) {
+                            console.warn('Error removing old model object:', e);
+                        }
+                    }
+                });
+                
+                // Now reload all models
+                if (modelLayerRef && modelLayerRef.loadModel) {
+                    console.log('Reloading all models after style change...');
+                    placedModels.forEach((entry, index) => {
+                        if (entry && entry.geo && entry.url) {
+                            console.log(`Reloading model ${index + 1}/${modelCount}:`, entry.name, entry.url);
+                            // Use a small delay between each model to avoid overloading
+                            setTimeout(() => {
+                                modelLayerRef.loadModel(entry.url, entry.transform, [entry.geo.lng, entry.geo.lat, entry.geo.alt || 0], entry.id, entry.name);
+                            }, index * 100); // 100ms delay between each model
+                        }
+                    });
+                } else {
+                    console.warn('modelLayerRef or loadModel not available for restoration');
+                }
+            }
+        }, 1000);
+        
         // also (re)attach style/data listeners which may add layers after style.load
         try { map.off && map.off('styledata', hideBuildings); } catch (e) {}
         try { map.off && map.off('sourcedata', hideBuildings); } catch (e) {}
