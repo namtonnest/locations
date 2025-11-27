@@ -25,6 +25,18 @@
   <div class="card">
     <h2>Admin: Saved Map States</h2>
     <!-- ...existing code... -->
+    
+    <!-- User Management Section -->
+    <div class="card" style="margin-top:32px;max-width:900px;">
+      <h3>User Profiles & Model Correlation</h3>
+      <p class="note">Manage user profiles and see how they correlate with models on the map.</p>
+      <div class="row" style="margin-bottom:16px;">
+        <button id="refreshUsers" class="btn">Refresh Users</button>
+        <button class="btn" onclick="window.open('profile.html', '_blank')">Open User Portal</button>
+      </div>
+      <div id="usersList">Loading users...</div>
+    </div>
+    
     <div class="card" style="margin-top:32px;max-width:900px;">
       <h3>Tracked Employees Map</h3>
       <div id="adminMap" style="width:100%;height:400px;border-radius:8px;margin-top:12px;"></div>
@@ -63,7 +75,7 @@
   <script>
     // --- Admin Map: Show all tracked employees ---
     (function(){
-      const EMPLOYEE_LOCATION_ENDPOINT = 'https://locations-seven.vercel.app/api/employee-location';
+      const EMPLOYEE_LOCATION_ENDPOINT = '/api/employee-location'; // Use relative URL
       let adminMap, adminMarkers = {};
       function initAdminMap() {
         if (adminMap) return;
@@ -118,10 +130,17 @@
           if (!res.ok) return;
           const data = await res.json();
           const locations = data.locations || [];
+          
+          // Also fetch user profiles
+          const usersRes = await fetch('/api/users?action=all');
+          const userData = await usersRes.json();
+          const users = userData.users || [];
+          
           // Remove old markers
           Object.values(adminMarkers).forEach(marker => { try { marker.remove(); } catch (e) {} });
           adminMarkers = {};
-          // Add new markers
+          
+          // Add employee location markers (legacy)
           locations.forEach(loc => {
             if (typeof loc.lat !== 'number' || typeof loc.lng !== 'number') return;
             const el = document.createElement('div');
@@ -136,6 +155,37 @@
               .setLngLat([loc.lng, loc.lat])
               .addTo(adminMap);
             adminMarkers[loc.name || Math.random()] = marker;
+          });
+          
+          // Add user profile markers with model correlation
+          users.forEach(user => {
+            if (!user.lastLocation || typeof user.lastLocation.lat !== 'number') return;
+            
+            const el = document.createElement('div');
+            el.style.background = user.modelId ? '#16a34a' : '#f59e0b';
+            el.style.color = '#fff';
+            el.style.padding = '4px 8px';
+            el.style.borderRadius = '6px';
+            el.style.fontWeight = '600';
+            el.style.fontSize = '13px';
+            el.style.border = '2px solid white';
+            
+            const displayText = user.modelId ? `${user.username} (${user.modelId})` : user.username;
+            el.textContent = displayText;
+            
+            const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
+              <div style="padding:8px;">
+                <h4 style="margin:0 0 8px 0;">${user.username}</h4>
+                <p style="margin:4px 0;"><strong>Model:</strong> ${user.modelId || 'None'}</p>
+                <p style="margin:4px 0;"><strong>Updated:</strong> ${new Date(user.lastLocation.timestamp).toLocaleString()}</p>
+              </div>
+            `);
+            
+            const marker = new mapboxgl.Marker({ element: el })
+              .setLngLat([user.lastLocation.lng, user.lastLocation.lat])
+              .setPopup(popup)
+              .addTo(adminMap);
+            adminMarkers[`user_${user.id}`] = marker;
           });
         } catch (e) { /* ignore */ }
       }
@@ -433,6 +483,50 @@
       } catch (e) { statusEl.textContent = 'Import failed: ' + (e && e.message); alert('Import failed: ' + (e && e.message)); }
       importFile.value = '';
     });
+
+    // --- User Management Functions ---
+    async function loadUsers() {
+      const usersList = document.getElementById('usersList');
+      usersList.innerHTML = 'Loading users...';
+      
+      try {
+        const response = await fetch('/api/users?action=all');
+        const result = await response.json();
+        
+        if (result.users && result.users.length > 0) {
+          let html = '<table style="width:100%;margin-top:12px;"><thead><tr><th>Username</th><th>Email</th><th>Linked Model</th><th>Last Location</th><th>Created</th></tr></thead><tbody>';
+          
+          result.users.forEach(user => {
+            const modelInfo = user.modelId ? `<span style="color:#06b6d4;">${user.modelId}</span>` : '<span style="color:#9fb6c9;">None</span>';
+            const locationInfo = user.lastLocation ? 
+              `<span style="color:#16a34a;">${user.lastLocation.lat.toFixed(4)}, ${user.lastLocation.lng.toFixed(4)}</span><br><small>${new Date(user.lastLocation.timestamp).toLocaleString()}</small>` : 
+              '<span style="color:#9fb6c9;">No data</span>';
+            const createdDate = new Date(user.createdAt).toLocaleDateString();
+            
+            html += `<tr>
+              <td><strong>${user.username}</strong></td>
+              <td>${user.email}</td>
+              <td>${modelInfo}</td>
+              <td>${locationInfo}</td>
+              <td>${createdDate}</td>
+            </tr>`;
+          });
+          
+          html += '</tbody></table>';
+          usersList.innerHTML = html;
+        } else {
+          usersList.innerHTML = '<p style="color:#9fb6c9;font-style:italic;">No users registered yet.</p>';
+        }
+      } catch (error) {
+        usersList.innerHTML = '<p style="color:#ef4444;">Error loading users: ' + error.message + '</p>';
+      }
+    }
+
+    // Add event listener for refresh users button
+    document.getElementById('refreshUsers').addEventListener('click', loadUsers);
+
+    // Load users on page load
+    loadUsers();
 
     // auto-refresh on load
     refresh();
