@@ -342,7 +342,8 @@
         mapboxgl.accessToken = "pk.eyJ1IjoicHVycGhhY3RzIiwiYSI6ImNsdzY1bzVvNzFwb3IyamxyOG1vY3oyM2gifQ.2LikTeWKwlWsAcEneBXW0Q";
 
         // --- Employee location markers ---
-        const EMPLOYEE_LOCATION_ENDPOINT = 'https://locations-seven.vercel.app/api/employee-location';
+        // Use relative URL so it works from any domain (localhost or any Vercel deployment)
+        const EMPLOYEE_LOCATION_ENDPOINT = '/api/employee-location';
         let employeeMarkers = {};
 
         async function fetchAndDisplayEmployeeLocations() {
@@ -517,7 +518,8 @@
     // Backend endpoint that stores state and returns an 8-character id.
     // Deploy the server code (README in repo) and set this to your deployed URL, e.g.
     // const BACKEND_STATE_ENDPOINT = 'https://your-deployment.example.com/api/state';
-        const BACKEND_STATE_ENDPOINT = 'https://locations-seven.vercel.app/api/state';
+        // Use relative URL so it works from any domain (localhost or any Vercel deployment)
+        const BACKEND_STATE_ENDPOINT = '/api/state';
 
     // Prepare to allow adding a GLTF model interactively.
     // Raw URL for the provided GitHub model (encoded for spaces)
