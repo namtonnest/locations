@@ -404,25 +404,48 @@
                 }
             }
             if (!map.getLayer('3d-buildings')) {
-                // Default to visible (enable by default)
-                const show = localStorage.getItem('show_3d_buildings') !== '0';
+                // Force buildings to be visible
                 map.addLayer({
                     id: '3d-buildings',
                     source: 'composite',
                     'source-layer': 'building',
                     filter: ['==', 'extrude', 'true'],
                     type: 'fill-extrusion',
-                    // lower minzoom so buildings show at most zoom levels
-                    minzoom: 10,
+                    // much lower minzoom so buildings show at most zoom levels
+                    minzoom: 8,
                     layout: { visibility: 'visible' },
                     paint: {
-                        'fill-extrusion-color': '#888',
-                        'fill-extrusion-height': ['coalesce', ['get', 'height'], 5],
-                        'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
-                        'fill-extrusion-opacity': 0.9
+                        'fill-extrusion-color': ['case', ['boolean', ['get', 'underground'], false], '#666', '#aaa'],
+                        'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 8, 0, 10, ['*', 1.5, ['coalesce', ['get', 'height'], 8]]],
+                        'fill-extrusion-base': ['case', ['boolean', ['get', 'underground'], false], 0, ['coalesce', ['get', 'min_height'], 0]],
+                        'fill-extrusion-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0, 10, 0.8, 16, 0.9]
                     }
                 }, labelLayerId);
-                console.debug && console.debug('index: 3d-buildings layer added, visible=', show);
+                console.log('3D buildings layer added with enhanced visibility');
+                
+                // Force localStorage to enabled
+                localStorage.setItem('show_3d_buildings', '1');
+                window.__show3DBuildings = true;
+                
+                // Set a slight pitch to better show 3D buildings
+                setTimeout(() => {
+                    if (map.getPitch() < 20) {
+                        map.easeTo({ pitch: 35, duration: 1500 });
+                        console.log('Adjusted map pitch to better show 3D buildings');
+                    }
+                    
+                    // Navigate to downtown Toronto where buildings are prominent
+                    setTimeout(() => {
+                        map.flyTo({
+                            center: [-79.3832, 43.6532], // Downtown Toronto (Financial District)
+                            zoom: 16,
+                            pitch: 45,
+                            bearing: 0,
+                            duration: 2000
+                        });
+                        console.log('Navigated to downtown Toronto for 3D buildings demo');
+                    }, 1000);
+                }, 500);
             }
         } catch (e) { console.warn('Failed to add 3D buildings layer', e); }
     });
