@@ -2845,36 +2845,160 @@
         }
     });
 
-    // --- Model hover tooltip (show model name when cursor is near a placed model) ---
+    // --- Interactive Model Tooltip with Controls ---
     const modelTooltip = document.createElement('div');
     modelTooltip.id = 'model-tooltip';
     modelTooltip.style.position = 'absolute';
-    modelTooltip.style.pointerEvents = 'none';
-    modelTooltip.style.padding = '6px 8px';
-    modelTooltip.style.background = 'rgba(255,255,255,0.95)';
-    modelTooltip.style.border = '1px solid rgba(0,0,0,0.08)';
-    modelTooltip.style.borderRadius = '6px';
+    modelTooltip.style.pointerEvents = 'auto';
+    modelTooltip.style.padding = '12px';
+    modelTooltip.style.background = 'rgba(255,255,255,0.98)';
+    modelTooltip.style.border = '1px solid rgba(0,0,0,0.12)';
+    modelTooltip.style.borderRadius = '8px';
     modelTooltip.style.fontFamily = 'sans-serif';
     modelTooltip.style.fontSize = '13px';
     modelTooltip.style.color = '#0f1724';
-    modelTooltip.style.zIndex = '10';
+    modelTooltip.style.zIndex = '1000';
     modelTooltip.style.display = 'none';
+    modelTooltip.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+    modelTooltip.style.minWidth = '200px';
+    modelTooltip.style.maxWidth = '280px';
     document.body.appendChild(modelTooltip);
 
     let hoveredModelId = null;
+    let tooltipMoveMode = false;
+    let tooltipDragData = null;
 
     function hideModelTooltip() {
         hoveredModelId = null;
+        tooltipMoveMode = false;
+        tooltipDragData = null;
         modelTooltip.style.display = 'none';
     }
 
+    function updateTooltipContent(entry) {
+        const rotationDegrees = Math.round((entry.transform.rotateY * 180 / Math.PI) * 100) / 100;
+        const moveButtonStyle = tooltipMoveMode ? 'background:#16a34a;color:white' : 'background:#f3f4f6;color:#374151';
+        
+        modelTooltip.innerHTML = `
+            <div style="font-weight:600;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+                <span>${entry.name || ('Model ' + entry.id)}</span>
+                <button id="tooltip-close" style="background:none;border:none;cursor:pointer;font-size:16px;color:#9ca3af;" title="Close">×</button>
+            </div>
+            <div style="margin-bottom:8px;">
+                <label style="display:block;font-size:11px;color:#6b7280;margin-bottom:2px;">Rotation</label>
+                <input type="range" id="tooltip-rotation" min="0" max="360" value="${rotationDegrees}" 
+                       style="width:100%;margin-bottom:4px;">
+                <div style="text-align:center;font-size:11px;color:#9ca3af;">${rotationDegrees}°</div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px;">
+                <button id="tooltip-move" style="flex:1;padding:6px;border:1px solid #d1d5db;border-radius:4px;cursor:pointer;font-size:12px;${moveButtonStyle}">
+                    ${tooltipMoveMode ? '✓ Moving' : 'Move'}
+                </button>
+                <button id="tooltip-select" style="flex:1;padding:6px;border:1px solid #d1d5db;border-radius:4px;cursor:pointer;font-size:12px;background:#0ea5e9;color:white;">
+                    Select
+                </button>
+            </div>
+        `;
+
+        // Add event listeners
+        document.getElementById('tooltip-close').onclick = (e) => {
+            e.stopPropagation();
+            hideModelTooltip();
+        };
+
+        document.getElementById('tooltip-rotation').oninput = (e) => {
+            e.stopPropagation();
+            const degrees = parseFloat(e.target.value);
+            const radians = degrees * Math.PI / 180;
+            entry.transform.rotateY = radians;
+            
+            // Update the degree display
+            const display = e.target.nextElementSibling;
+            display.textContent = degrees + '°';
+            
+            // Update rotation slider in main panel if this model is selected
+            if (selectedModelId === entry.id && rot) {
+                rot.value = degrees;
+            }
+            
+            try { applyTransformsFromInputs(); } catch (e) {}
+            if (map) map.triggerRepaint();
+        };
+
+        document.getElementById('tooltip-move').onclick = (e) => {
+            e.stopPropagation();
+            tooltipMoveMode = !tooltipMoveMode;
+            updateTooltipContent(entry);
+            
+            if (tooltipMoveMode) {
+                map.getCanvas().style.cursor = 'move';
+                // Auto-hide tooltip after 3 seconds in move mode
+                setTimeout(() => {
+                    if (tooltipMoveMode) {
+                        tooltipMoveMode = false;
+                        map.getCanvas().style.cursor = '';
+                        hideModelTooltip();
+                    }
+                }, 3000);
+            } else {
+                map.getCanvas().style.cursor = '';
+            }
+        };
+
+        document.getElementById('tooltip-select').onclick = (e) => {
+            e.stopPropagation();
+            selectedModelId = entry.id;
+            if (rot) rot.value = rotationDegrees;
+            if (scaleInput) scaleInput.value = Math.round((entry.transform.scale / (entry.meterScale || 1)) * 100) / 100;
+            setControlsDisabled(false);
+            try { renderSidebar(); } catch (e) {}
+            hideModelTooltip();
+        };
+    }
+
+    // Handle model movement when in move mode
+    map.on('click', (e) => {
+        if (!tooltipMoveMode || !hoveredModelId) return;
+        
+        const entry = placedModels.find(p => p.id === hoveredModelId);
+        if (!entry) return;
+        
+        const lngLat = [e.lngLat.lng, e.lngLat.lat];
+        
+        // Update model position
+        entry.geo.lng = lngLat[0];
+        entry.geo.lat = lngLat[1];
+        
+        // Update mercator coordinates
+        const newMercator = mapboxgl.MercatorCoordinate.fromLngLat(lngLat, 0);
+        entry.transform.translateX = newMercator.x;
+        entry.transform.translateY = newMercator.y;
+        
+        // Apply transforms and refresh
+        try { applyTransformsFromInputs(); } catch (e) {}
+        if (map) map.triggerRepaint();
+        try { renderSidebar(); } catch (e) {}
+        
+        // Exit move mode
+        tooltipMoveMode = false;
+        map.getCanvas().style.cursor = '';
+        hideModelTooltip();
+        
+        e.originalEvent.stopPropagation();
+    });
+
     // Use pixel-distance hover detection: project each model's geo to screen and compare to mouse point
     map.on('mousemove', (e) => {
-        if (!placedModels || !placedModels.length) { hideModelTooltip(); return; }
+        if (!placedModels || !placedModels.length || tooltipMoveMode) { 
+            if (!tooltipMoveMode) hideModelTooltip(); 
+            return; 
+        }
+        
         const mousePoint = e.point; // pixel coords relative to map container
         let bestEntry = null;
         let bestProj = null;
         let bestDist2 = Infinity;
+        
         for (const p of placedModels) {
             if (!p.geo || p.geo.lng === undefined || p.geo.lat === undefined) continue;
             const proj = map.project([p.geo.lng, p.geo.lat]);
@@ -2883,19 +3007,35 @@
             const d2 = dx*dx + dy*dy;
             if (d2 < bestDist2) { bestDist2 = d2; bestEntry = p; bestProj = proj; }
         }
+        
         if (!bestEntry) { hideModelTooltip(); return; }
+        
         const pixelThreshold = 40; // hover radius in pixels
         if (bestDist2 <= (pixelThreshold * pixelThreshold)) {
             if (hoveredModelId !== bestEntry.id) {
                 hoveredModelId = bestEntry.id;
-                modelTooltip.textContent = bestEntry.name || ('Model ' + bestEntry.id);
+                updateTooltipContent(bestEntry);
             }
-            // position tooltip near mouse pointer using absolute page coords
+            
+            // Position tooltip near mouse pointer using absolute page coords
             const canvasRect = map.getCanvas().getBoundingClientRect();
             const absLeft = canvasRect.left + mousePoint.x;
             const absTop = canvasRect.top + mousePoint.y;
-            modelTooltip.style.left = (absLeft + 12) + 'px';
-            modelTooltip.style.top = (absTop + 12) + 'px';
+            
+            // Keep tooltip on screen
+            const tooltipRect = modelTooltip.getBoundingClientRect();
+            let finalLeft = absLeft + 12;
+            let finalTop = absTop + 12;
+            
+            if (finalLeft + tooltipRect.width > window.innerWidth) {
+                finalLeft = absLeft - tooltipRect.width - 12;
+            }
+            if (finalTop + tooltipRect.height > window.innerHeight) {
+                finalTop = absTop - tooltipRect.height - 12;
+            }
+            
+            modelTooltip.style.left = finalLeft + 'px';
+            modelTooltip.style.top = finalTop + 'px';
             modelTooltip.style.display = 'block';
         } else {
             hideModelTooltip();
