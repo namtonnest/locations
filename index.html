@@ -2979,6 +2979,24 @@
                 <div style="text-align:center;font-size:11px;color:#9ca3af;">${rotationDegrees}°</div>
             </div>
             <div style="margin-bottom:8px;">
+                <label style="display:block;font-size:11px;color:#6b7280;margin-bottom:2px;">Real-world Dimensions (meters)</label>
+                <div style="display:flex;gap:8px;margin-bottom:4px;">
+                    <div style="flex:1;">
+                        <input type="number" id="tooltip-length" placeholder="Length" value="${entry.realLength || 5}" 
+                               style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;" step="0.1" min="0.1">
+                        <div style="text-align:center;font-size:10px;color:#9ca3af;">Length (m)</div>
+                    </div>
+                    <div style="flex:1;">
+                        <input type="number" id="tooltip-width" placeholder="Width" value="${entry.realWidth || 3}" 
+                               style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;" step="0.1" min="0.1">
+                        <div style="text-align:center;font-size:10px;color:#9ca3af;">Width (m)</div>
+                    </div>
+                </div>
+                <button id="tooltip-apply-dimensions" style="width:100%;padding:4px;border:1px solid #16a34a;border-radius:4px;cursor:pointer;font-size:11px;background:#16a34a;color:white;">
+                    Apply Real Size
+                </button>
+            </div>
+            <div style="margin-bottom:8px;">
                 <label style="display:block;font-size:11px;color:#6b7280;margin-bottom:2px;">Scale</label>
                 <input type="range" id="tooltip-scale" min="0.1" max="5" step="0.1" value="${scaleValue}" 
                        style="width:100%;margin-bottom:4px;">
