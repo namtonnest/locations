@@ -3016,10 +3016,12 @@
             if (map) map.triggerRepaint();
             try { renderSidebar(); } catch (e) {}
             
-            // Exit move mode
+            // Exit move mode but don't hide tooltip immediately to allow re-clicking
             tooltipMoveMode = false;
             map.getCanvas().style.cursor = '';
-            hideModelTooltip();
+            
+            // Update the tooltip content to show the move button is no longer active
+            updateTooltipContent(entry);
             
             e.originalEvent.stopPropagation();
             return;
@@ -3068,6 +3070,7 @@
                 }, 10);
                 
                 modelTooltip.style.display = 'block';
+                mouseOverTooltip = false; // Reset this flag when showing tooltip
                 e.originalEvent.stopPropagation();
             } else {
                 // Only hide tooltip if not clicking elsewhere and mouse not over tooltip
