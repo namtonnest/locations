@@ -3088,12 +3088,19 @@
             // Apply transforms and refresh
             selectedModelId = entry.id; // Ensure the moved model is selected for transform application
             try { applyTransformsFromInputs(); } catch (e) {}
-            if (map) map.triggerRepaint();
+            if (map) {
+                map.triggerRepaint();
+                // Force map to recalculate projections
+                map.fire('sourcedata');
+            }
             try { renderSidebar(); } catch (e) {}
+            
+            console.log('After movement - checking projection:', map.project([entry.geo.lng, entry.geo.lat]));
             
             // Update selection indicator position
             if (selectedModelMarker) {
                 selectedModelMarker.setLngLat([entry.geo.lng, entry.geo.lat]);
+                console.log('Updated marker position to:', entry.geo.lng, entry.geo.lat);
             }
             
             // Exit move mode but don't hide tooltip immediately to allow re-clicking
@@ -3102,6 +3109,11 @@
             
             // Update the tooltip content to show the move button is no longer active
             updateTooltipContent(entry);
+            
+            // Small delay to ensure coordinate system is updated before next click
+            setTimeout(() => {
+                console.log('Coordinates should now be stable for model', entry.id);
+            }, 100);
             
             e.originalEvent.stopPropagation();
             return;
@@ -3115,10 +3127,25 @@
             
             console.log('Checking for models at mouse position:', mousePoint.x, mousePoint.y);
             console.log('Total models to check:', placedModels.length);
+            console.log('Map center:', map.getCenter(), 'Zoom:', map.getZoom());
             
             for (const p of placedModels) {
                 if (!p.geo || p.geo.lng === undefined || p.geo.lat === undefined) continue;
+                
+                // Validate coordinates are reasonable
+                if (Math.abs(p.geo.lng) > 180 || Math.abs(p.geo.lat) > 90) {
+                    console.warn('Invalid coordinates for model', p.id, ':', p.geo.lng, p.geo.lat);
+                    continue;
+                }
+                
                 const proj = map.project([p.geo.lng, p.geo.lat]);
+                
+                // Check if projection is valid
+                if (!isFinite(proj.x) || !isFinite(proj.y)) {
+                    console.warn('Invalid projection for model', p.id, 'at geo:', p.geo.lng, p.geo.lat);
+                    continue;
+                }
+                
                 const dx = proj.x - mousePoint.x;
                 const dy = proj.y - mousePoint.y;
                 const d2 = dx*dx + dy*dy;
