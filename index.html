@@ -2958,46 +2958,96 @@
 
     // Handle model movement when in move mode
     map.on('click', (e) => {
-        if (!tooltipMoveMode || !hoveredModelId) return;
-        
-        const entry = placedModels.find(p => p.id === hoveredModelId);
-        if (!entry) return;
-        
-        const lngLat = [e.lngLat.lng, e.lngLat.lat];
-        
-        // Update model position
-        entry.geo.lng = lngLat[0];
-        entry.geo.lat = lngLat[1];
-        
-        // Update mercator coordinates
-        const newMercator = mapboxgl.MercatorCoordinate.fromLngLat(lngLat, 0);
-        entry.transform.translateX = newMercator.x;
-        entry.transform.translateY = newMercator.y;
-        
-        // Apply transforms and refresh
-        try { applyTransformsFromInputs(); } catch (e) {}
-        if (map) map.triggerRepaint();
-        try { renderSidebar(); } catch (e) {}
-        
-        // Exit move mode
-        tooltipMoveMode = false;
-        map.getCanvas().style.cursor = '';
-        hideModelTooltip();
-        
-        e.originalEvent.stopPropagation();
+        if (tooltipMoveMode && hoveredModelId) {
+            const entry = placedModels.find(p => p.id === hoveredModelId);
+            if (!entry) return;
+            
+            const lngLat = [e.lngLat.lng, e.lngLat.lat];
+            
+            // Update model position
+            entry.geo.lng = lngLat[0];
+            entry.geo.lat = lngLat[1];
+            
+            // Update mercator coordinates
+            const newMercator = mapboxgl.MercatorCoordinate.fromLngLat(lngLat, 0);
+            entry.transform.translateX = newMercator.x;
+            entry.transform.translateY = newMercator.y;
+            
+            // Apply transforms and refresh
+            try { applyTransformsFromInputs(); } catch (e) {}
+            if (map) map.triggerRepaint();
+            try { renderSidebar(); } catch (e) {}
+            
+            // Exit move mode
+            tooltipMoveMode = false;
+            map.getCanvas().style.cursor = '';
+            hideModelTooltip();
+            
+            e.originalEvent.stopPropagation();
+            return;
+        }
+
+        // Check if clicking on a model to show tooltip
+        if (!placingModel) {
+            const mousePoint = e.point;
+            let bestEntry = null;
+            let bestDist2 = Infinity;
+            
+            for (const p of placedModels) {
+                if (!p.geo || p.geo.lng === undefined || p.geo.lat === undefined) continue;
+                const proj = map.project([p.geo.lng, p.geo.lat]);
+                const dx = proj.x - mousePoint.x;
+                const dy = proj.y - mousePoint.y;
+                const d2 = dx*dx + dy*dy;
+                if (d2 < bestDist2) { bestDist2 = d2; bestEntry = p; }
+            }
+            
+            const pixelThreshold = 40; // click radius in pixels
+            if (bestEntry && bestDist2 <= (pixelThreshold * pixelThreshold)) {
+                hoveredModelId = bestEntry.id;
+                updateTooltipContent(bestEntry);
+                
+                // Position tooltip near click point
+                const canvasRect = map.getCanvas().getBoundingClientRect();
+                const absLeft = canvasRect.left + mousePoint.x;
+                const absTop = canvasRect.top + mousePoint.y;
+                
+                // Keep tooltip on screen
+                setTimeout(() => {
+                    const tooltipRect = modelTooltip.getBoundingClientRect();
+                    let finalLeft = absLeft + 12;
+                    let finalTop = absTop + 12;
+                    
+                    if (finalLeft + tooltipRect.width > window.innerWidth) {
+                        finalLeft = absLeft - tooltipRect.width - 12;
+                    }
+                    if (finalTop + tooltipRect.height > window.innerHeight) {
+                        finalTop = absTop - tooltipRect.height - 12;
+                    }
+                    
+                    modelTooltip.style.left = finalLeft + 'px';
+                    modelTooltip.style.top = finalTop + 'px';
+                }, 10);
+                
+                modelTooltip.style.display = 'block';
+                e.originalEvent.stopPropagation();
+            } else {
+                // Clicking elsewhere hides tooltip
+                hideModelTooltip();
+            }
+        }
     });
 
-    // Use pixel-distance hover detection: project each model's geo to screen and compare to mouse point
+    // Remove the mousemove hover detection and replace with a simpler version for cursor feedback
     map.on('mousemove', (e) => {
-        if (!placedModels || !placedModels.length || tooltipMoveMode) { 
-            if (!tooltipMoveMode) hideModelTooltip(); 
-            return; 
-        }
+        if (tooltipMoveMode) return;
         
-        const mousePoint = e.point; // pixel coords relative to map container
-        let bestEntry = null;
-        let bestProj = null;
+        // Just provide cursor feedback when hovering over models
+        if (!placedModels || !placedModels.length) return;
+        
+        const mousePoint = e.point;
         let bestDist2 = Infinity;
+        let foundModel = false;
         
         for (const p of placedModels) {
             if (!p.geo || p.geo.lng === undefined || p.geo.lat === undefined) continue;
@@ -3005,40 +3055,17 @@
             const dx = proj.x - mousePoint.x;
             const dy = proj.y - mousePoint.y;
             const d2 = dx*dx + dy*dy;
-            if (d2 < bestDist2) { bestDist2 = d2; bestEntry = p; bestProj = proj; }
+            if (d2 < bestDist2) { bestDist2 = d2; }
         }
         
-        if (!bestEntry) { hideModelTooltip(); return; }
-        
-        const pixelThreshold = 40; // hover radius in pixels
+        const pixelThreshold = 40;
         if (bestDist2 <= (pixelThreshold * pixelThreshold)) {
-            if (hoveredModelId !== bestEntry.id) {
-                hoveredModelId = bestEntry.id;
-                updateTooltipContent(bestEntry);
-            }
-            
-            // Position tooltip near mouse pointer using absolute page coords
-            const canvasRect = map.getCanvas().getBoundingClientRect();
-            const absLeft = canvasRect.left + mousePoint.x;
-            const absTop = canvasRect.top + mousePoint.y;
-            
-            // Keep tooltip on screen
-            const tooltipRect = modelTooltip.getBoundingClientRect();
-            let finalLeft = absLeft + 12;
-            let finalTop = absTop + 12;
-            
-            if (finalLeft + tooltipRect.width > window.innerWidth) {
-                finalLeft = absLeft - tooltipRect.width - 12;
-            }
-            if (finalTop + tooltipRect.height > window.innerHeight) {
-                finalTop = absTop - tooltipRect.height - 12;
-            }
-            
-            modelTooltip.style.left = finalLeft + 'px';
-            modelTooltip.style.top = finalTop + 'px';
-            modelTooltip.style.display = 'block';
-        } else {
-            hideModelTooltip();
+            map.getCanvas().style.cursor = 'pointer';
+            foundModel = true;
+        }
+        
+        if (!foundModel && map.getCanvas().style.cursor === 'pointer') {
+            map.getCanvas().style.cursor = '';
         }
     });
 
