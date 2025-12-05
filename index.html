@@ -3062,32 +3062,24 @@
             
             console.log('Moving model', entry.id, 'from', entry.geo.lng, entry.geo.lat, 'to', lngLat[0], lngLat[1]);
             
-            // Update model position
-            entry.geo.lng = lngLat[0];
-            entry.geo.lat = lngLat[1];
-            
-            // Update mercator coordinates
+            // Instead of directly updating geo coordinates, update the transform coordinates
+            // This keeps the coordinate system consistent with how the app was designed
             const newMercator = mapboxgl.MercatorCoordinate.fromLngLat(lngLat, 0);
             entry.transform.translateX = newMercator.x;
             entry.transform.translateY = newMercator.y;
             
-            console.log('Updated model coordinates - geo:', entry.geo.lng, entry.geo.lat, 'mercator:', entry.transform.translateX, entry.transform.translateY);
+            console.log('Updated transform coordinates - mercator:', entry.transform.translateX, entry.transform.translateY);
             
-            // Force update the model's matrix transforms 
-            if (entry.modelObject && entry.modelObject.matrix) {
-                const modelAltitude = 0;
-                const modelRotate = [Math.PI / 2, 0, entry.transform.rotateY || 0];
-                const modelScale = mapboxgl.MercatorCoordinate.fromLngLat([0, 0], 0).meterInMercatorCoordinateUnits() * (entry.meterScale || 1) * (entry.transform.scale || 1);
-                
-                entry.modelObject.matrix = new THREE.Matrix4()
-                    .makeTranslation(newMercator.x, newMercator.y, modelAltitude)
-                    .multiply(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...modelRotate)))
-                    .multiply(new THREE.Matrix4().makeScale(modelScale, -modelScale, modelScale));
-            }
+            // Let updateEntryGeo calculate the geo coordinates based on the transform
+            // This ensures consistency with the existing coordinate system
             
-            // Apply transforms and refresh
+            // Apply transforms and refresh - this will call updateEntryGeo to calculate proper coordinates
             selectedModelId = entry.id; // Ensure the moved model is selected for transform application
-            try { applyTransformsFromInputs(); } catch (e) {}
+            try { 
+                applyTransformsFromInputs(); // This calls updateEntryGeo which calculates geo coordinates
+            } catch (e) {
+                console.error('Error applying transforms:', e);
+            }
             if (map) {
                 map.triggerRepaint();
                 // Force map to recalculate projections
@@ -3095,12 +3087,13 @@
             }
             try { renderSidebar(); } catch (e) {}
             
+            console.log('After updateEntryGeo - final geo coordinates:', entry.geo.lng, entry.geo.lat);
             console.log('After movement - checking projection:', map.project([entry.geo.lng, entry.geo.lat]));
             
-            // Update selection indicator position
+            // Update selection indicator position using the calculated coordinates
             if (selectedModelMarker) {
                 selectedModelMarker.setLngLat([entry.geo.lng, entry.geo.lat]);
-                console.log('Updated marker position to:', entry.geo.lng, entry.geo.lat);
+                console.log('Updated marker position to calculated coords:', entry.geo.lng, entry.geo.lat);
             }
             
             // Exit move mode but don't hide tooltip immediately to allow re-clicking
