@@ -2883,6 +2883,7 @@
     let hoveredModelId = null;
     let tooltipMoveMode = false;
     let tooltipDragData = null;
+    let selectedModelMarker = null; // Visual indicator for selected model
 
     function hideModelTooltip() {
         hoveredModelId = null;
@@ -2890,6 +2891,48 @@
         tooltipDragData = null;
         modelTooltip.style.display = 'none';
         mouseOverTooltip = false;
+        
+        // Remove selection indicator
+        if (selectedModelMarker) {
+            selectedModelMarker.remove();
+            selectedModelMarker = null;
+        }
+    }
+
+    function showSelectedModelIndicator(entry) {
+        // Remove existing indicator
+        if (selectedModelMarker) {
+            selectedModelMarker.remove();
+        }
+        
+        // Create a visual indicator at the model location
+        const markerElement = document.createElement('div');
+        markerElement.style.width = '60px';
+        markerElement.style.height = '60px';
+        markerElement.style.border = '3px solid #16a34a';
+        markerElement.style.borderRadius = '50%';
+        markerElement.style.backgroundColor = 'rgba(22, 163, 74, 0.1)';
+        markerElement.style.pointerEvents = 'none';
+        markerElement.style.boxShadow = '0 0 20px rgba(22, 163, 74, 0.5)';
+        markerElement.style.animation = 'pulse 2s infinite';
+        
+        // Add pulsing animation
+        if (!document.getElementById('selection-indicator-style')) {
+            const style = document.createElement('style');
+            style.id = 'selection-indicator-style';
+            style.textContent = `
+                @keyframes pulse {
+                    0% { transform: scale(1); opacity: 0.8; }
+                    50% { transform: scale(1.1); opacity: 0.4; }
+                    100% { transform: scale(1); opacity: 0.8; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        selectedModelMarker = new mapboxgl.Marker(markerElement)
+            .setLngLat([entry.geo.lng, entry.geo.lat])
+            .addTo(map);
     }
 
     function checkForModelUnderMouse(mousePoint) {
@@ -3025,6 +3068,11 @@
             if (map) map.triggerRepaint();
             try { renderSidebar(); } catch (e) {}
             
+            // Update selection indicator position
+            if (selectedModelMarker) {
+                selectedModelMarker.setLngLat([entry.geo.lng, entry.geo.lat]);
+            }
+            
             // Exit move mode but don't hide tooltip immediately to allow re-clicking
             tooltipMoveMode = false;
             map.getCanvas().style.cursor = '';
@@ -3056,6 +3104,9 @@
                 console.log('Clicking on model:', bestEntry.id, 'current hoveredModelId:', hoveredModelId);
                 hoveredModelId = bestEntry.id;
                 updateTooltipContent(bestEntry);
+                
+                // Show visual selection indicator
+                showSelectedModelIndicator(bestEntry);
                 
                 // Position tooltip near click point
                 const canvasRect = map.getCanvas().getBoundingClientRect();
