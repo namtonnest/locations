@@ -3073,7 +3073,20 @@
             
             console.log('Updated model coordinates - geo:', entry.geo.lng, entry.geo.lat, 'mercator:', entry.transform.translateX, entry.transform.translateY);
             
+            // Force update the model's matrix transforms 
+            if (entry.modelObject && entry.modelObject.matrix) {
+                const modelAltitude = 0;
+                const modelRotate = [Math.PI / 2, 0, entry.transform.rotateY || 0];
+                const modelScale = mapboxgl.MercatorCoordinate.fromLngLat([0, 0], 0).meterInMercatorCoordinateUnits() * (entry.meterScale || 1) * (entry.transform.scale || 1);
+                
+                entry.modelObject.matrix = new THREE.Matrix4()
+                    .makeTranslation(newMercator.x, newMercator.y, modelAltitude)
+                    .multiply(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...modelRotate)))
+                    .multiply(new THREE.Matrix4().makeScale(modelScale, -modelScale, modelScale));
+            }
+            
             // Apply transforms and refresh
+            selectedModelId = entry.id; // Ensure the moved model is selected for transform application
             try { applyTransformsFromInputs(); } catch (e) {}
             if (map) map.triggerRepaint();
             try { renderSidebar(); } catch (e) {}
@@ -3113,8 +3126,15 @@
                 if (d2 < bestDist2) { bestDist2 = d2; bestEntry = p; }
             }
             
-            const pixelThreshold = 40; // click radius in pixels
+            const pixelThreshold = 80; // increased click radius in pixels
             console.log('Best match:', bestEntry ? bestEntry.id : 'none', 'distance²:', bestDist2, 'threshold²:', pixelThreshold * pixelThreshold);
+            
+            // Visual debugging - show where we think the model is
+            if (bestEntry) {
+                const proj = map.project([bestEntry.geo.lng, bestEntry.geo.lat]);
+                console.log('Model projected position:', proj.x, proj.y, 'vs click position:', mousePoint.x, mousePoint.y);
+            }
+            
             if (bestEntry && bestDist2 <= (pixelThreshold * pixelThreshold)) {
                 console.log('Clicking on model:', bestEntry.id, 'current hoveredModelId:', hoveredModelId);
                 hoveredModelId = bestEntry.id;
