@@ -2864,6 +2864,22 @@
     modelTooltip.style.maxWidth = '280px';
     document.body.appendChild(modelTooltip);
 
+    // Prevent tooltip from being hidden when mouse is over it
+    let mouseOverTooltip = false;
+    modelTooltip.addEventListener('mouseenter', () => {
+        mouseOverTooltip = true;
+    });
+    modelTooltip.addEventListener('mouseleave', () => {
+        mouseOverTooltip = false;
+        // Small delay to allow mouse to move back to model
+        setTimeout(() => {
+            if (!mouseOverTooltip && !tooltipMoveMode) {
+                const mousePoint = map.project(map.getCenter()); // fallback point
+                checkForModelUnderMouse(mousePoint);
+            }
+        }, 100);
+    });
+
     let hoveredModelId = null;
     let tooltipMoveMode = false;
     let tooltipDragData = null;
@@ -2873,6 +2889,28 @@
         tooltipMoveMode = false;
         tooltipDragData = null;
         modelTooltip.style.display = 'none';
+        mouseOverTooltip = false;
+    }
+
+    function checkForModelUnderMouse(mousePoint) {
+        if (tooltipMoveMode || mouseOverTooltip) return;
+        
+        let bestEntry = null;
+        let bestDist2 = Infinity;
+        
+        for (const p of placedModels) {
+            if (!p.geo || p.geo.lng === undefined || p.geo.lat === undefined) continue;
+            const proj = map.project([p.geo.lng, p.geo.lat]);
+            const dx = proj.x - mousePoint.x;
+            const dy = proj.y - mousePoint.y;
+            const d2 = dx*dx + dy*dy;
+            if (d2 < bestDist2) { bestDist2 = d2; bestEntry = p; }
+        }
+        
+        const pixelThreshold = 40;
+        if (!bestEntry || bestDist2 > (pixelThreshold * pixelThreshold)) {
+            hideModelTooltip();
+        }
     }
 
     function updateTooltipContent(entry) {
@@ -3032,8 +3070,10 @@
                 modelTooltip.style.display = 'block';
                 e.originalEvent.stopPropagation();
             } else {
-                // Clicking elsewhere hides tooltip
-                hideModelTooltip();
+                // Only hide tooltip if not clicking elsewhere and mouse not over tooltip
+                if (!mouseOverTooltip) {
+                    hideModelTooltip();
+                }
             }
         }
     });
