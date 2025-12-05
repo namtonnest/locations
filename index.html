@@ -2956,7 +2956,7 @@
             if (d2 < bestDist2) { bestDist2 = d2; bestEntry = p; }
         }
         
-        const pixelThreshold = 40;
+        const pixelThreshold = 250;
         if (!bestEntry || bestDist2 > (pixelThreshold * pixelThreshold)) {
             hideModelTooltip();
         }
@@ -3238,7 +3238,7 @@
             if (d2 < bestDist2) { bestDist2 = d2; }
         }
         
-        const pixelThreshold = 40;
+        const pixelThreshold = 250;
         if (bestDist2 <= (pixelThreshold * pixelThreshold)) {
             map.getCanvas().style.cursor = 'pointer';
             foundModel = true;
