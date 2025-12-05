@@ -2905,6 +2905,8 @@
             selectedModelMarker.remove();
         }
         
+        console.log('Creating selection indicator for model at:', entry.geo.lng, entry.geo.lat);
+        
         // Create a visual indicator at the model location
         const markerElement = document.createElement('div');
         markerElement.style.width = '60px';
@@ -2915,6 +2917,8 @@
         markerElement.style.pointerEvents = 'none';
         markerElement.style.boxShadow = '0 0 20px rgba(22, 163, 74, 0.5)';
         markerElement.style.animation = 'pulse 2s infinite';
+        markerElement.style.position = 'relative';
+        markerElement.style.zIndex = '10';
         
         // Add pulsing animation
         if (!document.getElementById('selection-indicator-style')) {
@@ -2933,6 +2937,8 @@
         selectedModelMarker = new mapboxgl.Marker(markerElement)
             .setLngLat([entry.geo.lng, entry.geo.lat])
             .addTo(map);
+            
+        console.log('Selection indicator created and added to map');
     }
 
     function checkForModelUnderMouse(mousePoint) {
@@ -3054,6 +3060,8 @@
             
             const lngLat = [e.lngLat.lng, e.lngLat.lat];
             
+            console.log('Moving model', entry.id, 'from', entry.geo.lng, entry.geo.lat, 'to', lngLat[0], lngLat[1]);
+            
             // Update model position
             entry.geo.lng = lngLat[0];
             entry.geo.lat = lngLat[1];
@@ -3062,6 +3070,8 @@
             const newMercator = mapboxgl.MercatorCoordinate.fromLngLat(lngLat, 0);
             entry.transform.translateX = newMercator.x;
             entry.transform.translateY = newMercator.y;
+            
+            console.log('Updated model coordinates - geo:', entry.geo.lng, entry.geo.lat, 'mercator:', entry.transform.translateX, entry.transform.translateY);
             
             // Apply transforms and refresh
             try { applyTransformsFromInputs(); } catch (e) {}
@@ -3090,16 +3100,21 @@
             let bestEntry = null;
             let bestDist2 = Infinity;
             
+            console.log('Checking for models at mouse position:', mousePoint.x, mousePoint.y);
+            console.log('Total models to check:', placedModels.length);
+            
             for (const p of placedModels) {
                 if (!p.geo || p.geo.lng === undefined || p.geo.lat === undefined) continue;
                 const proj = map.project([p.geo.lng, p.geo.lat]);
                 const dx = proj.x - mousePoint.x;
                 const dy = proj.y - mousePoint.y;
                 const d2 = dx*dx + dy*dy;
+                console.log('Model', p.id, 'at geo:', p.geo.lng, p.geo.lat, 'proj:', proj.x, proj.y, 'distance²:', d2);
                 if (d2 < bestDist2) { bestDist2 = d2; bestEntry = p; }
             }
             
             const pixelThreshold = 40; // click radius in pixels
+            console.log('Best match:', bestEntry ? bestEntry.id : 'none', 'distance²:', bestDist2, 'threshold²:', pixelThreshold * pixelThreshold);
             if (bestEntry && bestDist2 <= (pixelThreshold * pixelThreshold)) {
                 console.log('Clicking on model:', bestEntry.id, 'current hoveredModelId:', hoveredModelId);
                 hoveredModelId = bestEntry.id;
