@@ -3069,10 +3069,6 @@
         }
     });
 
-    // hide tooltip when mouse leaves the map canvas
-    const canvas = map.getCanvas && map.getCanvas();
-    if (canvas) canvas.addEventListener('mouseleave', hideModelTooltip);
-
 // --- Address / location bar (bottom) ---
 const addressBar = document.createElement('div');
 addressBar.id = 'address-bar';
