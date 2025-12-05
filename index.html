@@ -2907,6 +2907,11 @@
         
         console.log('Creating selection indicator for model at:', entry.geo.lng, entry.geo.lat);
         
+        // Test projection to see where the map thinks this coordinate is
+        const testProj = map.project([entry.geo.lng, entry.geo.lat]);
+        console.log('Coordinate projects to screen position:', testProj.x, testProj.y);
+        console.log('Map center:', map.getCenter(), 'Zoom:', map.getZoom());
+        
         // Create a visual indicator at the model location
         const markerElement = document.createElement('div');
         markerElement.style.width = '60px';
@@ -2917,8 +2922,6 @@
         markerElement.style.pointerEvents = 'none';
         markerElement.style.boxShadow = '0 0 20px rgba(22, 163, 74, 0.5)';
         markerElement.style.animation = 'pulse 2s infinite';
-        markerElement.style.position = 'relative';
-        markerElement.style.zIndex = '10';
         
         // Add pulsing animation
         if (!document.getElementById('selection-indicator-style')) {
@@ -2939,6 +2942,17 @@
             .addTo(map);
             
         console.log('Selection indicator created and added to map');
+        
+        // Additional debugging - check if marker is where we expect
+        setTimeout(() => {
+            if (selectedModelMarker) {
+                const markerEl = selectedModelMarker.getElement();
+                if (markerEl) {
+                    const rect = markerEl.getBoundingClientRect();
+                    console.log('Marker actual screen position:', rect.left, rect.top);
+                }
+            }
+        }, 100);
     }
 
     function checkForModelUnderMouse(mousePoint) {
@@ -3094,6 +3108,46 @@
             setControlsDisabled(false);
             try { renderSidebar(); } catch (e) {}
             hideModelTooltip();
+        };
+
+        // Add event listener for Apply Real Size button
+        document.getElementById('tooltip-apply-dimensions').onclick = (e) => {
+            e.stopPropagation();
+            const length = parseFloat(document.getElementById('tooltip-length').value);
+            const width = parseFloat(document.getElementById('tooltip-width').value);
+            
+            if (length > 0 && width > 0) {
+                // Store the real-world dimensions
+                entry.realLength = length;
+                entry.realWidth = width;
+                
+                // Calculate appropriate scale based on typical model size
+                // Assume the original model is roughly 1 meter in its longest dimension
+                const maxDimension = Math.max(length, width);
+                const calculatedScale = maxDimension / 1; // 1 meter base reference
+                
+                // Apply the calculated scale
+                if (entry.meterScale) {
+                    entry.transform.scale = entry.meterScale * calculatedScale;
+                }
+                
+                // Update the scale slider display
+                const scaleSlider = document.getElementById('tooltip-scale');
+                if (scaleSlider) {
+                    scaleSlider.value = calculatedScale;
+                    scaleSlider.nextElementSibling.textContent = calculatedScale.toFixed(2) + 'x';
+                }
+                
+                // Update main panel scale input if this model is selected
+                if (selectedModelId === entry.id && scaleInput) {
+                    scaleInput.value = calculatedScale.toFixed(2);
+                }
+                
+                try { applyTransformsFromInputs(); } catch (e) {}
+                if (map) map.triggerRepaint();
+                
+                console.log(`Applied real size: ${length}m x ${width}m (scale: ${calculatedScale.toFixed(2)}x)`);
+            }
         };
     }
 
