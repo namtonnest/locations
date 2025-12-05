@@ -2941,7 +2941,16 @@
         // Add event listeners
         document.getElementById('tooltip-close').onclick = (e) => {
             e.stopPropagation();
+            e.preventDefault();
             hideModelTooltip();
+            
+            // Ensure cursor is reset to normal
+            map.getCanvas().style.cursor = '';
+            
+            // Small delay to ensure clean state before allowing new clicks
+            setTimeout(() => {
+                mouseOverTooltip = false;
+            }, 50);
         };
 
         document.getElementById('tooltip-rotation').oninput = (e) => {
@@ -3044,6 +3053,7 @@
             
             const pixelThreshold = 40; // click radius in pixels
             if (bestEntry && bestDist2 <= (pixelThreshold * pixelThreshold)) {
+                console.log('Clicking on model:', bestEntry.id, 'current hoveredModelId:', hoveredModelId);
                 hoveredModelId = bestEntry.id;
                 updateTooltipContent(bestEntry);
                 
