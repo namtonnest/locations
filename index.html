@@ -262,6 +262,9 @@
         #draw-panel input, #draw-panel button, #model-controls input, #model-controls button, #sidebar .model-row { font-size: 13px; }
         /* Nudge address bar sizing to fit better */
         #address-bar { min-width: 260px; padding: 6px; font-size: 13px; bottom: 10px; }
+        /* Show mobile user controls and hide topbar user info on mobile */
+        #mobile-user-controls { display: flex !important; }
+        .user-info { display: none !important; }
         /* Slightly smaller thumbnails */
         .lib-item img.thumb { width: 100px; height: 68px; }
     }
@@ -585,6 +588,14 @@
             const controlsRight = topbar.querySelector('.controls-right');
             topbar.insertBefore(userInfo, controlsRight);
             
+            // Add mobile user controls
+            const mobileControls = document.getElementById('mobile-user-controls');
+            mobileControls.innerHTML = `
+                <a href="dashboard.html" style="padding: 8px 12px; background: rgba(255,255,255,0.95); color: #333; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">My States</a>
+                <button onclick="logout()" style="padding: 8px 12px; background: rgba(255,255,255,0.95); border: none; color: #333; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">Logout</button>
+            `;
+            mobileControls.style.display = 'flex';
+            
             // Expose logout function globally
             window.logout = logout;
         } else {
@@ -595,6 +606,12 @@
             loginInfo.innerHTML = `
                 <a href="login.html" style="padding: 6px 12px; background: linear-gradient(90deg, #06b6d4, #7c3aed); color: white; border-radius: 6px; text-decoration: none; font-weight: 600;">Login / Register</a>
             `;
+            
+            // Hide mobile controls for non-authenticated users
+            const mobileControls = document.getElementById('mobile-user-controls');
+            if (mobileControls) {
+                mobileControls.style.display = 'none';
+            }
             
             const topbar = document.querySelector('.topbar');
             const controlsRight = topbar.querySelector('.controls-right');
@@ -3597,6 +3614,22 @@
             map.getCanvas().style.cursor = '';
         }
     });
+
+// --- Mobile user controls (above address bar) ---
+const mobileUserControls = document.createElement('div');
+mobileUserControls.id = 'mobile-user-controls';
+mobileUserControls.style.cssText = `
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 70px;
+    z-index: 10;
+    display: none;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+`;
+document.body.appendChild(mobileUserControls);
 
 // --- Address / location bar (bottom) ---
 const addressBar = document.createElement('div');
