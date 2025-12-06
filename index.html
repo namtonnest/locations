@@ -450,7 +450,7 @@
                     
                     // Only navigate to downtown Toronto if no saved state is being loaded
                     const params = new URLSearchParams(window.location.search);
-                    const hasStateToLoad = params.get('local_state_id') || params.get('state_id') || params.get('state');
+                    const hasStateToLoad = params.get('local_state_id') || params.get('state_id') || params.get('temp_state_id') || params.get('state');
                     
                     if (!hasStateToLoad) {
                         setTimeout(() => {
@@ -536,10 +536,50 @@
     })();
 
     // Backend endpoint that stores state and returns an 8-character id.
-    // Deploy the server code (README in repo) and set this to your deployed URL, e.g.
-    // const BACKEND_STATE_ENDPOINT = 'https://your-deployment.example.com/api/state';
-        // Use relative URL so it works from any domain (localhost or any Vercel deployment)
-        const BACKEND_STATE_ENDPOINT = '/api/state';
+    // Quick alternative backend using a simple storage service for immediate testing
+    const BACKEND_STATE_ENDPOINT = 'TEMP_BACKEND';
+    
+    // Temporary backend implementation using localStorage + URL sharing
+    const TEMP_STORAGE = {
+        async save(state) {
+            const id = Math.random().toString(36).substring(2, 10); // 8 char random id
+            const stateData = { id, state, timestamp: Date.now() };
+            
+            // Save to localStorage
+            localStorage.setItem('temp_state_' + id, JSON.stringify(stateData));
+            
+            // Also save to a global list for admin
+            const listKey = 'temp_state_list';
+            let list = [];
+            try { list = JSON.parse(localStorage.getItem(listKey) || '[]'); } catch (e) {}
+            list.unshift({ id, timestamp: Date.now(), name: state.name || 'Unnamed' });
+            list = list.slice(0, 100); // Keep only 100 most recent
+            localStorage.setItem(listKey, JSON.stringify(list));
+            
+            return { id };
+        },
+        
+        async load(id) {
+            const key = 'temp_state_' + id;
+            const data = localStorage.getItem(key);
+            if (!data) throw new Error('State not found');
+            return JSON.parse(data);
+        },
+        
+        async list() {
+            const listKey = 'temp_state_list';
+            try {
+                const list = JSON.parse(localStorage.getItem(listKey) || '[]');
+                return list.map(item => ({
+                    id: item.id,
+                    name: item.name,
+                    timestamp: item.timestamp
+                }));
+            } catch (e) {
+                return [];
+            }
+        }
+    };
 
     // Prepare to allow adding a GLTF model interactively.
     // Raw URL for the provided GitHub model (encoded for spaces)
@@ -1935,7 +1975,7 @@
                 try { name = prompt('Enter a name for this map (optional)'); } catch (e) { name = null; }
                 if (name !== null) name = (String(name).trim() || null);
 
-                if (BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
+                if (BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT !== 'TEMP_BACKEND') {
                     saveBtn.disabled = true;
                     // include name alongside state; backend may ignore unknown fields but will receive it if supported
                     const body = JSON.stringify({ state: payload, name });
@@ -1966,15 +2006,29 @@
                     }
                     saveBtn.disabled = false;
                 } else {
-                    // Backend not available - save locally as fallback
-                    const localId = saveStateLocally(payload, name);
-                    if (localId) {
-                        const url = location.origin + location.pathname + '?local_state_id=' + encodeURIComponent(localId);
-                        alert('Saved locally! Share this URL to load on other devices:\n' + url);
-                        console.debug('Saved local state id', localId);
-                    } else {
-                        alert('Failed to save state locally');
+                    // Use temporary backend
+                    saveBtn.disabled = true;
+                    try {
+                        const result = await TEMP_STORAGE.save(Object.assign({}, payload, { name }));
+                        const shareUrl = location.origin + location.pathname + '?temp_state_id=' + encodeURIComponent(result.id);
+                        
+                        // Show success with shareable URL
+                        const message = `Saved with ID: ${result.id}\n\nShare this URL for cross-device access:\n${shareUrl}`;
+                        alert(message);
+                        
+                        // Copy to clipboard automatically
+                        try {
+                            if (navigator.clipboard && navigator.clipboard.writeText) {
+                                await navigator.clipboard.writeText(shareUrl);
+                                console.log('Share URL copied to clipboard');
+                            }
+                        } catch (e) { /* ignore clipboard errors */ }
+                        
+                        console.debug('Saved temp state id', result.id);
+                    } catch (e) {
+                        alert('Failed to save state: ' + e.message);
                     }
+                    saveBtn.disabled = false;
                 }
                 
                 // Always save a local backup copy regardless of backend success/failure
@@ -1994,7 +2048,7 @@
         try {
             const data = serializePlacedModels();
             const payload = { mapCenter: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), models: data, draws: drawnFeatures };
-            if (BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
+            if (BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT !== 'TEMP_BACKEND') {
                 shareBtn.disabled = true;
                 const res = await fetch(BACKEND_STATE_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: payload }) });
                 if (!res.ok) throw new Error('Backend save failed: ' + res.status);
@@ -2010,7 +2064,22 @@
                 } catch (e) { console.warn('clipboard write failed', e); }
                 try { window.prompt('Copy this URL', url); } catch (e) { alert(url); }
             } else {
-                alert('No backend configured for sharing');
+                // Use temporary backend for sharing
+                shareBtn.disabled = true;
+                const result = await TEMP_STORAGE.save(payload);
+                const url = location.origin + location.pathname + '?temp_state_id=' + encodeURIComponent(result.id);
+                
+                try {
+                    if (navigator.share) { await navigator.share({ url }); return; }
+                } catch (e) { console.warn('navigator.share failed', e); }
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) { 
+                        await navigator.clipboard.writeText(url); 
+                        alert('Share URL copied to clipboard!\nSend this link to access from any device.'); 
+                        return; 
+                    }
+                } catch (e) { console.warn('clipboard write failed', e); }
+                try { window.prompt('Copy this URL to share across devices', url); } catch (e) { alert(url); }
             }
         } catch (e) { alert('Failed to create share URL: ' + (e && e.message)); }
         finally { try { if (shareBtn) shareBtn.disabled = false; } catch (e) {} }
@@ -2023,7 +2092,28 @@
             const params = new URLSearchParams(window.location.search);
             const localId = params.get('local_state_id');
             const id = params.get('state_id');
+            const tempId = params.get('temp_state_id');
             const s = params.get('state');
+            
+            if (tempId) {
+                // Load from temporary storage
+                setTimeout(async () => {
+                    try {
+                        const data = await TEMP_STORAGE.load(tempId);
+                        console.log('[DEBUG] Loaded temp state:', data);
+                        if (data && data.state) {
+                            restoreSavedState(data.state);
+                        } else {
+                            console.warn('No state found in temp storage for id', tempId);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to load temp state', tempId, e);
+                        alert('Failed to load shared state: ' + e.message);
+                    }
+                }, 300);
+                return;
+            }
+            
             if (localId) {
                 // load from localStorage
                 setTimeout(() => {
@@ -2036,7 +2126,7 @@
                 }, 300);
                 return;
             }
-            if (id && BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT.length) {
+            if (id && BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT !== 'TEMP_BACKEND') {
                 setTimeout(async () => {
                     try {
                         const url = BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id);
