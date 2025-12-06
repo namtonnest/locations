@@ -2085,7 +2085,10 @@
                             body: JSON.stringify({ state: payload, name })
                         });
                         
+                        console.log('Response status:', response.status);
                         const data = await response.json();
+                        console.log('Response data:', data);
+                        
                         if (data.success) {
                             const shareUrl = location.origin + location.pathname + '?user_state_id=' + encodeURIComponent(data.id);
                             alert(`Saved to your account!\nState ID: ${data.id}\n\nShare URL:\n${shareUrl}`);
@@ -2098,6 +2101,7 @@
                             alert('Failed to save: ' + (data.error || 'Unknown error'));
                         }
                     } catch (e) {
+                        console.error('Save error:', e);
                         alert('Failed to save to your account: ' + e.message);
                     }
                     saveBtn.disabled = false;
