@@ -54,39 +54,24 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    // Check Redis connection first
-    try {
-      const redis = getRedis();
-      // Test connection
-      await redis.ping();
-    } catch (redisError) {
-      console.error('Redis connection error:', redisError);
-      return res.status(500).json({ 
-        error: 'Database connection failed', 
-        details: redisError.message,
-        envCheck: {
-          hasUrl: !!process.env.UPSTASH_REDIS_REST_URL,
-          hasToken: !!process.env.UPSTASH_REDIS_REST_TOKEN
+    const { action } = req.body || {};
+
+    // Test action that doesn't require Redis
+    if (action === 'test') {
+      return res.json({ 
+        success: true, 
+        message: 'API is working',
+        envStatus: {
+          hasRedisUrl: !!process.env.UPSTASH_REDIS_REST_URL,
+          hasRedisToken: !!process.env.UPSTASH_REDIS_REST_TOKEN
         }
       });
     }
 
+    // Initialize Redis only when needed for actual operations
     const redis = getRedis();
-    const { action } = req.body || {};
 
     if (req.method === 'POST') {
-      // Test action for connectivity
-      if (action === 'test') {
-        return res.json({ 
-          success: true, 
-          message: 'API is working',
-          envStatus: {
-            hasRedisUrl: !!process.env.UPSTASH_REDIS_REST_URL,
-            hasRedisToken: !!process.env.UPSTASH_REDIS_REST_TOKEN
-          }
-        });
-      }
-
       if (action === 'register') {
         const { username, password, email } = req.body;
         
