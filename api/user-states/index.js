@@ -1,6 +1,16 @@
 // Simplified User-specific state management API
-// Simple in-memory storage for mock functionality
-const mockStates = {};
+// Simple in-memory storage for mock functionality - separated by user
+const userStates = {}; // Structure: { userId: { stateId: stateData } }
+
+function getUserIdFromToken(sessionToken) {
+  // Extract username from session token (format: temp_timestamp_username)
+  if (sessionToken && sessionToken.startsWith('temp_')) {
+    const parts = sessionToken.split('_');
+    const username = parts.slice(2).join('_') || 'unknown';
+    return username;
+  }
+  return 'unknown';
+}
 
 module.exports = async function handler(req, res) {
   // Enable CORS
@@ -28,11 +38,19 @@ module.exports = async function handler(req, res) {
         return res.status(400).json({ error: 'Name and state required' });
       }
 
-      // Mock successful save - store the actual state
+      // Get user ID from session token
+      const userId = getUserIdFromToken(sessionToken);
+      
+      // Mock successful save - store the actual state for this user
       const stateId = `state_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       
-      // Store the state in our mock storage
-      mockStates[stateId] = {
+      // Initialize user storage if it doesn't exist
+      if (!userStates[userId]) {
+        userStates[userId] = {};
+      }
+      
+      // Store the state in this user's storage
+      userStates[userId][stateId] = {
         id: stateId,
         name: name,
         state: state,
@@ -49,10 +67,12 @@ module.exports = async function handler(req, res) {
 
     if (req.method === 'GET') {
       const { id } = req.query;
+      const userId = getUserIdFromToken(sessionToken);
+      const userStorage = userStates[userId] || {};
       
       if (id) {
-        // Get specific state
-        const savedState = mockStates[id];
+        // Get specific state for this user
+        const savedState = userStorage[id];
         if (savedState) {
           return res.json({
             success: true,
@@ -61,12 +81,12 @@ module.exports = async function handler(req, res) {
         } else {
           return res.json({
             success: false,
-            error: 'State not found'
+            error: 'State not found or not accessible'
           });
         }
       } else {
-        // List user states - return all saved states
-        const statesList = Object.values(mockStates).map(state => ({
+        // List user states - return only this user's states
+        const statesList = Object.values(userStorage).map(state => ({
           id: state.id,
           name: state.name,
           createdAt: state.createdAt
@@ -86,8 +106,11 @@ module.exports = async function handler(req, res) {
         return res.status(400).json({ error: 'State ID required' });
       }
 
-      if (mockStates[id]) {
-        delete mockStates[id];
+      const userId = getUserIdFromToken(sessionToken);
+      const userStorage = userStates[userId] || {};
+
+      if (userStorage[id]) {
+        delete userStates[userId][id];
         return res.json({
           success: true,
           message: 'State deleted successfully'
@@ -95,7 +118,7 @@ module.exports = async function handler(req, res) {
       } else {
         return res.json({
           success: false,
-          error: 'State not found'
+          error: 'State not found or not accessible'
         });
       }
     }
