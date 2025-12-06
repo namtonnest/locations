@@ -1789,6 +1789,55 @@
             };
         });
     }
+    
+    // helper to save state to localStorage
+    function saveStateLocally(payload, name) {
+        try {
+            const id = 'local_' + Date.now();
+            const key = 'saved_state_' + id;
+            const stateRecord = {
+                id: id,
+                name: name || 'Unnamed state',
+                state: payload,
+                created: new Date().toISOString()
+            };
+            localStorage.setItem(key, JSON.stringify(stateRecord));
+            
+            // Update the list of saved local state IDs
+            const listKey = 'local_state_ids_v1';
+            let ids = [];
+            try { ids = JSON.parse(localStorage.getItem(listKey) || '[]'); } catch (e) { ids = []; }
+            if (!ids.includes(id)) { ids.unshift(id); ids = ids.slice(0, 50); } // Keep only 50 most recent
+            localStorage.setItem(listKey, JSON.stringify(ids));
+            
+            // Update the name mapping
+            const namesKey = 'local_state_names_v1';
+            let names = {};
+            try { names = JSON.parse(localStorage.getItem(namesKey) || '{}'); } catch (e) { names = {}; }
+            names[id] = name || 'Unnamed state';
+            localStorage.setItem(namesKey, JSON.stringify(names));
+            
+            return id;
+        } catch (e) {
+            console.warn('Failed to save state locally', e);
+            return null;
+        }
+    }
+
+    // helper to load state from localStorage by id
+    function loadStateLocally(id) {
+        try {
+            const key = 'saved_state_' + id;
+            const raw = localStorage.getItem(key);
+            if (!raw) return null;
+            const record = JSON.parse(raw);
+            return record.state || record; // Support both old format and new format
+        } catch (e) {
+            console.warn('Failed to load local state', id, e);
+            return null;
+        }
+    }
+    
     // helper to restore parsed state object (used by URL restore)
     function restoreSavedState(parsed) {
         try {
@@ -1917,7 +1966,23 @@
                     }
                     saveBtn.disabled = false;
                 } else {
-                    alert('No backend endpoint configured');
+                    // Backend not available - save locally as fallback
+                    const localId = saveStateLocally(payload, name);
+                    if (localId) {
+                        const url = location.origin + location.pathname + '?local_state_id=' + encodeURIComponent(localId);
+                        alert('Saved locally! Share this URL to load on other devices:\n' + url);
+                        console.debug('Saved local state id', localId);
+                    } else {
+                        alert('Failed to save state locally');
+                    }
+                }
+                
+                // Always save a local backup copy regardless of backend success/failure
+                try {
+                    const localBackupId = saveStateLocally(payload, (name || 'Backup') + ' (auto-backup)');
+                    console.debug('Created local backup with id:', localBackupId);
+                } catch (e) {
+                    console.warn('Failed to create local backup:', e);
                 }
             } catch (e) { alert('Save failed: ' + (e && e.message)); saveBtn.disabled = false; }
         });
