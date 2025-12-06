@@ -2071,9 +2071,9 @@
                 try { name = prompt('Enter a name for this map (optional)'); } catch (e) { name = null; }
                 if (name !== null) name = (String(name).trim() || null);
 
-                if (currentUser && sessionToken) {
-                    // Save to user's personal database
-                    console.log('Saving to user account:', currentUser.username, 'with token:', sessionToken.substring(0, 10) + '...');
+                if (sessionToken) {
+                    // Save to user's personal database if we have a session token
+                    console.log('Saving to user account with token:', sessionToken.substring(0, 10) + '...');
                     saveBtn.disabled = true;
                     try {
                         const response = await fetch(BACKEND_STATE_ENDPOINT, {
