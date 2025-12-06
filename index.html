@@ -580,7 +580,7 @@
             userInfo.style.cssText = 'color: white; font-size: 14px; margin-right: 12px; display: flex; align-items: center; gap: 8px;';
             userInfo.innerHTML = `
                 <span>Welcome, ${currentUser.username}</span>
-                <a href="dashboard.html" style="padding: 4px 8px; background: rgba(255,255,255,0.2); color: white; border-radius: 4px; text-decoration: none; font-size: 12px;">My States</a>
+                <a href="dashboard.html" style="padding: 4px 8px; background: rgba(255,255,255,0.2); color: white; border-radius: 4px; text-decoration: none; font-size: 12px;">My Maps</a>
                 <button onclick="logout()" style="padding: 4px 8px; background: rgba(255,255,255,0.2); border: none; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">Logout</button>
             `;
             
@@ -591,7 +591,7 @@
             // Add mobile user controls
             const mobileControls = document.getElementById('mobile-user-controls');
             mobileControls.innerHTML = `
-                <a href="dashboard.html" style="padding: 8px 12px; background: rgba(255,255,255,0.95); color: #333; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">My States</a>
+                <a href="dashboard.html" style="padding: 8px 12px; background: rgba(255,255,255,0.95); color: #333; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">My Maps</a>
                 <button onclick="logout()" style="padding: 8px 12px; background: rgba(255,255,255,0.95); border: none; color: #333; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">Logout</button>
             `;
             mobileControls.style.display = 'flex';
