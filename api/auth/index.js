@@ -48,6 +48,23 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    // Check Redis connection first
+    try {
+      const redis = getRedis();
+      // Test connection
+      await redis.ping();
+    } catch (redisError) {
+      console.error('Redis connection error:', redisError);
+      return res.status(500).json({ 
+        error: 'Database connection failed', 
+        details: redisError.message,
+        envCheck: {
+          hasUrl: !!process.env.UPSTASH_REDIS_REST_URL,
+          hasToken: !!process.env.UPSTASH_REDIS_REST_TOKEN
+        }
+      });
+    }
+
     const redis = getRedis();
     const { action } = req.body || {};
 
