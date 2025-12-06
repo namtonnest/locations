@@ -2182,7 +2182,7 @@
                     }
                     
                     try {
-                        const response = await fetch(`${BACKEND_STATE_ENDPOINT}?stateId=${encodeURIComponent(userStateId)}`, {
+                        const response = await fetch(`${BACKEND_STATE_ENDPOINT}?id=${encodeURIComponent(userStateId)}`, {
                             headers: { 'X-Session-Token': sessionToken }
                         });
                         

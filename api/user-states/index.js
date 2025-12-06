@@ -45,13 +45,12 @@ module.exports = async function handler(req, res) {
           success: true,
           state: {
             name: 'Mock Saved State',
-            data: {
-              center: [-79.3832, 43.6532],
-              zoom: 15,
-              pitch: 45,
-              bearing: -17.6,
-              models: []
-            }
+            mapCenter: [-79.3832, 43.6532],
+            zoom: 15,
+            pitch: 45,
+            bearing: -17.6,
+            models: [],
+            draws: []
           }
         });
       } else {
