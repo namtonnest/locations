@@ -59,6 +59,27 @@ module.exports = async function handler(req, res) {
           message: 'Login temporarily using mock response' 
         });
       }
+
+      if (action === 'verify') {
+        const sessionToken = req.body.sessionToken || req.headers.authorization?.replace('Bearer ', '');
+        
+        // For mock sessions, accept any token that starts with 'temp_'
+        if (sessionToken && sessionToken.startsWith('temp_')) {
+          return res.json({ 
+            success: true, 
+            userId: `user_mock`,
+            username: 'MockUser',
+            message: 'Mock session valid' 
+          });
+        }
+        
+        return res.status(401).json({ error: 'Invalid session' });
+      }
+
+      if (action === 'logout') {
+        // Mock logout - just return success
+        return res.json({ success: true, message: 'Logged out successfully' });
+      }
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
