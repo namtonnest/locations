@@ -34,11 +34,12 @@ module.exports = async function handler(req, res) {
         }
 
         // Temporary mock response
+        const sessionToken = `temp_${Date.now()}_${username}`;
         return res.json({ 
           success: true, 
           userId: `user_${Date.now()}`,
           username,
-          sessionToken: `temp_${Date.now()}`,
+          sessionToken,
           message: 'Registration temporarily disabled - using mock response' 
         });
       }
@@ -51,11 +52,12 @@ module.exports = async function handler(req, res) {
         }
 
         // Temporary mock response
+        const sessionToken = `temp_${Date.now()}_${username}`;
         return res.json({ 
           success: true, 
           userId: `user_${Date.now()}`,
           username,
-          sessionToken: `temp_${Date.now()}`,
+          sessionToken,
           message: 'Login temporarily using mock response' 
         });
       }
@@ -65,10 +67,14 @@ module.exports = async function handler(req, res) {
         
         // For mock sessions, accept any token that starts with 'temp_'
         if (sessionToken && sessionToken.startsWith('temp_')) {
+          // Extract username from session token (format: temp_timestamp_username)
+          const parts = sessionToken.split('_');
+          const username = parts.slice(2).join('_') || 'MockUser';
+          
           return res.json({ 
             success: true, 
             userId: `user_mock`,
-            username: 'MockUser',
+            username: username,
             message: 'Mock session valid' 
           });
         }
