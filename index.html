@@ -448,17 +448,24 @@
                         console.log('Adjusted map pitch to better show 3D buildings');
                     }
                     
-                    // Navigate to downtown Toronto where buildings are prominent
-                    setTimeout(() => {
-                        map.flyTo({
-                            center: [-79.3832, 43.6532], // Downtown Toronto (Financial District)
-                            zoom: 16,
-                            pitch: 45,
-                            bearing: 0,
-                            duration: 2000
-                        });
-                        console.log('Navigated to downtown Toronto for 3D buildings demo');
-                    }, 1000);
+                    // Only navigate to downtown Toronto if no saved state is being loaded
+                    const params = new URLSearchParams(window.location.search);
+                    const hasStateToLoad = params.get('local_state_id') || params.get('state_id') || params.get('state');
+                    
+                    if (!hasStateToLoad) {
+                        setTimeout(() => {
+                            map.flyTo({
+                                center: [-79.3832, 43.6532], // Downtown Toronto (Financial District)
+                                zoom: 16,
+                                pitch: 45,
+                                bearing: 0,
+                                duration: 2000
+                            });
+                            console.log('Navigated to downtown Toronto for 3D buildings demo');
+                        }, 1000);
+                    } else {
+                        console.log('Skipped Toronto navigation - loading saved state instead');
+                    }
                 }, 500);
             }
         } catch (e) { console.warn('Failed to add 3D buildings layer', e); }
@@ -3248,32 +3255,7 @@
             const pixelThreshold = 250; // significantly increased click radius in pixels
             console.log('Best match:', bestEntry ? bestEntry.id : 'none', 'distance²:', bestDist2, 'threshold²:', pixelThreshold * pixelThreshold);
             
-            // Visual debugging - show where we think the model is
-            if (bestEntry) {
-                const proj = map.project([bestEntry.geo.lng, bestEntry.geo.lat]);
-                console.log('Model projected position:', proj.x, proj.y, 'vs click position:', mousePoint.x, mousePoint.y);
-                
-                // Add a temporary visual marker to show where the system thinks the model is
-                const debugMarker = document.createElement('div');
-                debugMarker.style.width = '20px';
-                debugMarker.style.height = '20px';
-                debugMarker.style.backgroundColor = 'red';
-                debugMarker.style.border = '2px solid white';
-                debugMarker.style.borderRadius = '50%';
-                debugMarker.style.position = 'absolute';
-                debugMarker.style.left = (proj.x - 10) + 'px';
-                debugMarker.style.top = (proj.y - 10) + 'px';
-                debugMarker.style.pointerEvents = 'none';
-                debugMarker.style.zIndex = '9999';
-                map.getContainer().appendChild(debugMarker);
-                
-                // Remove debug marker after 3 seconds
-                setTimeout(() => {
-                    if (debugMarker.parentNode) {
-                        debugMarker.parentNode.removeChild(debugMarker);
-                    }
-                }, 3000);
-            }
+
             
             if (bestEntry && bestDist2 <= (pixelThreshold * pixelThreshold)) {
                 console.log('Clicking on model:', bestEntry.id, 'current hoveredModelId:', hoveredModelId);
