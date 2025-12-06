@@ -14,11 +14,17 @@ function normalizeUpstashUrl(raw) {
 
 function getRedis() {
   if (cachedRedis) return cachedRedis;
+  
   const url = normalizeUpstashUrl(process.env.UPSTASH_REDIS_REST_URL);
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) {
-    throw new Error('Missing Redis credentials. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN environment variables.');
+  
+  if (!url) {
+    throw new Error(`Missing UPSTASH_REDIS_REST_URL environment variable. Current value: ${process.env.UPSTASH_REDIS_REST_URL}`);
   }
+  if (!token) {
+    throw new Error(`Missing UPSTASH_REDIS_REST_TOKEN environment variable. Has token: ${!!process.env.UPSTASH_REDIS_REST_TOKEN}`);
+  }
+  
   cachedRedis = new Redis({ url, token });
   return cachedRedis;
 }
@@ -69,6 +75,18 @@ module.exports = async function handler(req, res) {
     const { action } = req.body || {};
 
     if (req.method === 'POST') {
+      // Test action for connectivity
+      if (action === 'test') {
+        return res.json({ 
+          success: true, 
+          message: 'API is working',
+          envStatus: {
+            hasRedisUrl: !!process.env.UPSTASH_REDIS_REST_URL,
+            hasRedisToken: !!process.env.UPSTASH_REDIS_REST_TOKEN
+          }
+        });
+      }
+
       if (action === 'register') {
         const { username, password, email } = req.body;
         
