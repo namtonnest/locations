@@ -192,6 +192,24 @@
         const form = document.getElementById('authForm');
         const submitBtn = document.getElementById('submitBtn');
 
+        // Test API connectivity on page load
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('/api/auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'test' })
+                });
+                console.log('API test response status:', response.status);
+                if (!response.ok) {
+                    const text = await response.text();
+                    console.log('API test error response:', text);
+                }
+            } catch (error) {
+                console.error('API connectivity test failed:', error);
+            }
+        });
+
         function toggleMode() {
             isLoginMode = !isLoginMode;
             
@@ -269,6 +287,11 @@
                     body: JSON.stringify(body)
                 });
                 
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
                 const data = await response.json();
                 
                 if (data.success) {
@@ -287,7 +310,13 @@
                 }
             } catch (error) {
                 console.error('Auth error:', error);
-                showMessage('Connection error. Please try again.');
+                if (error.message.includes('fetch')) {
+                    showMessage('Cannot connect to server. Please check if the site is deployed correctly.');
+                } else if (error.message.includes('HTTP')) {
+                    showMessage(`Server error: ${error.message}`);
+                } else {
+                    showMessage(`Connection error: ${error.message}`);
+                }
             }
             
             setLoading(false);
