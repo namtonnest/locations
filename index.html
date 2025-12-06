@@ -450,7 +450,7 @@
                     
                     // Only navigate to downtown Toronto if no saved state is being loaded
                     const params = new URLSearchParams(window.location.search);
-                    const hasStateToLoad = params.get('local_state_id') || params.get('state_id') || params.get('temp_state_id') || params.get('state');
+                    const hasStateToLoad = params.get('local_state_id') || params.get('state_id') || params.get('temp_state_id') || params.get('user_state_id') || params.get('state');
                     
                     if (!hasStateToLoad) {
                         setTimeout(() => {
@@ -536,8 +536,94 @@
     })();
 
     // Backend endpoint that stores state and returns an 8-character id.
-    // Quick alternative backend using a simple storage service for immediate testing
-    const BACKEND_STATE_ENDPOINT = 'TEMP_BACKEND';
+    // User account system with individual databases for each user
+    const BACKEND_STATE_ENDPOINT = '/api/user-states'; // User-specific states
+    const AUTH_ENDPOINT = '/api/auth'; // Authentication
+    const TEMP_BACKEND_ENDPOINT = 'TEMP_BACKEND'; // Fallback for testing
+    
+    // User session management
+    let currentUser = null;
+    let sessionToken = localStorage.getItem('sessionToken');
+    
+    // Check if user is logged in
+    async function verifySession() {
+        if (!sessionToken) return false;
+        
+        try {
+            const response = await fetch(AUTH_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'verify', sessionToken })
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                currentUser = {
+                    id: data.userId,
+                    username: data.username,
+                    email: data.email
+                };
+                updateUIForUser();
+                return true;
+            } else {
+                logout();
+                return false;
+            }
+        } catch (error) {
+            console.warn('Session verification failed:', error);
+            return false;
+        }
+    }
+    
+    function logout() {
+        if (sessionToken) {
+            fetch(AUTH_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'logout', sessionToken })
+            }).catch(() => {});
+        }
+        
+        localStorage.removeItem('sessionToken');
+        localStorage.removeItem('username');
+        localStorage.removeItem('userId');
+        currentUser = null;
+        sessionToken = null;
+        window.location.href = 'login.html';
+    }
+    
+    function updateUIForUser() {
+        if (currentUser) {
+            // Add user info to the topbar
+            const userInfo = document.createElement('div');
+            userInfo.className = 'user-info';
+            userInfo.style.cssText = 'color: white; font-size: 14px; margin-right: 12px; display: flex; align-items: center; gap: 8px;';
+            userInfo.innerHTML = `
+                <span>Welcome, ${currentUser.username}</span>
+                <a href="dashboard.html" style="padding: 4px 8px; background: rgba(255,255,255,0.2); color: white; border-radius: 4px; text-decoration: none; font-size: 12px;">My States</a>
+                <button onclick="logout()" style="padding: 4px 8px; background: rgba(255,255,255,0.2); border: none; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">Logout</button>
+            `;
+            
+            const topbar = document.querySelector('.topbar');
+            const controlsRight = topbar.querySelector('.controls-right');
+            topbar.insertBefore(userInfo, controlsRight);
+            
+            // Expose logout function globally
+            window.logout = logout;
+        } else {
+            // Add login button for non-authenticated users
+            const loginInfo = document.createElement('div');
+            loginInfo.className = 'login-info';
+            loginInfo.style.cssText = 'color: white; font-size: 14px; margin-right: 12px;';
+            loginInfo.innerHTML = `
+                <a href="login.html" style="padding: 6px 12px; background: linear-gradient(90deg, #06b6d4, #7c3aed); color: white; border-radius: 6px; text-decoration: none; font-weight: 600;">Login / Register</a>
+            `;
+            
+            const topbar = document.querySelector('.topbar');
+            const controlsRight = topbar.querySelector('.controls-right');
+            topbar.insertBefore(loginInfo, controlsRight);
+        }
+    }
     
     // Temporary backend implementation using localStorage + URL sharing
     const TEMP_STORAGE = {
@@ -1975,58 +2061,65 @@
                 try { name = prompt('Enter a name for this map (optional)'); } catch (e) { name = null; }
                 if (name !== null) name = (String(name).trim() || null);
 
-                if (BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT !== 'TEMP_BACKEND') {
+                if (currentUser && sessionToken) {
+                    // Save to user's personal database
                     saveBtn.disabled = true;
-                    // include name alongside state; backend may ignore unknown fields but will receive it if supported
-                    const body = JSON.stringify({ state: payload, name });
-                    const res = await fetch(BACKEND_STATE_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
-                    if (!res.ok) throw new Error('Save failed: ' + res.status);
-                    const j = await res.json();
-                    const id = j && j.id;
-                    if (id) {
-                        alert('Saved state id: ' + id + '\nYou can view it in the admin page.');
-                        console.debug('Saved state id', id, j);
-                        // Always update localStorage id list and name mapping
-                        try {
-                            const key = 'admin_known_state_ids_v1';
-                            let arr = [];
-                            try { arr = JSON.parse(localStorage.getItem(key) || '[]'); } catch (e) { arr = []; }
-                            if (!arr.includes(id)) { arr.unshift(id); arr = arr.slice(0, 200); }
-                            localStorage.setItem(key, JSON.stringify(arr));
-                        } catch (e) {}
-                        try {
-                            const namesKey = 'admin_known_state_names_v1';
-                            let map = {};
-                            try { map = JSON.parse(localStorage.getItem(namesKey) || '{}'); } catch (e) { map = {}; }
-                            map[id] = name || '';
-                            localStorage.setItem(namesKey, JSON.stringify(map));
-                        } catch (e) {}
-                    } else {
-                        alert('Saved but server returned no id');
+                    try {
+                        const response = await fetch(BACKEND_STATE_ENDPOINT, {
+                            method: 'POST',
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'X-Session-Token': sessionToken
+                            },
+                            body: JSON.stringify({ state: payload, name })
+                        });
+                        
+                        const data = await response.json();
+                        if (data.success) {
+                            const shareUrl = location.origin + location.pathname + '?user_state_id=' + encodeURIComponent(data.id);
+                            alert(`Saved to your account!\nState ID: ${data.id}\n\nShare URL:\n${shareUrl}`);
+                            
+                            // Copy to clipboard
+                            if (navigator.clipboard && navigator.clipboard.writeText) {
+                                await navigator.clipboard.writeText(shareUrl);
+                            }
+                        } else {
+                            alert('Failed to save: ' + (data.error || 'Unknown error'));
+                        }
+                    } catch (e) {
+                        alert('Failed to save to your account: ' + e.message);
                     }
                     saveBtn.disabled = false;
-                } else {
-                    // Use temporary backend
+                } else if (TEMP_BACKEND_ENDPOINT === 'TEMP_BACKEND') {
+                    // Use temporary backend for non-logged-in users
                     saveBtn.disabled = true;
                     try {
                         const result = await TEMP_STORAGE.save(Object.assign({}, payload, { name }));
                         const shareUrl = location.origin + location.pathname + '?temp_state_id=' + encodeURIComponent(result.id);
                         
-                        // Show success with shareable URL
-                        const message = `Saved with ID: ${result.id}\n\nShare this URL for cross-device access:\n${shareUrl}`;
+                        const message = `Saved temporarily!\n\nTo save permanently, please login.\n\nTemp ID: ${result.id}\nShare URL:\n${shareUrl}`;
                         alert(message);
                         
                         // Copy to clipboard automatically
                         try {
                             if (navigator.clipboard && navigator.clipboard.writeText) {
                                 await navigator.clipboard.writeText(shareUrl);
-                                console.log('Share URL copied to clipboard');
                             }
                         } catch (e) { /* ignore clipboard errors */ }
-                        
-                        console.debug('Saved temp state id', result.id);
                     } catch (e) {
-                        alert('Failed to save state: ' + e.message);
+                        alert('Failed to save temporarily: ' + e.message);
+                    }
+                    saveBtn.disabled = false;
+                } else {
+                    // Fallback to original backend
+                    saveBtn.disabled = true;
+                    const body = JSON.stringify({ state: payload, name });
+                    const res = await fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+                    if (!res.ok) throw new Error('Save failed: ' + res.status);
+                    const j = await res.json();
+                    const id = j && j.id;
+                    if (id) {
+                        alert('Saved state id: ' + id + '\nYou can view it in the admin page.');
                     }
                     saveBtn.disabled = false;
                 }
@@ -2093,7 +2186,37 @@
             const localId = params.get('local_state_id');
             const id = params.get('state_id');
             const tempId = params.get('temp_state_id');
+            const userStateId = params.get('user_state_id');
             const s = params.get('state');
+            
+            if (userStateId) {
+                // Load from user's personal database
+                setTimeout(async () => {
+                    if (!sessionToken) {
+                        alert('You need to login to access this user state.');
+                        window.location.href = 'login.html';
+                        return;
+                    }
+                    
+                    try {
+                        const response = await fetch(`${BACKEND_STATE_ENDPOINT}?stateId=${encodeURIComponent(userStateId)}`, {
+                            headers: { 'X-Session-Token': sessionToken }
+                        });
+                        
+                        const data = await response.json();
+                        if (data.success) {
+                            console.log('[DEBUG] Loaded user state:', data);
+                            restoreSavedState(data.state);
+                        } else {
+                            alert('Failed to load state: ' + (data.error || 'State not found'));
+                        }
+                    } catch (e) {
+                        console.warn('Failed to load user state', userStateId, e);
+                        alert('Failed to load state: ' + e.message);
+                    }
+                }, 500);
+                return;
+            }
             
             if (tempId) {
                 // Load from temporary storage
@@ -2126,10 +2249,11 @@
                 }, 300);
                 return;
             }
-            if (id && BACKEND_STATE_ENDPOINT && BACKEND_STATE_ENDPOINT !== 'TEMP_BACKEND') {
+            
+            if (id) {
                 setTimeout(async () => {
                     try {
-                        const url = BACKEND_STATE_ENDPOINT + '/' + encodeURIComponent(id);
+                        const url = '/api/state/' + encodeURIComponent(id);
                         const res = await fetch(url);
                         if (!res.ok) throw new Error('Failed to fetch state: ' + res.status);
                         const j = await res.json();
@@ -2148,12 +2272,18 @@
                 }, 500);
                 return;
             }
+            
             if (!s) return;
             const json = decodeURIComponent(atob(s));
             const parsed = JSON.parse(json);
             setTimeout(() => { restoreSavedState(parsed); }, 500);
         } catch (e) { console.warn('Failed to restore from URL', e); }
     })();
+    
+    // Initialize authentication on page load
+    window.addEventListener('load', async () => {
+        await verifySession();
+    });
 
     // helpers to convert mercator deltas to lat/lng deltas
     function metersPerDegreeAtLat(latDeg) {

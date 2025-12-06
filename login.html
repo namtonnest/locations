@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Login - Location Manager</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: Inter, system-ui, -apple-system, sans-serif; 
+            margin: 0; 
+            background: linear-gradient(135deg, #0f1724, #1e293b);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .auth-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 32px;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            margin: 20px;
+        }
+        
+        .auth-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        
+        .auth-header h1 {
+            color: #0f1724;
+            margin: 0 0 8px 0;
+            font-size: 28px;
+            font-weight: 700;
+        }
+        
+        .auth-header p {
+            color: #6b7280;
+            margin: 0;
+            font-size: 16px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            color: #374151;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #06b6d4;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(90deg, #06b6d4, #7c3aed);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .toggle-mode {
+            text-align: center;
+            margin-top: 24px;
+            color: #6b7280;
+        }
+        
+        .toggle-mode a {
+            color: #06b6d4;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .toggle-mode a:hover {
+            text-decoration: underline;
+        }
+        
+        .error {
+            background: #fef2f2;
+            color: #dc2626;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        
+        .success {
+            background: #f0fdf4;
+            color: #16a34a;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.8s ease-in-out infinite;
+            margin-right: 8px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-header">
+            <h1 id="authTitle">Welcome Back</h1>
+            <p id="authSubtitle">Sign in to your account</p>
+        </div>
+        
+        <div id="message"></div>
+        
+        <form id="authForm">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            
+            <div class="form-group" id="emailGroup" style="display: none;">
+                <label for="email">Email (optional)</label>
+                <input type="email" id="email" name="email">
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            
+            <button type="submit" class="btn" id="submitBtn">
+                <span id="submitText">Sign In</span>
+            </button>
+        </form>
+        
+        <div class="toggle-mode">
+            <span id="toggleText">Don't have an account?</span>
+            <a href="#" id="toggleLink">Create one</a>
+        </div>
+    </div>
+
+    <script>
+        let isLoginMode = true;
+        
+        const authTitle = document.getElementById('authTitle');
+        const authSubtitle = document.getElementById('authSubtitle');
+        const emailGroup = document.getElementById('emailGroup');
+        const submitText = document.getElementById('submitText');
+        const toggleText = document.getElementById('toggleText');
+        const toggleLink = document.getElementById('toggleLink');
+        const messageDiv = document.getElementById('message');
+        const form = document.getElementById('authForm');
+        const submitBtn = document.getElementById('submitBtn');
+
+        function toggleMode() {
+            isLoginMode = !isLoginMode;
+            
+            if (isLoginMode) {
+                authTitle.textContent = 'Welcome Back';
+                authSubtitle.textContent = 'Sign in to your account';
+                emailGroup.style.display = 'none';
+                submitText.textContent = 'Sign In';
+                toggleText.textContent = "Don't have an account?";
+                toggleLink.textContent = 'Create one';
+            } else {
+                authTitle.textContent = 'Create Account';
+                authSubtitle.textContent = 'Join Location Manager';
+                emailGroup.style.display = 'block';
+                submitText.textContent = 'Create Account';
+                toggleText.textContent = 'Already have an account?';
+                toggleLink.textContent = 'Sign in';
+            }
+            
+            clearMessage();
+        }
+        
+        function showMessage(text, type = 'error') {
+            messageDiv.innerHTML = `<div class="${type}">${text}</div>`;
+        }
+        
+        function clearMessage() {
+            messageDiv.innerHTML = '';
+        }
+        
+        function setLoading(loading) {
+            submitBtn.disabled = loading;
+            if (loading) {
+                submitText.innerHTML = '<span class="loading"></span>Processing...';
+            } else {
+                submitText.textContent = isLoginMode ? 'Sign In' : 'Create Account';
+            }
+        }
+        
+        toggleLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            toggleMode();
+        });
+        
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const email = document.getElementById('email').value.trim();
+            
+            if (!username || !password) {
+                showMessage('Please fill in all required fields');
+                return;
+            }
+            
+            setLoading(true);
+            clearMessage();
+            
+            try {
+                const endpoint = '/api/auth';
+                const body = {
+                    action: isLoginMode ? 'login' : 'register',
+                    username,
+                    password
+                };
+                
+                if (!isLoginMode && email) {
+                    body.email = email;
+                }
+                
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Store session token
+                    localStorage.setItem('sessionToken', data.sessionToken);
+                    localStorage.setItem('username', data.username);
+                    localStorage.setItem('userId', data.userId);
+                    
+                    showMessage(`${isLoginMode ? 'Login' : 'Account creation'} successful! Redirecting...`, 'success');
+                    
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 1500);
+                } else {
+                    showMessage(data.error || 'An error occurred');
+                }
+            } catch (error) {
+                console.error('Auth error:', error);
+                showMessage('Connection error. Please try again.');
+            }
+            
+            setLoading(false);
+        });
+        
+        // Check if user is already logged in
+        window.addEventListener('load', async () => {
+            const sessionToken = localStorage.getItem('sessionToken');
+            if (sessionToken) {
+                try {
+                    const response = await fetch('/api/auth', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'verify', sessionToken })
+                    });
+                    
+                    const data = await response.json();
+                    if (data.success) {
+                        window.location.href = 'index.html';
+                    }
+                } catch (error) {
+                    // Ignore verification errors
+                }
+            }
+        });
+    </script>
+</body>
+</html>
