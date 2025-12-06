@@ -1,7 +1,6 @@
 // User-specific state management API
 const { Redis } = require('@upstash/redis');
 
-let nanoid;
 let cachedRedis = null;
 
 function normalizeUpstashUrl(raw) {
@@ -36,7 +35,7 @@ async function getUserFromSession(sessionToken) {
   return userData ? JSON.parse(userData) : null;
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
@@ -65,13 +64,10 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'State data required' });
       }
 
-      // Initialize nanoid
-      if (!nanoid) {
-        const mod = await import('nanoid');
-        nanoid = mod.nanoid;
-      }
-
+      // Use dynamic import for nanoid since it's ESM only
+      const { nanoid } = await import('nanoid');
       const stateId = nanoid(8);
+      
       const stateRecord = {
         id: stateId,
         userId: user.id,
@@ -158,4 +154,4 @@ export default async function handler(req, res) {
     console.error('User states error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
-}
+};

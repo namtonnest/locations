@@ -1,7 +1,22 @@
 {
   "functions": {
+    "api/auth/index.js": {
+      "runtime": "@vercel/node@18"
+    },
+    "api/user-states/index.js": {
+      "runtime": "@vercel/node@18"
+    },
+    "api/state/index.js": {
+      "runtime": "@vercel/node@18"
+    },
+    "api/state/[id].js": {
+      "runtime": "@vercel/node@18"
+    },
+    "api/state/list.js": {
+      "runtime": "@vercel/node@18"
+    },
     "api/**/*.js": {
-      "runtime": "nodejs18.x"
+      "runtime": "@vercel/node@18"
     }
   },
   "rewrites": [
