@@ -322,7 +322,8 @@
             setLoading(false);
         });
         
-        // Check if user is already logged in
+        // Check if user is already logged in - commented out to allow manual login page access
+        /*
         window.addEventListener('load', async () => {
             const sessionToken = localStorage.getItem('sessionToken');
             if (sessionToken) {
@@ -342,6 +343,7 @@
                 }
             }
         });
+        */
     </script>
 </body>
 </html>
