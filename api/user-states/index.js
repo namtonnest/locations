@@ -103,14 +103,23 @@ module.exports = async function handler(req, res) {
       
       try {
         const redis = getRedis();
+        console.log('[GET] Redis connection established');
         
         if (id) {
+          console.log('[GET] Processing state ID:', id);
+          console.log('[GET] User ID from token:', userId);
+          
           // Get specific state for this user
           let stateKey = `user_state:${userId}:${id}`;
           console.log('[GET] Retrieving specific state with key:', stateKey);
           
-          let stateData = await redis.get(stateKey);
-          console.log('[GET] Raw state data found:', !!stateData);
+          let stateData = null;
+          try {
+            stateData = await redis.get(stateKey);
+            console.log('[GET] Raw state data found:', !!stateData);
+          } catch (redisError) {
+            console.error('[GET] Redis get error for primary key:', redisError.message);
+          }
           
           // If not found, try alternative user ID patterns (like we do in listing)
           if (!stateData) {
@@ -120,13 +129,21 @@ module.exports = async function handler(req, res) {
               const usernameOnly = userId.split('@')[0];
               const altKey = `user_state:${usernameOnly}:${id}`;
               console.log('[GET] Trying alternative key:', altKey);
-              stateData = await redis.get(altKey);
-              if (stateData) stateKey = altKey;
+              try {
+                stateData = await redis.get(altKey);
+                if (stateData) stateKey = altKey;
+              } catch (redisError) {
+                console.error('[GET] Redis get error for alt key:', redisError.message);
+              }
             } else {
               const emailKey = `user_state:${userId}@gmail.com:${id}`;
               console.log('[GET] Trying email key:', emailKey);
-              stateData = await redis.get(emailKey);
-              if (stateData) stateKey = emailKey;
+              try {
+                stateData = await redis.get(emailKey);
+                if (stateData) stateKey = emailKey;
+              } catch (redisError) {
+                console.error('[GET] Redis get error for email key:', redisError.message);
+              }
             }
             
             console.log('[GET] Alternative key result:', !!stateData);
@@ -136,7 +153,14 @@ module.exports = async function handler(req, res) {
             try {
               const parsedState = JSON.parse(stateData);
               console.log('[GET] Parsed state structure:', Object.keys(parsedState));
-              console.log('[GET] Full parsed state:', JSON.stringify(parsedState, null, 2));
+              
+              // Safely log parsed state (avoid potential circular reference issues)
+              try {
+                console.log('[GET] Full parsed state:', JSON.stringify(parsedState, null, 2));
+              } catch (stringifyError) {
+                console.log('[GET] Could not stringify full state:', stringifyError.message);
+                console.log('[GET] State keys only:', Object.keys(parsedState));
+              }
               
               // Handle different possible state data structures
               let actualState;
@@ -151,9 +175,14 @@ module.exports = async function handler(req, res) {
                 console.log('[GET] Using direct state structure');
               } else if (parsedState.id && parsedState.createdAt && Object.keys(parsedState).length > 3) {
                 // Wrapper format: extract everything except metadata
-                const { id, createdAt, userId, name, ...stateData } = parsedState;
-                actualState = stateData;
-                console.log('[GET] Extracted state from wrapper structure');
+                try {
+                  const { id, createdAt, userId, name, ...stateData } = parsedState;
+                  actualState = stateData;
+                  console.log('[GET] Extracted state from wrapper structure');
+                } catch (destructureError) {
+                  console.error('[GET] Destructuring failed, using whole object:', destructureError.message);
+                  actualState = parsedState;
+                }
               } else {
                 // Fallback: try to use the whole thing
                 actualState = parsedState;
@@ -178,6 +207,7 @@ module.exports = async function handler(req, res) {
               });
             } catch (e) {
               console.error('[GET] Error parsing state data:', e.message);
+              console.error('[GET] Stack trace:', e.stack);
               console.error('[GET] Raw state data (first 500 chars):', stateData.substring(0, 500));
               return res.json({
                 success: false,
