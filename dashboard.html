@@ -229,7 +229,10 @@
 
         async function loadUserStates() {
             console.log('[DASHBOARD] Loading user states');
-            console.log('[DASHBOARD] Session token for API call:', sessionToken ? sessionToken.substring(0, 20) + '...' : 'NONE');
+            
+            // Always refresh session token from localStorage
+            sessionToken = localStorage.getItem('sessionToken');
+            console.log('[DASHBOARD] Refreshed session token for API call:', sessionToken);
             
             if (!sessionToken) {
                 console.log('[DASHBOARD] No session token for API call');
