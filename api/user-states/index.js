@@ -106,11 +106,31 @@ module.exports = async function handler(req, res) {
         
         if (id) {
           // Get specific state for this user
-          const stateKey = `user_state:${userId}:${id}`;
+          let stateKey = `user_state:${userId}:${id}`;
           console.log('[GET] Retrieving specific state with key:', stateKey);
           
-          const stateData = await redis.get(stateKey);
+          let stateData = await redis.get(stateKey);
           console.log('[GET] Raw state data found:', !!stateData);
+          
+          // If not found, try alternative user ID patterns (like we do in listing)
+          if (!stateData) {
+            console.log('[GET] State not found with primary key, trying alternatives...');
+            
+            if (userId.includes('@')) {
+              const usernameOnly = userId.split('@')[0];
+              const altKey = `user_state:${usernameOnly}:${id}`;
+              console.log('[GET] Trying alternative key:', altKey);
+              stateData = await redis.get(altKey);
+              if (stateData) stateKey = altKey;
+            } else {
+              const emailKey = `user_state:${userId}@gmail.com:${id}`;
+              console.log('[GET] Trying email key:', emailKey);
+              stateData = await redis.get(emailKey);
+              if (stateData) stateKey = emailKey;
+            }
+            
+            console.log('[GET] Alternative key result:', !!stateData);
+          }
           
           if (stateData) {
             try {
@@ -219,7 +239,17 @@ module.exports = async function handler(req, res) {
                   console.log('[LIST] Parsed state keys:', Object.keys(parsedState));
                 } catch (parseError) {
                   console.error('[LIST] Failed to parse JSON for key', key, ':', parseError.message);
-                  console.log('[LIST] Raw data:', stateData.substring(0, 200));
+                  console.log('[LIST] Raw data (first 200 chars):', stateData.substring(0, 200));
+                  // Try to add a broken state indicator
+                  const keyParts = key.split(':');
+                  const stateId = keyParts[keyParts.length - 1];
+                  statesList.push({
+                    id: stateId,
+                    name: 'Corrupted State Data',
+                    createdAt: new Date().toISOString(),
+                    error: true,
+                    errorType: 'parse'
+                  });
                   continue;
                 }
                 
@@ -272,6 +302,7 @@ module.exports = async function handler(req, res) {
               }
             } catch (e) {
               console.error('[LIST] Error processing key', key, ':', e.message);
+              console.error('[LIST] Stack trace:', e.stack);
               // Try to add at least something for this key
               try {
                 const keyParts = key.split(':');
@@ -280,11 +311,13 @@ module.exports = async function handler(req, res) {
                   id: stateId,
                   name: 'Error Loading State',
                   createdAt: new Date().toISOString(),
-                  error: true
+                  error: true,
+                  errorType: 'processing',
+                  errorMessage: e.message
                 });
                 console.log('[LIST] Added error placeholder for key:', key);
               } catch (fallbackError) {
-                console.error('[LIST] Even fallback failed for key:', key);
+                console.error('[LIST] Even fallback failed for key:', key, fallbackError.message);
               }
             }
           }
