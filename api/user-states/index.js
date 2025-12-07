@@ -6,7 +6,15 @@ try {
   console.log('Redis module imported successfully');
 } catch (importError) {
   console.error('Failed to import Redis module:', importError.message);
-  throw importError;
+  // Create a dummy handler that returns the error
+  module.exports = async function handler(req, res) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    return res.status(500).json({ 
+      error: 'Redis module import failed',
+      details: importError.message 
+    });
+  };
+  return;
 }
 
 // Redis connection with error handling
@@ -63,8 +71,35 @@ module.exports = async function handler(req, res) {
   const startTime = Date.now();
   const requestId = Math.random().toString(36).substring(7);
   
-  console.log(`[${requestId}] Handler starting at ${new Date().toISOString()}`);
-  console.log(`[${requestId}] Method: ${req.method}, URL: ${req.url}`);
+  // Immediate safety wrapper to catch any early errors
+  try {
+    console.log(`[${requestId}] Handler starting at ${new Date().toISOString()}`);
+    console.log(`[${requestId}] Method: ${req.method}, URL: ${req.url}`);
+    
+    // Early CORS setup to ensure we can always respond
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Session-Token');
+    
+    if (req.method === 'OPTIONS') {
+      console.log(`[${requestId}] OPTIONS request, returning 200`);
+      return res.status(200).end();
+    }
+
+  } catch (setupError) {
+    console.error('Critical setup error:', setupError);
+    try {
+      return res.status(500).json({ 
+        error: 'Critical setup error',
+        details: setupError.message,
+        requestId: requestId || 'unknown'
+      });
+    } catch (responseError) {
+      console.error('Cannot send error response:', responseError);
+      return;
+    }
+  }
+
   console.log(`[${requestId}] Headers:`, JSON.stringify(req.headers, null, 2));
   console.log(`[${requestId}] Query:`, JSON.stringify(req.query, null, 2));
   
