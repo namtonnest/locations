@@ -2060,6 +2060,11 @@
                 // Refresh session token in case user just logged in
                 sessionToken = refreshSessionToken();
                 
+                console.log('[SAVE DEBUG] Starting save process');
+                console.log('[SAVE DEBUG] Session token:', sessionToken ? sessionToken.substring(0, 20) + '...' : 'NULL');
+                console.log('[SAVE DEBUG] Current user:', currentUser);
+                console.log('[SAVE DEBUG] TEMP_BACKEND_ENDPOINT:', TEMP_BACKEND_ENDPOINT);
+                
                 const data = serializePlacedModels();
                 const payload = { mapCenter: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), models: data, draws: drawnFeatures };
                 // Prompt user for an optional name for this saved map
@@ -2068,6 +2073,7 @@
                 if (name !== null) name = (String(name).trim() || null);
 
                 if (sessionToken) {
+                    console.log('[SAVE DEBUG] Using user account save with session token');
                     // Save to user's personal database if we have a session token
                     console.log('Saving to user account with token:', sessionToken.substring(0, 10) + '...');
                     saveBtn.disabled = true;
@@ -2113,6 +2119,7 @@
                     }
                     saveBtn.disabled = false;
                 } else if (TEMP_BACKEND_ENDPOINT === 'TEMP_BACKEND') {
+                    console.log('[SAVE DEBUG] Using temporary storage - no session token');
                     // Use temporary backend for non-logged-in users
                     console.log('No user login detected, saving temporarily. currentUser:', currentUser, 'sessionToken:', sessionToken);
                     saveBtn.disabled = true;
