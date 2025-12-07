@@ -515,8 +515,17 @@
     let currentUser = null;
     let sessionToken = localStorage.getItem('sessionToken');
     
+    // Function to refresh session token from localStorage
+    function refreshSessionToken() {
+        sessionToken = localStorage.getItem('sessionToken');
+        return sessionToken;
+    }
+    
     // Check if user is logged in
     async function verifySession() {
+        // Always refresh session token from localStorage first
+        sessionToken = refreshSessionToken();
+        
         if (!sessionToken) return false;
         
         try {
@@ -2048,6 +2057,9 @@
     if (saveBtn) {
         saveBtn.addEventListener('click', async () => {
             try {
+                // Refresh session token in case user just logged in
+                sessionToken = refreshSessionToken();
+                
                 const data = serializePlacedModels();
                 const payload = { mapCenter: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), models: data, draws: drawnFeatures };
                 // Prompt user for an optional name for this saved map
@@ -2702,7 +2714,7 @@
                 } catch (e) {
                     console.error('Loader error', e);
                 }
-                return id;
+                return entry.id;
             };
         },
         render: function (gl, matrix) {
