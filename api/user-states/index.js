@@ -370,10 +370,17 @@ module.exports = async function handler(req, res) {
             } catch (e) {
               console.error('[GET] Error parsing state data:', e.message);
               console.error('[GET] Stack trace:', e.stack);
-              console.error('[GET] Raw state data (first 500 chars):', stateData.substring(0, 500));
+              console.error('[GET] Raw state data type:', typeof stateData);
+              console.error('[GET] Raw state data:', stateData);
+              if (typeof stateData === 'string') {
+                console.error('[GET] Raw state data (first 500 chars):', stateData.substring(0, 500));
+              } else {
+                console.error('[GET] Raw state data (stringified):', JSON.stringify(stateData).substring(0, 500));
+              }
               return res.json({
                 success: false,
-                error: 'Invalid state data format: ' + e.message
+                error: 'Invalid state data format: ' + e.message,
+                requestId: requestId
               });
             }
           } else {
@@ -434,7 +441,12 @@ module.exports = async function handler(req, res) {
                   console.log('[LIST] Parsed state keys:', Object.keys(parsedState));
                 } catch (parseError) {
                   console.error('[LIST] Failed to parse JSON for key', key, ':', parseError.message);
-                  console.log('[LIST] Raw data (first 200 chars):', stateData.substring(0, 200));
+                  console.error('[LIST] Raw data type:', typeof stateData);
+                  if (typeof stateData === 'string') {
+                    console.log('[LIST] Raw data (first 200 chars):', stateData.substring(0, 200));
+                  } else {
+                    console.log('[LIST] Raw data (stringified):', JSON.stringify(stateData).substring(0, 200));
+                  }
                   // Try to add a broken state indicator
                   const keyParts = key.split(':');
                   const stateId = keyParts[keyParts.length - 1];
