@@ -68,15 +68,15 @@ function getUserIdFromToken(sessionToken) {
 }
 
 module.exports = async function handler(req, res) {
-  const startTime = Date.now();
-  const requestId = Math.random().toString(36).substring(7);
+  let startTime, requestId;
   
-  // Immediate safety wrapper to catch any early errors
   try {
-    console.log(`[${requestId}] Handler starting at ${new Date().toISOString()}`);
-    console.log(`[${requestId}] Method: ${req.method}, URL: ${req.url}`);
+    startTime = Date.now();
+    requestId = Math.random().toString(36).substring(7);
     
-    // Early CORS setup to ensure we can always respond
+    console.log(`[${requestId}] Handler starting at ${new Date().toISOString()}`);
+    
+    // Immediate safety wrapper to catch any early errors
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Session-Token');
@@ -84,6 +84,17 @@ module.exports = async function handler(req, res) {
     if (req.method === 'OPTIONS') {
       console.log(`[${requestId}] OPTIONS request, returning 200`);
       return res.status(200).end();
+    }
+
+    console.log(`[${requestId}] Method: ${req.method}, URL: ${req.url}`);
+    console.log(`[${requestId}] Query:`, JSON.stringify(req.query, null, 2));
+    
+    const sessionToken = req.headers['x-session-token'] || req.headers.authorization?.replace('Bearer ', '');
+    console.log(`[${requestId}] Session token present:`, !!sessionToken);
+    
+    if (!sessionToken || !sessionToken.startsWith('temp_')) {
+      console.log(`[${requestId}] Authentication failed`);
+      return res.status(401).json({ error: 'Authentication required', requestId });
     }
 
   } catch (setupError) {
@@ -99,31 +110,17 @@ module.exports = async function handler(req, res) {
       return;
     }
   }
-
-  console.log(`[${requestId}] Headers:`, JSON.stringify(req.headers, null, 2));
-  console.log(`[${requestId}] Query:`, JSON.stringify(req.query, null, 2));
   
+  // Main request processing with comprehensive error handling
   try {
-    // Enable CORS
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Session-Token');
+    console.log(`[${requestId}] Starting main request processing`);
     
-    if (req.method === 'OPTIONS') {
-      console.log(`[${requestId}] OPTIONS request, returning 200`);
-      return res.status(200).end();
-    }
-
-    console.log(`[${requestId}] CORS headers set, processing method: ${req.method}`);
-
     const sessionToken = req.headers['x-session-token'] || req.headers.authorization?.replace('Bearer ', '');
+    console.log(`[${requestId}] Session token extracted:`, !!sessionToken);
     
-    console.log(`[${requestId}] Extracted session token:`, sessionToken ? sessionToken.substring(0, 15) + '...' : 'None');
-    
-    // For mock sessions, accept any token that starts with 'temp_'
     if (!sessionToken || !sessionToken.startsWith('temp_')) {
-      console.log(`[${requestId}] Authentication failed: invalid token`);
-      return res.status(401).json({ error: 'Authentication required' });
+      console.log(`[${requestId}] Authentication failed`);
+      return res.status(401).json({ error: 'Authentication required', requestId });
     }
 
     if (req.method === 'POST') {
