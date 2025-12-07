@@ -2101,8 +2101,11 @@
                         }
                         
                         console.log('Response data:', data);
+                        console.log('[SAVE DEBUG] data.success:', data.success);
+                        console.log('[SAVE DEBUG] data.id:', data.id);
                         
                         if (data.success) {
+                            console.log('[SAVE DEBUG] Success condition met, showing alert');
                             const shareUrl = location.origin + location.pathname + '?user_state_id=' + encodeURIComponent(data.id);
                             alert(`Saved to your account!\nState ID: ${data.id}\n\nShare URL:\n${shareUrl}`);
                             
