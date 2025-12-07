@@ -128,6 +128,10 @@ module.exports = async function handler(req, res) {
           const keys = await redis.keys(pattern);
           console.log('[LIST] Found keys:', keys);
           
+          // For debugging, also try to get some sample keys
+          const allKeys = await redis.keys('user_state:*');
+          console.log('[LIST] All user_state keys in Redis:', allKeys);
+          
           const statesList = [];
           for (const key of keys) {
             try {
@@ -149,9 +153,18 @@ module.exports = async function handler(req, res) {
           // Sort by creation date (newest first)
           statesList.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
           
+          console.log('[LIST] Final states list:', statesList);
+          console.log('[LIST] Returning', statesList.length, 'states');
+          
           return res.json({
             success: true,
-            states: statesList
+            states: statesList,
+            debug: {
+              userId: userId,
+              pattern: pattern,
+              keysFound: keys.length,
+              allUserStateKeys: await redis.keys('user_state:*')
+            }
           });
         }
       } catch (error) {
