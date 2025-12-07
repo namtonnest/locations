@@ -99,7 +99,19 @@ module.exports = async function handler(req, res) {
 
     if (req.method === 'GET') {
       const { id } = req.query;
-      const userId = getUserIdFromToken(sessionToken);
+      console.log('[GET] Request query:', req.query);
+      
+      let userId;
+      try {
+        userId = getUserIdFromToken(sessionToken);
+        console.log('[GET] Extracted userId:', userId);
+      } catch (userIdError) {
+        console.error('[GET] Error extracting userId:', userIdError.message);
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Invalid session token format' 
+        });
+      }
       
       try {
         const redis = getRedis();
@@ -108,6 +120,15 @@ module.exports = async function handler(req, res) {
         if (id) {
           console.log('[GET] Processing state ID:', id);
           console.log('[GET] User ID from token:', userId);
+          
+          // Validate state ID format
+          if (typeof id !== 'string' || id.trim().length === 0) {
+            console.error('[GET] Invalid state ID format:', typeof id, id);
+            return res.status(400).json({
+              success: false,
+              error: 'Invalid state ID format'
+            });
+          }
           
           // Get specific state for this user
           let stateKey = `user_state:${userId}:${id}`;
@@ -125,25 +146,29 @@ module.exports = async function handler(req, res) {
           if (!stateData) {
             console.log('[GET] State not found with primary key, trying alternatives...');
             
-            if (userId.includes('@')) {
-              const usernameOnly = userId.split('@')[0];
-              const altKey = `user_state:${usernameOnly}:${id}`;
-              console.log('[GET] Trying alternative key:', altKey);
-              try {
-                stateData = await redis.get(altKey);
-                if (stateData) stateKey = altKey;
-              } catch (redisError) {
-                console.error('[GET] Redis get error for alt key:', redisError.message);
+            try {
+              if (userId && userId.includes('@')) {
+                const usernameOnly = userId.split('@')[0];
+                const altKey = `user_state:${usernameOnly}:${id}`;
+                console.log('[GET] Trying alternative key:', altKey);
+                try {
+                  stateData = await redis.get(altKey);
+                  if (stateData) stateKey = altKey;
+                } catch (redisError) {
+                  console.error('[GET] Redis get error for alt key:', redisError.message);
+                }
+              } else if (userId) {
+                const emailKey = `user_state:${userId}@gmail.com:${id}`;
+                console.log('[GET] Trying email key:', emailKey);
+                try {
+                  stateData = await redis.get(emailKey);
+                  if (stateData) stateKey = emailKey;
+                } catch (redisError) {
+                  console.error('[GET] Redis get error for email key:', redisError.message);
+                }
               }
-            } else {
-              const emailKey = `user_state:${userId}@gmail.com:${id}`;
-              console.log('[GET] Trying email key:', emailKey);
-              try {
-                stateData = await redis.get(emailKey);
-                if (stateData) stateKey = emailKey;
-              } catch (redisError) {
-                console.error('[GET] Redis get error for email key:', redisError.message);
-              }
+            } catch (altKeyError) {
+              console.error('[GET] Error in alternative key processing:', altKeyError.message);
             }
             
             console.log('[GET] Alternative key result:', !!stateData);
