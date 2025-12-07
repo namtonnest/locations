@@ -166,7 +166,11 @@
         let currentUser = null;
 
         async function verifySession() {
+            console.log('[DASHBOARD] Starting session verification');
+            console.log('[DASHBOARD] Session token:', sessionToken ? sessionToken.substring(0, 20) + '...' : 'NOT FOUND');
+            
             if (!sessionToken) {
+                console.log('[DASHBOARD] No session token, redirecting to login');
                 window.location.href = 'login.html';
                 return false;
             }
@@ -222,21 +226,31 @@
         }
 
         async function loadUserStates() {
+            console.log('[DASHBOARD] Loading user states');
+            console.log('[DASHBOARD] Session token for API call:', sessionToken ? sessionToken.substring(0, 20) + '...' : 'NONE');
+            
             if (!sessionToken) {
+                console.log('[DASHBOARD] No session token for API call');
                 showError('Not authenticated');
                 return;
             }
 
             try {
                 clearError();
+                console.log('[DASHBOARD] Fetching from /api/user-states');
                 const response = await fetch('/api/user-states', {
                     headers: { 'X-Session-Token': sessionToken }
                 });
 
+                console.log('[DASHBOARD] API response status:', response.status);
                 const data = await response.json();
+                console.log('[DASHBOARD] API response data:', data);
+                
                 if (data.success) {
+                    console.log('[DASHBOARD] States loaded successfully:', data.states.length, 'states');
                     renderStates(data.states);
                 } else {
+                    console.log('[DASHBOARD] API returned error:', data.error);
                     showError('Failed to load states: ' + (data.error || 'Unknown error'));
                 }
             } catch (error) {
@@ -246,9 +260,12 @@
         }
 
         function renderStates(states) {
+            console.log('[DASHBOARD] renderStates called with:', states);
             const container = document.getElementById('statesContainer');
+            console.log('[DASHBOARD] Container element:', container);
             
             if (!states || states.length === 0) {
+                console.log('[DASHBOARD] No states to render, showing empty state');
                 container.innerHTML = `
                     <div class="empty-state">
                         <h3>No saved states yet</h3>
@@ -259,6 +276,7 @@
                 return;
             }
 
+            console.log('[DASHBOARD] Rendering', states.length, 'states');
             const statesHtml = states.map(state => {
                 const createdDate = new Date(state.createdAt).toLocaleDateString();
                 const createdTime = new Date(state.createdAt).toLocaleTimeString();
