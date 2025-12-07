@@ -1,6 +1,21 @@
-// Simplified User-specific state management API
-// Simple in-memory storage for mock functionality - separated by user
-const userStates = {}; // Structure: { userId: { stateId: stateData } }
+// User-specific state management API with Redis
+const { Redis } = require('@upstash/redis');
+
+// Redis connection with error handling
+let cachedRedis = null;
+function getRedis() {
+  if (cachedRedis) return cachedRedis;
+  
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  
+  if (!url || !token) {
+    throw new Error('Redis credentials not configured');
+  }
+  
+  cachedRedis = new Redis({ url, token });
+  return cachedRedis;
+}
 
 function getUserIdFromToken(sessionToken) {
   // Extract username from session token (format: temp_timestamp_username)
@@ -38,63 +53,95 @@ module.exports = async function handler(req, res) {
         return res.status(400).json({ error: 'Name and state required' });
       }
 
-      // Get user ID from session token
-      const userId = getUserIdFromToken(sessionToken);
-      
-      // Mock successful save - store the actual state for this user
-      const stateId = `state_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-      
-      // Initialize user storage if it doesn't exist
-      if (!userStates[userId]) {
-        userStates[userId] = {};
+      try {
+        const redis = getRedis();
+        const userId = getUserIdFromToken(sessionToken);
+        const stateId = `state_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        
+        // Save state to Redis
+        const stateData = {
+          id: stateId,
+          name: name,
+          state: state,
+          createdAt: new Date().toISOString(),
+          userId: userId
+        };
+        
+        await redis.set(`user_state:${userId}:${stateId}`, JSON.stringify(stateData));
+        
+        return res.json({
+          success: true,
+          id: stateId,
+          message: 'State saved successfully',
+          shareUrl: `${req.headers.origin || 'https://localhost'}?user_state_id=${stateId}`
+        });
+      } catch (error) {
+        console.error('Failed to save state:', error);
+        return res.status(500).json({ 
+          error: 'Failed to save state',
+          details: error.message 
+        });
       }
-      
-      // Store the state in this user's storage
-      userStates[userId][stateId] = {
-        id: stateId,
-        name: name,
-        state: state,
-        createdAt: new Date().toISOString()
-      };
-      
-      return res.json({
-        success: true,
-        id: stateId,
-        message: 'State saved successfully (mock)',
-        shareUrl: `${req.headers.origin || 'https://localhost'}?user_state_id=${stateId}`
-      });
     }
 
     if (req.method === 'GET') {
       const { id } = req.query;
       const userId = getUserIdFromToken(sessionToken);
-      const userStorage = userStates[userId] || {};
       
-      if (id) {
-        // Get specific state for this user
-        const savedState = userStorage[id];
-        if (savedState) {
+      try {
+        const redis = getRedis();
+        
+        if (id) {
+          // Get specific state for this user
+          const stateData = await redis.get(`user_state:${userId}:${id}`);
+          if (stateData) {
+            const parsedState = JSON.parse(stateData);
+            return res.json({
+              success: true,
+              state: parsedState.state
+            });
+          } else {
+            return res.json({
+              success: false,
+              error: 'State not found or not accessible'
+            });
+          }
+        } else {
+          // List user states - get all states for this user
+          const pattern = `user_state:${userId}:*`;
+          const keys = await redis.keys(pattern);
+          
+          const statesList = [];
+          for (const key of keys) {
+            try {
+              const stateData = await redis.get(key);
+              if (stateData) {
+                const parsedState = JSON.parse(stateData);
+                statesList.push({
+                  id: parsedState.id,
+                  name: parsedState.name,
+                  createdAt: parsedState.createdAt
+                });
+              }
+            } catch (e) {
+              // Skip invalid entries
+              continue;
+            }
+          }
+          
+          // Sort by creation date (newest first)
+          statesList.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          
           return res.json({
             success: true,
-            state: savedState.state
-          });
-        } else {
-          return res.json({
-            success: false,
-            error: 'State not found or not accessible'
+            states: statesList
           });
         }
-      } else {
-        // List user states - return only this user's states
-        const statesList = Object.values(userStorage).map(state => ({
-          id: state.id,
-          name: state.name,
-          createdAt: state.createdAt
-        }));
-        
-        return res.json({
-          success: true,
-          states: statesList
+      } catch (error) {
+        console.error('Failed to get states:', error);
+        return res.status(500).json({ 
+          error: 'Failed to retrieve states',
+          details: error.message 
         });
       }
     }
@@ -106,19 +153,29 @@ module.exports = async function handler(req, res) {
         return res.status(400).json({ error: 'State ID required' });
       }
 
-      const userId = getUserIdFromToken(sessionToken);
-      const userStorage = userStates[userId] || {};
-
-      if (userStorage[id]) {
-        delete userStates[userId][id];
-        return res.json({
-          success: true,
-          message: 'State deleted successfully'
-        });
-      } else {
-        return res.json({
-          success: false,
-          error: 'State not found or not accessible'
+      try {
+        const redis = getRedis();
+        const userId = getUserIdFromToken(sessionToken);
+        const key = `user_state:${userId}:${id}`;
+        
+        const result = await redis.del(key);
+        
+        if (result > 0) {
+          return res.json({
+            success: true,
+            message: 'State deleted successfully'
+          });
+        } else {
+          return res.json({
+            success: false,
+            error: 'State not found or not accessible'
+          });
+        }
+      } catch (error) {
+        console.error('Failed to delete state:', error);
+        return res.status(500).json({ 
+          error: 'Failed to delete state',
+          details: error.message 
         });
       }
     }
