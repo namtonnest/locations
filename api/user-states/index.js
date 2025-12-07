@@ -106,14 +106,33 @@ module.exports = async function handler(req, res) {
         
         if (id) {
           // Get specific state for this user
-          const stateData = await redis.get(`user_state:${userId}:${id}`);
+          const stateKey = `user_state:${userId}:${id}`;
+          console.log('[GET] Retrieving specific state with key:', stateKey);
+          
+          const stateData = await redis.get(stateKey);
+          console.log('[GET] Raw state data found:', !!stateData);
+          
           if (stateData) {
-            const parsedState = JSON.parse(stateData);
-            return res.json({
-              success: true,
-              state: parsedState.state
-            });
+            try {
+              const parsedState = JSON.parse(stateData);
+              console.log('[GET] Parsed state structure:', Object.keys(parsedState));
+              
+              // Return the actual state data - could be nested under 'state' property
+              let actualState = parsedState.state || parsedState;
+              
+              return res.json({
+                success: true,
+                state: actualState
+              });
+            } catch (e) {
+              console.error('[GET] Error parsing state data:', e.message);
+              return res.json({
+                success: false,
+                error: 'Invalid state data format'
+              });
+            }
           } else {
+            console.log('[GET] No state found for key:', stateKey);
             return res.json({
               success: false,
               error: 'State not found or not accessible'
