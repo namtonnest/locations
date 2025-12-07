@@ -1,5 +1,13 @@
 // User-specific state management API with Redis
-const { Redis } = require('@upstash/redis');
+let Redis;
+try {
+  const upstashModule = require('@upstash/redis');
+  Redis = upstashModule.Redis;
+  console.log('Redis module imported successfully');
+} catch (importError) {
+  console.error('Failed to import Redis module:', importError.message);
+  throw importError;
+}
 
 // Redis connection with error handling
 let cachedRedis = null;
@@ -9,12 +17,20 @@ function getRedis() {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
   
+  console.log('Redis env check:', { hasUrl: !!url, hasToken: !!token });
+  
   if (!url || !token) {
     throw new Error('Redis credentials not configured');
   }
   
-  cachedRedis = new Redis({ url, token });
-  return cachedRedis;
+  try {
+    cachedRedis = new Redis({ url, token });
+    console.log('Redis connection created successfully');
+    return cachedRedis;
+  } catch (redisError) {
+    console.error('Failed to create Redis connection:', redisError.message);
+    throw redisError;
+  }
 }
 
 function getUserIdFromToken(sessionToken) {
@@ -28,6 +44,8 @@ function getUserIdFromToken(sessionToken) {
 }
 
 module.exports = async function handler(req, res) {
+  console.log('[HANDLER] Starting request processing');
+  
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
@@ -36,6 +54,8 @@ module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
+
+  console.log('[HANDLER] CORS headers set, processing method:', req.method);
 
   try {
     const sessionToken = req.headers['x-session-token'] || req.headers.authorization?.replace('Bearer ', '');
@@ -441,9 +461,10 @@ module.exports = async function handler(req, res) {
 
   } catch (error) {
     console.error('User states error:', error);
+    console.error('Stack trace:', error.stack);
     return res.status(500).json({ 
       error: 'Internal server error',
       details: error.message 
     });
   }
-};
+};;
