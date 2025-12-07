@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Save Functionality</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .debug-item { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background: #d4edda; border-color: #c3e6cb; }
+        .error { background: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Save Functionality Debug</h1>
+    <div id="output"></div>
+    
+    <button onclick="checkLocalStorage()">1. Check LocalStorage</button>
+    <button onclick="testLogin()">2. Test Login</button>
+    <button onclick="testSessionVerify()">3. Test Session Verify</button>
+    <button onclick="testSave()">4. Test Save</button>
+    <button onclick="clearAll()">Clear All</button>
+
+    <script>
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const div = document.createElement('div');
+            div.className = `debug-item ${type}`;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            output.appendChild(div);
+            console.log(message);
+        }
+
+        function checkLocalStorage() {
+            log('=== CHECKING LOCALSTORAGE ===');
+            const sessionToken = localStorage.getItem('sessionToken');
+            const username = localStorage.getItem('username');
+            const userId = localStorage.getItem('userId');
+            
+            log(`Session Token: ${sessionToken ? sessionToken.substring(0, 30) + '...' : 'NOT FOUND'}`, sessionToken ? 'success' : 'error');
+            log(`Username: ${username || 'NOT FOUND'}`, username ? 'success' : 'error');
+            log(`User ID: ${userId || 'NOT FOUND'}`, userId ? 'success' : 'error');
+        }
+
+        async function testLogin() {
+            log('=== TESTING LOGIN ===');
+            try {
+                const response = await fetch('/api/auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'login', username: 'debuguser', password: 'debugpass' })
+                });
+                
+                const data = await response.json();
+                log(`Login Response: ${JSON.stringify(data)}`, data.success ? 'success' : 'error');
+                
+                if (data.success) {
+                    localStorage.setItem('sessionToken', data.sessionToken);
+                    localStorage.setItem('username', data.username);
+                    localStorage.setItem('userId', data.userId);
+                    log('Session data stored in localStorage', 'success');
+                }
+            } catch (e) {
+                log(`Login Error: ${e.message}`, 'error');
+            }
+        }
+
+        async function testSessionVerify() {
+            log('=== TESTING SESSION VERIFY ===');
+            const sessionToken = localStorage.getItem('sessionToken');
+            
+            if (!sessionToken) {
+                log('No session token found. Please login first.', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'verify', sessionToken })
+                });
+                
+                const data = await response.json();
+                log(`Session Verify Response: ${JSON.stringify(data)}`, data.success ? 'success' : 'error');
+            } catch (e) {
+                log(`Session Verify Error: ${e.message}`, 'error');
+            }
+        }
+
+        async function testSave() {
+            log('=== TESTING SAVE ===');
+            const sessionToken = localStorage.getItem('sessionToken');
+            
+            if (!sessionToken) {
+                log('No session token found. Please login first.', 'error');
+                return;
+            }
+            
+            const testState = {
+                mapCenter: [-79.3875, 43.6426],
+                zoom: 18,
+                pitch: 60,
+                bearing: 0,
+                models: [],
+                draws: []
+            };
+            
+            try {
+                log(`Attempting save with token: ${sessionToken.substring(0, 30)}...`);
+                
+                const response = await fetch('/api/user-states', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-Session-Token': sessionToken
+                    },
+                    body: JSON.stringify({ state: testState, name: 'Debug Test State' })
+                });
+                
+                log(`Save Response Status: ${response.status}`);
+                const responseText = await response.text();
+                log(`Save Response Text: ${responseText}`);
+                
+                if (response.ok) {
+                    const data = JSON.parse(responseText);
+                    log(`Save Success: ${JSON.stringify(data)}`, 'success');
+                } else {
+                    log(`Save Failed: ${responseText}`, 'error');
+                }
+            } catch (e) {
+                log(`Save Error: ${e.message}`, 'error');
+            }
+        }
+
+        function clearAll() {
+            localStorage.clear();
+            document.getElementById('output').innerHTML = '';
+            log('Cleared localStorage and output');
+        }
+
+        // Run initial check
+        checkLocalStorage();
+    </script>
+</body>
+</html>
