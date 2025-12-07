@@ -167,7 +167,9 @@
 
         async function verifySession() {
             console.log('[DASHBOARD] Starting session verification');
-            console.log('[DASHBOARD] Session token:', sessionToken ? sessionToken.substring(0, 20) + '...' : 'NOT FOUND');
+            sessionToken = localStorage.getItem('sessionToken');
+            console.log('[DASHBOARD] Full session token:', sessionToken);
+            console.log('[DASHBOARD] Session token preview:', sessionToken ? sessionToken.substring(0, 30) + '...' : 'NOT FOUND');
             
             if (!sessionToken) {
                 console.log('[DASHBOARD] No session token, redirecting to login');
