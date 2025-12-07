@@ -386,18 +386,20 @@ module.exports = async function handler(req, res) {
           }
         } else {
           // List user states - get all states for this user
-          console.log('[LIST] Listing states for userId:', userId);
-          console.log('[LIST] Session token:', sessionToken);
-          const pattern = `user_state:${userId}:*`;
-          console.log('[LIST] Redis pattern:', pattern);
-          let keys = await redis.keys(pattern);
-          console.log('[LIST] Found keys for main pattern:', keys);
+          console.log(`[${requestId}] Starting states listing for userId:`, userId);
+          console.log(`[${requestId}] Session token:`, sessionToken ? 'present' : 'missing');
           
-          // Also try pattern without @ in case there's an email mismatch
-          if (userId.includes('@')) {
-            const usernameOnly = userId.split('@')[0];
-            const altPattern = `user_state:${usernameOnly}:*`;
-            console.log('[LIST] Trying alternative pattern:', altPattern);
+          try {
+            const pattern = `user_state:${userId}:*`;
+            console.log(`[${requestId}] Redis pattern:`, pattern);
+            let keys = await redis.keys(pattern);
+            console.log(`[${requestId}] Found keys for main pattern:`, keys.length);
+            
+            // Also try pattern without @ in case there's an email mismatch
+            if (userId.includes('@')) {
+              const usernameOnly = userId.split('@')[0];
+              const altPattern = `user_state:${usernameOnly}:*`;
+              console.log(`[${requestId}] Trying alternative pattern:`, altPattern);
             const altKeys = await redis.keys(altPattern);
             console.log('[LIST] Found keys for alt pattern:', altKeys);
             keys = [...keys, ...altKeys];
@@ -531,12 +533,24 @@ module.exports = async function handler(req, res) {
               allUserStateKeys: await redis.keys('user_state:*')
             }
           });
+          } catch (listingError) {
+            console.error(`[${requestId}] Error during states listing:`, listingError.message);
+            throw listingError;
+          }
         }
       } catch (error) {
-        console.error('Failed to get states:', error);
+        console.error(`[${requestId}] Failed to get states:`, error.message);
+        console.error(`[${requestId}] Error stack:`, error.stack);
+        console.error(`[${requestId}] Error details:`, {
+          name: error.name,
+          cause: error.cause,
+          code: error.code
+        });
+        
         return res.status(500).json({ 
           error: 'Failed to retrieve states',
-          details: error.message 
+          details: error.message,
+          requestId: requestId
         });
       }
     }
