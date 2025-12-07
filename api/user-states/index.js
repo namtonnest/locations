@@ -180,30 +180,56 @@ module.exports = async function handler(req, res) {
               console.log('[LIST] Raw data for key', key, ':', stateData ? 'DATA FOUND' : 'NO DATA');
               
               if (stateData) {
-                const parsedState = JSON.parse(stateData);
-                console.log('[LIST] Parsed state keys:', Object.keys(parsedState));
+                let parsedState;
+                try {
+                  parsedState = JSON.parse(stateData);
+                  console.log('[LIST] Parsed state keys:', Object.keys(parsedState));
+                } catch (parseError) {
+                  console.error('[LIST] Failed to parse JSON for key', key, ':', parseError.message);
+                  console.log('[LIST] Raw data:', stateData.substring(0, 200));
+                  continue;
+                }
                 
-                // Handle different possible state structures
+                // Handle different possible state structures more robustly
                 let stateInfo;
-                if (parsedState.id && parsedState.name && parsedState.createdAt) {
+                const keyParts = key.split(':');
+                const stateId = keyParts[keyParts.length - 1]; // Last part of key
+                
+                // Try multiple extraction patterns
+                if (parsedState.id && parsedState.name !== undefined && parsedState.createdAt) {
                   // New format: has id, name, createdAt directly
                   stateInfo = {
                     id: parsedState.id,
-                    name: parsedState.name,
+                    name: parsedState.name || 'Unnamed State',
                     createdAt: parsedState.createdAt
                   };
-                } else if (parsedState.state && key.includes('state_')) {
-                  // Extract state ID from key if not in data
-                  const keyParts = key.split(':');
-                  const stateId = keyParts[keyParts.length - 1]; // Last part of key
+                } else if (parsedState.state) {
+                  // Format where actual state is nested - extract metadata
                   stateInfo = {
                     id: stateId,
-                    name: parsedState.name || 'Unnamed State',
-                    createdAt: parsedState.createdAt || new Date().toISOString()
+                    name: parsedState.name || parsedState.state.name || 'Unnamed State',
+                    createdAt: parsedState.createdAt || parsedState.timestamp || new Date().toISOString()
+                  };
+                } else if (parsedState.mapCenter || parsedState.models || parsedState.zoom !== undefined) {
+                  // Direct state data without wrapper - generate metadata
+                  stateInfo = {
+                    id: stateId,
+                    name: parsedState.name || 'Unnamed State', 
+                    createdAt: new Date().toISOString()
                   };
                 } else {
-                  console.log('[LIST] Unknown state structure, skipping:', parsedState);
-                  continue;
+                  // Try to extract anything useful
+                  const extractedName = parsedState.name || 
+                                      (typeof parsedState.state === 'object' && parsedState.state.name) ||
+                                      'Unnamed State';
+                  stateInfo = {
+                    id: stateId,
+                    name: extractedName,
+                    createdAt: parsedState.createdAt || 
+                              parsedState.timestamp ||
+                              new Date().toISOString()
+                  };
+                  console.log('[LIST] Fallback extraction for unknown structure:', stateInfo);
                 }
                 
                 statesList.push(stateInfo);
@@ -212,9 +238,21 @@ module.exports = async function handler(req, res) {
                 console.log('[LIST] No data found for key:', key);
               }
             } catch (e) {
-              console.error('[LIST] Error processing key', key, ':', e.message, e.stack);
-              // Skip invalid entries
-              continue;
+              console.error('[LIST] Error processing key', key, ':', e.message);
+              // Try to add at least something for this key
+              try {
+                const keyParts = key.split(':');
+                const stateId = keyParts[keyParts.length - 1];
+                statesList.push({
+                  id: stateId,
+                  name: 'Error Loading State',
+                  createdAt: new Date().toISOString(),
+                  error: true
+                });
+                console.log('[LIST] Added error placeholder for key:', key);
+              } catch (fallbackError) {
+                console.error('[LIST] Even fallback failed for key:', key);
+              }
             }
           }
           
