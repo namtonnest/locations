@@ -70,58 +70,78 @@ function getUserIdFromToken(sessionToken) {
 module.exports = async function handler(req, res) {
   let startTime, requestId;
   
+  // Absolute safeguards - these must work no matter what
   try {
     startTime = Date.now();
     requestId = Math.random().toString(36).substring(7);
     
-    console.log(`[${requestId}] Handler starting at ${new Date().toISOString()}`);
-    
-    // Immediate safety wrapper to catch any early errors
+    // Immediate response capability setup
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Session-Token');
     
-    if (req.method === 'OPTIONS') {
-      console.log(`[${requestId}] OPTIONS request, returning 200`);
-      return res.status(200).end();
-    }
-
-    console.log(`[${requestId}] Method: ${req.method}, URL: ${req.url}`);
-    console.log(`[${requestId}] Query:`, JSON.stringify(req.query, null, 2));
+    console.log(`[${requestId}] Handler starting - ${new Date().toISOString()}`);
     
-    const sessionToken = req.headers['x-session-token'] || req.headers.authorization?.replace('Bearer ', '');
-    console.log(`[${requestId}] Session token present:`, !!sessionToken);
-    
-    if (!sessionToken || !sessionToken.startsWith('temp_')) {
-      console.log(`[${requestId}] Authentication failed`);
-      return res.status(401).json({ error: 'Authentication required', requestId });
-    }
-
-  } catch (setupError) {
-    console.error('Critical setup error:', setupError);
+  } catch (criticalError) {
+    // If even basic setup fails, return minimal response
+    console.error('CRITICAL: Basic setup failed:', criticalError);
     try {
-      return res.status(500).json({ 
-        error: 'Critical setup error',
-        details: setupError.message,
-        requestId: requestId || 'unknown'
-      });
-    } catch (responseError) {
-      console.error('Cannot send error response:', responseError);
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      return res.status(500).json({ error: 'System initialization failed' });
+    } catch (finalError) {
+      console.error('FATAL: Cannot send response:', finalError);
       return;
     }
   }
   
-  // Main request processing with comprehensive error handling
+  // OPTIONS handling
   try {
-    console.log(`[${requestId}] Starting main request processing`);
-    
-    const sessionToken = req.headers['x-session-token'] || req.headers.authorization?.replace('Bearer ', '');
-    console.log(`[${requestId}] Session token extracted:`, !!sessionToken);
+    if (req.method === 'OPTIONS') {
+      console.log(`[${requestId}] OPTIONS handled`);
+      return res.status(200).end();
+    }
+  } catch (optionsError) {
+    console.error(`[${requestId}] OPTIONS failed:`, optionsError);
+    return res.status(500).json({ 
+      error: 'OPTIONS handling failed',
+      requestId: requestId 
+    });
+  }
+  
+  // Basic request info gathering with safeguards
+  try {
+    console.log(`[${requestId}] Method: ${req.method}`);
+    console.log(`[${requestId}] URL: ${req.url || 'unknown'}`);
+    console.log(`[${requestId}] Query keys: ${req.query ? Object.keys(req.query).join(',') : 'none'}`);
+  } catch (loggingError) {
+    console.error(`[${requestId}] Logging failed:`, loggingError);
+  }
+  
+  // Authentication with maximum safety
+  let sessionToken;
+  try {
+    sessionToken = req.headers['x-session-token'] || req.headers.authorization?.replace('Bearer ', '') || null;
+    console.log(`[${requestId}] Session token extraction: ${!!sessionToken}`);
     
     if (!sessionToken || !sessionToken.startsWith('temp_')) {
-      console.log(`[${requestId}] Authentication failed`);
-      return res.status(401).json({ error: 'Authentication required', requestId });
+      console.log(`[${requestId}] Auth failed - token: ${sessionToken ? 'invalid' : 'missing'}`);
+      return res.status(401).json({ 
+        error: 'Authentication required',
+        requestId: requestId 
+      });
     }
+    
+  } catch (authError) {
+    console.error(`[${requestId}] Auth processing failed:`, authError);
+    return res.status(500).json({ 
+      error: 'Authentication processing failed',
+      requestId: requestId 
+    });
+  }
+
+  // Main request processing
+  try {
+    console.log(`[${requestId}] Starting main processing`);
 
     if (req.method === 'POST') {
       // Save state
@@ -558,20 +578,18 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
 
   } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`[${requestId}] ERROR after ${duration}ms:`, error.message);
-    console.error(`[${requestId}] Stack trace:`, error.stack);
-    console.error(`[${requestId}] Request details:`, {
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-      query: req.query
-    });
+    const duration = startTime ? Date.now() - startTime : 0;
+    console.error(`[${requestId || 'unknown'}] ERROR after ${duration}ms:`, error.message);
+    console.error(`[${requestId || 'unknown'}] Stack trace:`, error.stack);
     
-    return res.status(500).json({ 
-      error: 'Internal server error',
-      details: error.message,
-      requestId: requestId
-    });
+    try {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        details: error.message,
+        requestId: requestId || 'unknown'
+      });
+    } catch (finalError) {
+      console.error('Cannot send error response:', finalError);
+    }
   }
-};;
+};
