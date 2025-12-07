@@ -61,7 +61,9 @@ module.exports = async function handler(req, res) {
         const userId = getUserIdFromToken(sessionToken);
         const stateId = `state_${Date.now()}_${Math.random().toString(36).substring(7)}`;
         
-        console.log('Saving state for user:', userId, 'with ID:', stateId);
+        console.log('[SAVE] Saving state for user:', userId, 'with ID:', stateId);
+        console.log('[SAVE] Session token:', sessionToken);
+        console.log('[SAVE] Extracted userId:', userId);
         
         // Save state to Redis
         const stateData = {
@@ -73,11 +75,12 @@ module.exports = async function handler(req, res) {
         };
         
         const redisKey = `user_state:${userId}:${stateId}`;
-        console.log('Redis key:', redisKey);
+        console.log('[SAVE] Redis key:', redisKey);
+        console.log('[SAVE] State data:', JSON.stringify(stateData, null, 2));
         
         await redis.set(redisKey, JSON.stringify(stateData));
         
-        console.log('State saved successfully to Redis');
+        console.log('[SAVE] State saved successfully to Redis');
         
         return res.json({
           success: true,
@@ -118,8 +121,12 @@ module.exports = async function handler(req, res) {
           }
         } else {
           // List user states - get all states for this user
+          console.log('[LIST] Listing states for userId:', userId);
+          console.log('[LIST] Session token:', sessionToken);
           const pattern = `user_state:${userId}:*`;
+          console.log('[LIST] Redis pattern:', pattern);
           const keys = await redis.keys(pattern);
+          console.log('[LIST] Found keys:', keys);
           
           const statesList = [];
           for (const key of keys) {
