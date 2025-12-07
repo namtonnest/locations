@@ -521,6 +521,26 @@
         return sessionToken;
     }
     
+    // Function to generate a temporary session token for anonymous users
+    function generateTemporarySessionToken() {
+        const timestamp = Date.now();
+        const randomId = Math.random().toString(36).substring(2, 8);
+        const tempToken = `temp_${timestamp}_anonymous_${randomId}@guest.local`;
+        localStorage.setItem('sessionToken', tempToken);
+        sessionToken = tempToken;
+        console.log('[DEBUG] Generated temporary session token:', tempToken);
+        return tempToken;
+    }
+    
+    // Ensure user has a session token (generate one if needed)
+    function ensureSessionToken() {
+        sessionToken = refreshSessionToken();
+        if (!sessionToken) {
+            sessionToken = generateTemporarySessionToken();
+        }
+        return sessionToken;
+    }
+    
     // Check if user is logged in
     async function verifySession() {
         // Always refresh session token from localStorage first
@@ -2057,8 +2077,8 @@
     if (saveBtn) {
         saveBtn.addEventListener('click', async () => {
             try {
-                // Refresh session token in case user just logged in
-                sessionToken = refreshSessionToken();
+                // Ensure we have a session token (generate temporary one if needed)
+                sessionToken = ensureSessionToken();
                 
                 console.log('[SAVE DEBUG] Starting save process');
                 console.log('[SAVE DEBUG] Session token:', sessionToken ? sessionToken.substring(0, 20) + '...' : 'NULL');
@@ -2225,18 +2245,35 @@
             if (userStateId) {
                 // Load from user's personal database
                 setTimeout(async () => {
+                    // Ensure we have a session token (generate temporary one if needed)
+                    sessionToken = ensureSessionToken();
+                    console.log('[DEBUG] Ensured session token after refresh:', sessionToken ? 'Present' : 'Missing');
+                    
                     if (!sessionToken) {
-                        alert('You need to login to access this user state.');
-                        window.location.href = 'login.html';
+                        alert('Unable to generate session token for state access.');
                         return;
                     }
                     
                     try {
+                        console.log('[DEBUG] Loading user state ID:', userStateId);
+                        console.log('[DEBUG] Session token preview:', sessionToken.substring(0, 30) + '...');
+                        
                         const response = await fetch(`${BACKEND_STATE_ENDPOINT}?id=${encodeURIComponent(userStateId)}`, {
                             headers: { 'X-Session-Token': sessionToken }
                         });
                         
+                        console.log('[DEBUG] Response status:', response.status, response.statusText);
+                        
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            console.error('[DEBUG] Error response:', errorText);
+                            alert(`Failed to load state: Server error (${response.status})`);
+                            return;
+                        }
+                        
                         const data = await response.json();
+                        console.log('[DEBUG] Response data:', data);
+                        
                         if (data.success) {
                             console.log('[DEBUG] Loaded user state:', data);
                             restoreSavedState(data.state);
@@ -2244,6 +2281,7 @@
                             alert('Failed to load state: ' + (data.error || 'State not found'));
                         }
                     } catch (e) {
+                        console.error('[DEBUG] Exception loading user state:', e);
                         console.warn('Failed to load user state', userStateId, e);
                         alert('Failed to load state: ' + e.message);
                     }
