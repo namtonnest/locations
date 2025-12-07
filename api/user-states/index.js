@@ -12,7 +12,15 @@ try {
 // Redis connection with error handling
 let cachedRedis = null;
 function getRedis() {
-  if (cachedRedis) return cachedRedis;
+  if (cachedRedis) {
+    try {
+      // Test the connection
+      return cachedRedis;
+    } catch (e) {
+      console.log('Cached Redis connection failed, creating new one:', e.message);
+      cachedRedis = null;
+    }
+  }
   
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -24,7 +32,15 @@ function getRedis() {
   }
   
   try {
-    cachedRedis = new Redis({ url, token });
+    cachedRedis = new Redis({ 
+      url, 
+      token,
+      retry: {
+        retries: 3,
+        delayMin: 100,
+        delayMax: 1000
+      }
+    });
     console.log('Redis connection created successfully');
     return cachedRedis;
   } catch (redisError) {
@@ -163,10 +179,23 @@ module.exports = async function handler(req, res) {
           
           let stateData = null;
           try {
-            stateData = await redis.get(stateKey);
-            console.log('[GET] Raw state data found:', !!stateData);
+            console.log(`[${requestId}] Attempting Redis GET for primary key`);
+            // Add timeout protection for Redis operations
+            const redisOperation = redis.get(stateKey);
+            const timeout = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Redis operation timeout')), 5000)
+            );
+            stateData = await Promise.race([redisOperation, timeout]);
+            console.log(`[${requestId}] Redis GET completed:`, !!stateData);
           } catch (redisError) {
-            console.error('[GET] Redis get error for primary key:', redisError.message);
+            console.error(`[${requestId}] Redis get error for primary key:`, redisError.message);
+            if (redisError.message.includes('timeout')) {
+              return res.status(503).json({
+                success: false,
+                error: 'Service temporarily unavailable - please try again',
+                requestId: requestId
+              });
+            }
           }
           
           // If not found, try alternative user ID patterns (like we do in listing)
@@ -177,25 +206,33 @@ module.exports = async function handler(req, res) {
               if (userId && userId.includes('@')) {
                 const usernameOnly = userId.split('@')[0];
                 const altKey = `user_state:${usernameOnly}:${id}`;
-                console.log('[GET] Trying alternative key:', altKey);
+                console.log(`[${requestId}] Trying alternative key:`, altKey);
                 try {
-                  stateData = await redis.get(altKey);
+                  const altOperation = redis.get(altKey);
+                  const altTimeout = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Redis alt operation timeout')), 3000)
+                  );
+                  stateData = await Promise.race([altOperation, altTimeout]);
                   if (stateData) stateKey = altKey;
                 } catch (redisError) {
-                  console.error('[GET] Redis get error for alt key:', redisError.message);
+                  console.error(`[${requestId}] Redis get error for alt key:`, redisError.message);
                 }
               } else if (userId) {
                 const emailKey = `user_state:${userId}@gmail.com:${id}`;
-                console.log('[GET] Trying email key:', emailKey);
+                console.log(`[${requestId}] Trying email key:`, emailKey);
                 try {
-                  stateData = await redis.get(emailKey);
+                  const emailOperation = redis.get(emailKey);
+                  const emailTimeout = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Redis email operation timeout')), 3000)
+                  );
+                  stateData = await Promise.race([emailOperation, emailTimeout]);
                   if (stateData) stateKey = emailKey;
                 } catch (redisError) {
-                  console.error('[GET] Redis get error for email key:', redisError.message);
+                  console.error(`[${requestId}] Redis get error for email key:`, redisError.message);
                 }
               }
             } catch (altKeyError) {
-              console.error('[GET] Error in alternative key processing:', altKeyError.message);
+              console.error(`[${requestId}] Error in alternative key processing:`, altKeyError.message);
             }
             
             console.log('[GET] Alternative key result:', !!stateData);
