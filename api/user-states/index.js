@@ -44,27 +44,34 @@ function getUserIdFromToken(sessionToken) {
 }
 
 module.exports = async function handler(req, res) {
-  console.log('[HANDLER] Starting request processing');
+  const startTime = Date.now();
+  const requestId = Math.random().toString(36).substring(7);
   
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Session-Token');
+  console.log(`[${requestId}] Handler starting at ${new Date().toISOString()}`);
+  console.log(`[${requestId}] Method: ${req.method}, URL: ${req.url}`);
+  console.log(`[${requestId}] Headers:`, JSON.stringify(req.headers, null, 2));
+  console.log(`[${requestId}] Query:`, JSON.stringify(req.query, null, 2));
   
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  console.log('[HANDLER] CORS headers set, processing method:', req.method);
-
   try {
+    // Enable CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Session-Token');
+    
+    if (req.method === 'OPTIONS') {
+      console.log(`[${requestId}] OPTIONS request, returning 200`);
+      return res.status(200).end();
+    }
+
+    console.log(`[${requestId}] CORS headers set, processing method: ${req.method}`);
+
     const sessionToken = req.headers['x-session-token'] || req.headers.authorization?.replace('Bearer ', '');
     
-    console.log('User-states API called:', req.method, 'Token:', sessionToken ? sessionToken.substring(0, 15) + '...' : 'None');
+    console.log(`[${requestId}] Extracted session token:`, sessionToken ? sessionToken.substring(0, 15) + '...' : 'None');
     
     // For mock sessions, accept any token that starts with 'temp_'
     if (!sessionToken || !sessionToken.startsWith('temp_')) {
-      console.log('Authentication failed: invalid token');
+      console.log(`[${requestId}] Authentication failed: invalid token`);
       return res.status(401).json({ error: 'Authentication required' });
     }
 
@@ -243,13 +250,15 @@ module.exports = async function handler(req, res) {
                 });
               }
               
-              console.log('[GET] Final state keys:', Object.keys(actualState));
-              console.log('[GET] Returning state with mapCenter:', !!actualState.mapCenter);
+              console.log(`[${requestId}] Final state keys:`, Object.keys(actualState));
+              console.log(`[${requestId}] Returning state with mapCenter:`, !!actualState.mapCenter);
               
-              return res.json({
+              const response = {
                 success: true,
                 state: actualState
-              });
+              };
+              console.log(`[${requestId}] Successful response prepared`);
+              return res.json(response);
             } catch (e) {
               console.error('[GET] Error parsing state data:', e.message);
               console.error('[GET] Stack trace:', e.stack);
@@ -260,10 +269,11 @@ module.exports = async function handler(req, res) {
               });
             }
           } else {
-            console.log('[GET] No state found for key:', stateKey);
+            console.log(`[${requestId}] No state found for any key pattern`);
             return res.json({
               success: false,
-              error: 'State not found or not accessible'
+              error: 'State not found or not accessible',
+              requestId: requestId
             });
           }
         } else {
@@ -460,11 +470,20 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
 
   } catch (error) {
-    console.error('User states error:', error);
-    console.error('Stack trace:', error.stack);
+    const duration = Date.now() - startTime;
+    console.error(`[${requestId}] ERROR after ${duration}ms:`, error.message);
+    console.error(`[${requestId}] Stack trace:`, error.stack);
+    console.error(`[${requestId}] Request details:`, {
+      method: req.method,
+      url: req.url,
+      headers: req.headers,
+      query: req.query
+    });
+    
     return res.status(500).json({ 
       error: 'Internal server error',
-      details: error.message 
+      details: error.message,
+      requestId: requestId
     });
   }
 };;
