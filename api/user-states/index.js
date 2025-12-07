@@ -135,16 +135,25 @@ module.exports = async function handler(req, res) {
           const statesList = [];
           for (const key of keys) {
             try {
+              console.log('[LIST] Processing key:', key);
               const stateData = await redis.get(key);
+              console.log('[LIST] Raw data for key', key, ':', stateData);
+              
               if (stateData) {
                 const parsedState = JSON.parse(stateData);
+                console.log('[LIST] Parsed state for key', key, ':', parsedState);
+                
                 statesList.push({
                   id: parsedState.id,
                   name: parsedState.name,
                   createdAt: parsedState.createdAt
                 });
+                console.log('[LIST] Added state to list:', parsedState.id, parsedState.name);
+              } else {
+                console.log('[LIST] No data found for key:', key);
               }
             } catch (e) {
+              console.error('[LIST] Error processing key', key, ':', e.message);
               // Skip invalid entries
               continue;
             }
