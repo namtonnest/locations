@@ -158,23 +158,42 @@ module.exports = async function handler(req, res) {
             try {
               console.log('[LIST] Processing key:', key);
               const stateData = await redis.get(key);
-              console.log('[LIST] Raw data for key', key, ':', stateData);
+              console.log('[LIST] Raw data for key', key, ':', stateData ? 'DATA FOUND' : 'NO DATA');
               
               if (stateData) {
                 const parsedState = JSON.parse(stateData);
-                console.log('[LIST] Parsed state for key', key, ':', parsedState);
+                console.log('[LIST] Parsed state keys:', Object.keys(parsedState));
                 
-                statesList.push({
-                  id: parsedState.id,
-                  name: parsedState.name,
-                  createdAt: parsedState.createdAt
-                });
-                console.log('[LIST] Added state to list:', parsedState.id, parsedState.name);
+                // Handle different possible state structures
+                let stateInfo;
+                if (parsedState.id && parsedState.name && parsedState.createdAt) {
+                  // New format: has id, name, createdAt directly
+                  stateInfo = {
+                    id: parsedState.id,
+                    name: parsedState.name,
+                    createdAt: parsedState.createdAt
+                  };
+                } else if (parsedState.state && key.includes('state_')) {
+                  // Extract state ID from key if not in data
+                  const keyParts = key.split(':');
+                  const stateId = keyParts[keyParts.length - 1]; // Last part of key
+                  stateInfo = {
+                    id: stateId,
+                    name: parsedState.name || 'Unnamed State',
+                    createdAt: parsedState.createdAt || new Date().toISOString()
+                  };
+                } else {
+                  console.log('[LIST] Unknown state structure, skipping:', parsedState);
+                  continue;
+                }
+                
+                statesList.push(stateInfo);
+                console.log('[LIST] Added state to list:', stateInfo.id, stateInfo.name);
               } else {
                 console.log('[LIST] No data found for key:', key);
               }
             } catch (e) {
-              console.error('[LIST] Error processing key', key, ':', e.message);
+              console.error('[LIST] Error processing key', key, ':', e.message, e.stack);
               // Skip invalid entries
               continue;
             }
