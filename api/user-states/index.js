@@ -292,7 +292,17 @@ module.exports = async function handler(req, res) {
           
           if (stateData) {
             try {
-              const parsedState = JSON.parse(stateData);
+              // Handle both string and object data from Redis
+              let parsedState;
+              if (typeof stateData === 'string') {
+                parsedState = JSON.parse(stateData);
+                console.log(`[${requestId}] Parsed state from JSON string`);
+              } else if (typeof stateData === 'object' && stateData !== null) {
+                parsedState = stateData;
+                console.log(`[${requestId}] Using state data as object directly`);
+              } else {
+                throw new Error(`Invalid state data type: ${typeof stateData}`);
+              }
               console.log(`[${requestId}] Parsed state keys:`, Object.keys(parsedState));
               
               // Safely log parsed state (avoid potential circular reference issues)
@@ -437,7 +447,16 @@ module.exports = async function handler(req, res) {
               if (stateData) {
                 let parsedState;
                 try {
-                  parsedState = JSON.parse(stateData);
+                  // Handle both string and object data from Redis
+                  if (typeof stateData === 'string') {
+                    parsedState = JSON.parse(stateData);
+                    console.log('[LIST] Parsed state from JSON string for key', key);
+                  } else if (typeof stateData === 'object' && stateData !== null) {
+                    parsedState = stateData;
+                    console.log('[LIST] Using state data as object directly for key', key);
+                  } else {
+                    throw new Error(`Invalid state data type: ${typeof stateData}`);
+                  }
                   console.log('[LIST] Parsed state keys:', Object.keys(parsedState));
                 } catch (parseError) {
                   console.error('[LIST] Failed to parse JSON for key', key, ':', parseError.message);
