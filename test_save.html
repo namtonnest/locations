@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Save Functionality</title>
+</head>
+<body>
+    <h1>Save Functionality Test</h1>
+    <div id="status"></div>
+    <button id="testLogin">Test Login</button>
+    <button id="testSave">Test Save</button>
+    <button id="checkSession">Check Session</button>
+    
+    <script>
+        const statusEl = document.getElementById('status');
+        
+        function log(message) {
+            console.log(message);
+            statusEl.innerHTML += '<div>' + message + '</div>';
+        }
+        
+        document.getElementById('checkSession').addEventListener('click', async () => {
+            const sessionToken = localStorage.getItem('sessionToken');
+            log('Session token: ' + (sessionToken ? sessionToken.substring(0, 20) + '...' : 'None'));
+            
+            if (sessionToken) {
+                try {
+                    const response = await fetch('/api/auth', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'verify', sessionToken })
+                    });
+                    const data = await response.json();
+                    log('Session verification: ' + JSON.stringify(data));
+                } catch (e) {
+                    log('Session verification error: ' + e.message);
+                }
+            }
+        });
+        
+        document.getElementById('testLogin').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/auth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'login', username: 'testuser', password: 'testpass' })
+                });
+                const data = await response.json();
+                log('Login response: ' + JSON.stringify(data));
+                
+                if (data.success) {
+                    localStorage.setItem('sessionToken', data.sessionToken);
+                    log('Session token stored successfully');
+                }
+            } catch (e) {
+                log('Login error: ' + e.message);
+            }
+        });
+        
+        document.getElementById('testSave').addEventListener('click', async () => {
+            const sessionToken = localStorage.getItem('sessionToken');
+            if (!sessionToken) {
+                log('No session token found. Please login first.');
+                return;
+            }
+            
+            try {
+                const testState = {
+                    mapCenter: [-79.3875, 43.6426],
+                    zoom: 18,
+                    pitch: 60,
+                    bearing: 0,
+                    models: [],
+                    draws: []
+                };
+                
+                log('Attempting to save state with token: ' + sessionToken.substring(0, 20) + '...');
+                
+                const response = await fetch('/api/user-states', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-Session-Token': sessionToken
+                    },
+                    body: JSON.stringify({ state: testState, name: 'Test State' })
+                });
+                
+                log('Save response status: ' + response.status);
+                const data = await response.json();
+                log('Save response: ' + JSON.stringify(data));
+            } catch (e) {
+                log('Save error: ' + e.message);
+            }
+        });
+    </script>
+</body>
+</html>

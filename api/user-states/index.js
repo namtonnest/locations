@@ -40,8 +40,11 @@ module.exports = async function handler(req, res) {
   try {
     const sessionToken = req.headers['x-session-token'] || req.headers.authorization?.replace('Bearer ', '');
     
+    console.log('User-states API called:', req.method, 'Token:', sessionToken ? sessionToken.substring(0, 15) + '...' : 'None');
+    
     // For mock sessions, accept any token that starts with 'temp_'
     if (!sessionToken || !sessionToken.startsWith('temp_')) {
+      console.log('Authentication failed: invalid token');
       return res.status(401).json({ error: 'Authentication required' });
     }
 
@@ -49,8 +52,8 @@ module.exports = async function handler(req, res) {
       // Save state
       const { name, state } = req.body;
       
-      if (!name || !state) {
-        return res.status(400).json({ error: 'Name and state required' });
+      if (!state) {
+        return res.status(400).json({ error: 'State is required' });
       }
 
       try {
@@ -58,16 +61,23 @@ module.exports = async function handler(req, res) {
         const userId = getUserIdFromToken(sessionToken);
         const stateId = `state_${Date.now()}_${Math.random().toString(36).substring(7)}`;
         
+        console.log('Saving state for user:', userId, 'with ID:', stateId);
+        
         // Save state to Redis
         const stateData = {
           id: stateId,
-          name: name,
+          name: name || 'Unnamed State',
           state: state,
           createdAt: new Date().toISOString(),
           userId: userId
         };
         
-        await redis.set(`user_state:${userId}:${stateId}`, JSON.stringify(stateData));
+        const redisKey = `user_state:${userId}:${stateId}`;
+        console.log('Redis key:', redisKey);
+        
+        await redis.set(redisKey, JSON.stringify(stateData));
+        
+        console.log('State saved successfully to Redis');
         
         return res.json({
           success: true,
