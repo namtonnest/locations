@@ -125,8 +125,29 @@ module.exports = async function handler(req, res) {
           console.log('[LIST] Session token:', sessionToken);
           const pattern = `user_state:${userId}:*`;
           console.log('[LIST] Redis pattern:', pattern);
-          const keys = await redis.keys(pattern);
-          console.log('[LIST] Found keys:', keys);
+          let keys = await redis.keys(pattern);
+          console.log('[LIST] Found keys for main pattern:', keys);
+          
+          // Also try pattern without @ in case there's an email mismatch
+          if (userId.includes('@')) {
+            const usernameOnly = userId.split('@')[0];
+            const altPattern = `user_state:${usernameOnly}:*`;
+            console.log('[LIST] Trying alternative pattern:', altPattern);
+            const altKeys = await redis.keys(altPattern);
+            console.log('[LIST] Found keys for alt pattern:', altKeys);
+            keys = [...keys, ...altKeys];
+          } else {
+            // Try with email domain if current userId doesn't have @
+            const emailPattern = `user_state:${userId}@gmail.com:*`;
+            console.log('[LIST] Trying email pattern:', emailPattern);
+            const emailKeys = await redis.keys(emailPattern);
+            console.log('[LIST] Found keys for email pattern:', emailKeys);
+            keys = [...keys, ...emailKeys];
+          }
+          
+          // Remove duplicates
+          keys = [...new Set(keys)];
+          console.log('[LIST] All unique keys found:', keys);
           
           // For debugging, also try to get some sample keys
           const allKeys = await redis.keys('user_state:*');
