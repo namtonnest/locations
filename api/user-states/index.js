@@ -273,61 +273,80 @@ module.exports = async function handler(req, res) {
           if (stateData) {
             try {
               const parsedState = JSON.parse(stateData);
-              console.log('[GET] Parsed state structure:', Object.keys(parsedState));
+              console.log(`[${requestId}] Parsed state keys:`, Object.keys(parsedState));
               
               // Safely log parsed state (avoid potential circular reference issues)
               try {
-                console.log('[GET] Full parsed state:', JSON.stringify(parsedState, null, 2));
-              } catch (stringifyError) {
-                console.log('[GET] Could not stringify full state:', stringifyError.message);
-                console.log('[GET] State keys only:', Object.keys(parsedState));
+                console.log(`[${requestId}] State structure sample:`, Object.keys(parsedState).slice(0, 5));
+              } catch (logError) {
+                console.log(`[${requestId}] Could not log state structure:`, logError.message);
               }
               
-              // Handle different possible state data structures
+              // Handle different possible state data structures with extra safety
               let actualState;
               
-              if (parsedState.state && typeof parsedState.state === 'object') {
-                // New format: state is nested under 'state' property
-                actualState = parsedState.state;
-                console.log('[GET] Using nested state structure');
-              } else if (parsedState.mapCenter || parsedState.models || parsedState.zoom !== undefined) {
-                // Direct state format: the parsedState IS the state
-                actualState = parsedState;
-                console.log('[GET] Using direct state structure');
-              } else if (parsedState.id && parsedState.createdAt && Object.keys(parsedState).length > 3) {
-                // Wrapper format: extract everything except metadata
-                try {
-                  const { id, createdAt, userId, name, ...stateData } = parsedState;
-                  actualState = stateData;
-                  console.log('[GET] Extracted state from wrapper structure');
-                } catch (destructureError) {
-                  console.error('[GET] Destructuring failed, using whole object:', destructureError.message);
+              try {
+                if (parsedState.state && typeof parsedState.state === 'object') {
+                  // New format: state is nested under 'state' property
+                  actualState = parsedState.state;
+                  console.log(`[${requestId}] Using nested state structure`);
+                } else if (parsedState.mapCenter || parsedState.models || parsedState.zoom !== undefined) {
+                  // Direct state format: the parsedState IS the state
                   actualState = parsedState;
+                  console.log(`[${requestId}] Using direct state structure`);
+                } else if (parsedState.id && parsedState.createdAt && Object.keys(parsedState).length > 3) {
+                  // Wrapper format: extract everything except metadata
+                  try {
+                    const { id, createdAt, userId, name, ...stateData } = parsedState;
+                    actualState = stateData;
+                    console.log(`[${requestId}] Extracted state from wrapper structure`);
+                  } catch (destructureError) {
+                    console.error(`[${requestId}] Destructuring failed, using whole object:`, destructureError.message);
+                    actualState = parsedState;
+                  }
+                } else {
+                  // Fallback: try to use the whole thing
+                  actualState = parsedState;
+                  console.log(`[${requestId}] Using fallback - whole parsed data as state`);
                 }
-              } else {
-                // Fallback: try to use the whole thing
-                actualState = parsedState;
-                console.log('[GET] Using fallback - whole parsed data as state');
+              } catch (structureError) {
+                console.error(`[${requestId}] State structure processing failed:`, structureError.message);
+                return res.json({
+                  success: false,
+                  error: 'State data structure error: ' + structureError.message,
+                  requestId: requestId
+                });
               }
               
               // Validate that we have something that looks like a map state
               if (!actualState || typeof actualState !== 'object') {
-                console.error('[GET] Invalid state structure - not an object:', typeof actualState);
+                console.error(`[${requestId}] Invalid state structure - not an object:`, typeof actualState);
                 return res.json({
                   success: false,
-                  error: 'Invalid state data format - not an object'
+                  error: 'Invalid state data format - not an object',
+                  requestId: requestId
                 });
               }
               
-              console.log(`[${requestId}] Final state keys:`, Object.keys(actualState));
+              console.log(`[${requestId}] Final state keys:`, Object.keys(actualState).slice(0, 10));
               console.log(`[${requestId}] Returning state with mapCenter:`, !!actualState.mapCenter);
               
-              const response = {
-                success: true,
-                state: actualState
-              };
-              console.log(`[${requestId}] Successful response prepared`);
-              return res.json(response);
+              // Safely create response
+              try {
+                const response = {
+                  success: true,
+                  state: actualState
+                };
+                console.log(`[${requestId}] Successful response prepared`);
+                return res.json(response);
+              } catch (responseError) {
+                console.error(`[${requestId}] Response creation failed:`, responseError.message);
+                return res.json({
+                  success: false,
+                  error: 'Response generation error: ' + responseError.message,
+                  requestId: requestId
+                });
+              }
             } catch (e) {
               console.error('[GET] Error parsing state data:', e.message);
               console.error('[GET] Stack trace:', e.stack);
