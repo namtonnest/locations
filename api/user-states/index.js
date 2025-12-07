@@ -116,9 +116,41 @@ module.exports = async function handler(req, res) {
             try {
               const parsedState = JSON.parse(stateData);
               console.log('[GET] Parsed state structure:', Object.keys(parsedState));
+              console.log('[GET] Full parsed state:', JSON.stringify(parsedState, null, 2));
               
-              // Return the actual state data - could be nested under 'state' property
-              let actualState = parsedState.state || parsedState;
+              // Handle different possible state data structures
+              let actualState;
+              
+              if (parsedState.state && typeof parsedState.state === 'object') {
+                // New format: state is nested under 'state' property
+                actualState = parsedState.state;
+                console.log('[GET] Using nested state structure');
+              } else if (parsedState.mapCenter || parsedState.models || parsedState.zoom !== undefined) {
+                // Direct state format: the parsedState IS the state
+                actualState = parsedState;
+                console.log('[GET] Using direct state structure');
+              } else if (parsedState.id && parsedState.createdAt && Object.keys(parsedState).length > 3) {
+                // Wrapper format: extract everything except metadata
+                const { id, createdAt, userId, name, ...stateData } = parsedState;
+                actualState = stateData;
+                console.log('[GET] Extracted state from wrapper structure');
+              } else {
+                // Fallback: try to use the whole thing
+                actualState = parsedState;
+                console.log('[GET] Using fallback - whole parsed data as state');
+              }
+              
+              // Validate that we have something that looks like a map state
+              if (!actualState || typeof actualState !== 'object') {
+                console.error('[GET] Invalid state structure - not an object:', typeof actualState);
+                return res.json({
+                  success: false,
+                  error: 'Invalid state data format - not an object'
+                });
+              }
+              
+              console.log('[GET] Final state keys:', Object.keys(actualState));
+              console.log('[GET] Returning state with mapCenter:', !!actualState.mapCenter);
               
               return res.json({
                 success: true,
@@ -126,9 +158,10 @@ module.exports = async function handler(req, res) {
               });
             } catch (e) {
               console.error('[GET] Error parsing state data:', e.message);
+              console.error('[GET] Raw state data (first 500 chars):', stateData.substring(0, 500));
               return res.json({
                 success: false,
-                error: 'Invalid state data format'
+                error: 'Invalid state data format: ' + e.message
               });
             }
           } else {
