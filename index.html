@@ -3602,11 +3602,14 @@
                     Reset to Default Size
                 </button>
             </div>
-            <div style="display:flex;gap:8px;margin-top:8px;">
-                <button id="tooltip-move" style="flex:1;padding:6px;border:1px solid #d1d5db;border-radius:4px;cursor:pointer;font-size:12px;${moveButtonStyle}">
+            <div style="display:flex;gap:6px;margin-top:8px;">
+                <button id="tooltip-move" style="flex:1;padding:6px;border:1px solid #d1d5db;border-radius:4px;cursor:pointer;font-size:11px;${moveButtonStyle}">
                     ${tooltipMoveMode ? '✓ Moving' : 'Move'}
                 </button>
-                <button id="tooltip-select" style="flex:1;padding:6px;border:1px solid #d1d5db;border-radius:4px;cursor:pointer;font-size:12px;background:#0ea5e9;color:white;">
+                <button id="tooltip-navigate" style="flex:1;padding:6px;border:1px solid #10b981;border-radius:4px;cursor:pointer;font-size:11px;background:#10b981;color:white;" title="Navigate to this location">
+                    Navigate
+                </button>
+                <button id="tooltip-select" style="flex:1;padding:6px;border:1px solid #0ea5e9;border-radius:4px;cursor:pointer;font-size:11px;background:#0ea5e9;color:white;">
                     Select
                 </button>
             </div>
@@ -3709,6 +3712,11 @@
             selectedModelId = entry.id;
             selectModel(entry.id);
             hideModelTooltip();
+        };
+
+        document.getElementById('tooltip-navigate').onclick = (e) => {
+            e.stopPropagation();
+            generateNavigationLink(entry);
         };
     }
 
@@ -4070,7 +4078,280 @@ function selectSuggestion(item) {
     }
 }
 
-// Mapbox forward-suggest (returns array of features)
+// --- Navigation and Location Tracking ---
+let userLocationMarker = null;
+let navigationRouteLayer = null;
+let watchPositionId = null;
+
+function generateNavigationLink(entry) {
+    const lat = entry.geo.lat;
+    const lng = entry.geo.lng;
+    const name = entry.name || `Model ${entry.id}`;
+    
+    // Create navigation URL for different platforms
+    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&destination_place_id=${encodeURIComponent(name)}`;
+    const appleMapsUrl = `http://maps.apple.com/?daddr=${lat},${lng}`;
+    const wazeUrl = `https://waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`;
+    
+    // Detect mobile platform
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isAndroid = /Android/.test(navigator.userAgent);
+    
+    let primaryUrl = googleMapsUrl;
+    if (isIOS) {
+        primaryUrl = appleMapsUrl;
+    }
+    
+    // Create navigation options modal
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    `;
+    
+    modal.innerHTML = `
+        <div style="background: white; border-radius: 12px; padding: 24px; max-width: 320px; margin: 20px;">
+            <h3 style="margin: 0 0 16px 0; font-size: 18px; color: #1f2937;">Navigate to ${name}</h3>
+            <p style="margin: 0 0 20px 0; font-size: 14px; color: #6b7280;">Choose your preferred navigation app:</p>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <button onclick="window.open('${googleMapsUrl}', '_blank')" style="padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 14px; background: #f9fafb; display: flex; align-items: center; justify-content: center;">
+                    🗺️ Google Maps
+                </button>
+                ${isIOS ? `<button onclick="window.open('${appleMapsUrl}', '_blank')" style="padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 14px; background: #f9fafb; display: flex; align-items: center; justify-content: center;">🍎 Apple Maps</button>` : ''}
+                <button onclick="window.open('${wazeUrl}', '_blank')" style="padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 14px; background: #f9fafb; display: flex; align-items: center; justify-content: center;">
+                    🚗 Waze
+                </button>
+                <button onclick="startInAppNavigation(${lat}, ${lng}, '${name}')" style="padding: 12px; border: 1px solid #10b981; border-radius: 8px; cursor: pointer; font-size: 14px; background: #10b981; color: white; display: flex; align-items: center; justify-content: center;">
+                    📍 Show Route on Map
+                </button>
+            </div>
+            <button onclick="this.parentElement.parentElement.remove()" style="margin-top: 16px; width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 14px; background: #f9fafb;">
+                Cancel
+            </button>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Auto-remove modal after 10 seconds
+    setTimeout(() => {
+        if (modal.parentElement) modal.remove();
+    }, 10000);
+}
+
+function startInAppNavigation(destLat, destLng, destName) {
+    // Close modal
+    const modal = document.querySelector('[style*="position: fixed"]');
+    if (modal) modal.remove();
+    
+    // Request user location
+    if ('geolocation' in navigator) {
+        const options = {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 60000
+        };
+        
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const userLat = position.coords.latitude;
+                const userLng = position.coords.longitude;
+                
+                showUserLocation(userLat, userLng);
+                showNavigationRoute(userLat, userLng, destLat, destLng, destName);
+                startLocationTracking();
+            },
+            (error) => {
+                console.error('Geolocation error:', error);
+                alert('Unable to get your location. Please enable location services.');
+            },
+            options
+        );
+    } else {
+        alert('Geolocation is not supported by this browser.');
+    }
+}
+
+function showUserLocation(lat, lng) {
+    // Remove existing user location marker
+    if (userLocationMarker) {
+        userLocationMarker.remove();
+    }
+    
+    // Create user location marker
+    const locationElement = document.createElement('div');
+    locationElement.style.cssText = `
+        width: 20px;
+        height: 20px;
+        background: #3b82f6;
+        border: 3px solid white;
+        border-radius: 50%;
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+    `;
+    
+    userLocationMarker = new mapboxgl.Marker(locationElement)
+        .setLngLat([lng, lat])
+        .addTo(map);
+}
+
+function showNavigationRoute(startLat, startLng, destLat, destLng, destName) {
+    // Get directions from Mapbox Directions API
+    const directionsUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${startLng},${startLat};${destLng},${destLat}?geometries=geojson&access_token=${mapboxgl.accessToken}`;
+    
+    fetch(directionsUrl)
+        .then(response => response.json())
+        .then(data => {
+            if (data.routes && data.routes.length > 0) {
+                const route = data.routes[0];
+                
+                // Remove existing route layer
+                if (map.getLayer('navigation-route')) {
+                    map.removeLayer('navigation-route');
+                }
+                if (map.getSource('navigation-route')) {
+                    map.removeSource('navigation-route');
+                }
+                
+                // Add route to map
+                map.addSource('navigation-route', {
+                    type: 'geojson',
+                    data: {
+                        type: 'Feature',
+                        properties: {},
+                        geometry: route.geometry
+                    }
+                });
+                
+                map.addLayer({
+                    id: 'navigation-route',
+                    type: 'line',
+                    source: 'navigation-route',
+                    layout: {
+                        'line-join': 'round',
+                        'line-cap': 'round'
+                    },
+                    paint: {
+                        'line-color': '#3b82f6',
+                        'line-width': 6,
+                        'line-opacity': 0.8
+                    }
+                });
+                
+                // Fit map to show the route
+                const coordinates = route.geometry.coordinates;
+                const bounds = coordinates.reduce((bounds, coord) => {
+                    return bounds.extend(coord);
+                }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+                
+                map.fitBounds(bounds, {
+                    padding: { top: 50, bottom: 50, left: 50, right: 50 },
+                    maxZoom: 16
+                });
+                
+                // Show route info
+                const distance = (route.distance / 1000).toFixed(1);
+                const duration = Math.round(route.duration / 60);
+                
+                const routeInfo = document.createElement('div');
+                routeInfo.id = 'route-info';
+                routeInfo.style.cssText = `
+                    position: fixed;
+                    bottom: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: white;
+                    padding: 12px 20px;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    z-index: 1000;
+                    font-size: 14px;
+                    text-align: center;
+                `;
+                
+                routeInfo.innerHTML = `
+                    <div style="font-weight: 600; margin-bottom: 4px;">Route to ${destName}</div>
+                    <div style="color: #6b7280;">${distance} km • ${duration} min</div>
+                    <button onclick="clearNavigation()" style="margin-top: 8px; padding: 6px 12px; border: 1px solid #ef4444; border-radius: 4px; background: #ef4444; color: white; cursor: pointer; font-size: 12px;">
+                        Clear Route
+                    </button>
+                `;
+                
+                // Remove existing route info
+                const existingInfo = document.getElementById('route-info');
+                if (existingInfo) existingInfo.remove();
+                
+                document.body.appendChild(routeInfo);
+            }
+        })
+        .catch(error => {
+            console.error('Error getting directions:', error);
+            alert('Unable to get directions. Please try again.');
+        });
+}
+
+function startLocationTracking() {
+    if (watchPositionId) {
+        navigator.geolocation.clearWatch(watchPositionId);
+    }
+    
+    const options = {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 30000
+    };
+    
+    watchPositionId = navigator.geolocation.watchPosition(
+        (position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            showUserLocation(lat, lng);
+        },
+        (error) => {
+            console.warn('Location tracking error:', error);
+        },
+        options
+    );
+}
+
+function clearNavigation() {
+    // Remove route layer
+    if (map.getLayer('navigation-route')) {
+        map.removeLayer('navigation-route');
+    }
+    if (map.getSource('navigation-route')) {
+        map.removeSource('navigation-route');
+    }
+    
+    // Remove user location marker
+    if (userLocationMarker) {
+        userLocationMarker.remove();
+        userLocationMarker = null;
+    }
+    
+    // Clear location tracking
+    if (watchPositionId) {
+        navigator.geolocation.clearWatch(watchPositionId);
+        watchPositionId = null;
+    }
+    
+    // Remove route info
+    const routeInfo = document.getElementById('route-info');
+    if (routeInfo) routeInfo.remove();
+}
+
+// Make functions globally available
+window.startInAppNavigation = startInAppNavigation;
+window.clearNavigation = clearNavigation;
+
+// --- Geocoding Functions ---
 async function geocodeSuggest(query) {
     try {
         const token = mapboxgl.accessToken;
