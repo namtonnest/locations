@@ -254,11 +254,11 @@
         }
         
         #route-tracking-btn {
-            top: 136px !important; /* Move to where 3D button was */
+            top: 136px !important; /* Keep mobile position */
         }
         
         #toggle-3d-btn {
-            top: 182px !important; /* Move 3D button below route tracking */
+            top: 182px !important; /* Keep mobile position */
         }
         
         /* Ensure save button doesn't overlap with route tracking */
@@ -1293,9 +1293,9 @@
             btn.className = 'btn secondary';
             btn.textContent = '3D';
             btn.title = 'Toggle 3D buildings';
-            // position under the Save button (which is at top:96px)
+            // position under the route tracking button (which is at top:130px)
             btn.style.position = 'absolute';
-            btn.style.top = '136px';
+            btn.style.top = '170px';
             btn.style.right = '12px';
             btn.style.zIndex = '30';
             btn.style.width = '36px';
@@ -4675,7 +4675,7 @@ function addRouteTrackingControl() {
     control.title = 'Toggle Driver Route Tracking';
     control.style.cssText = `
         position: absolute;
-        top: 112px;
+        top: 130px;
         right: 12px;
         z-index: 30;
         width: 36px;
