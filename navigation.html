@@ -339,27 +339,66 @@
             const destinationName = urlParams.get('name') || 'Vehicle Location';
             const modelId = urlParams.get('id');
 
-        // Check if we have valid coordinates
-        if (isNaN(destinationLat) || isNaN(destinationLng)) {
-            alert('Invalid destination coordinates. Please try again.');
-            window.close();
-        }
+            // Check if we have valid coordinates
+            if (isNaN(destinationLat) || isNaN(destinationLng)) {
+                alert('Invalid destination coordinates. Please try again.');
+                window.close();
+                return;
+            }
 
-        // Update header with destination info
-        document.getElementById('destination-name').textContent = destinationName;
-        document.getElementById('destination-coords').textContent = `${destinationLat.toFixed(6)}, ${destinationLng.toFixed(6)}`;
+            // Update header with destination info
+            document.getElementById('destination-name').textContent = destinationName;
+            document.getElementById('destination-coords').textContent = `${destinationLat.toFixed(6)}, ${destinationLng.toFixed(6)}`;
 
-        // Initialize Mapbox
-        mapboxgl.accessToken = 'pk.eyJ1IjoibmFtdG9ubmVzdCIsImEiOiJjbTBrbWxieGoxMTJlMmpzN2o5Nnd3a2ZkIn0.eqncjfXHTSQA3d4rJAEMrg';
-
-        const map = new mapboxgl.Map({
-            container: 'map',
-            style: 'mapbox://styles/mapbox/satellite-streets-v12',
-            center: [destinationLng, destinationLat],
-            zoom: 15,
-            bearing: 0,
-            pitch: 45
-        });
+            // Set Mapbox access token - using the same token as main application
+            mapboxgl.accessToken = 'pk.eyJ1IjoibmFtdG9ubmVzdCIsImEiOiJjbTBrbWxieGoxMTJlMmpzN2o5Nnd3a2ZkIn0.eqncjfXHTSQA3d4rJAEMrg';
+            
+            // Verify token is set
+            if (!mapboxgl.accessToken) {
+                console.error('Mapbox access token not set');
+                document.body.innerHTML = `
+                    <div style="padding: 20px; text-align: center; font-family: sans-serif;">
+                        <h2>Configuration Error</h2>
+                        <p>Mapbox access token is missing. Please contact support.</p>
+                        <button onclick="openExternalMaps()" style="padding: 10px 20px; margin: 10px; cursor: pointer; background: #10b981; color: white; border: none; border-radius: 6px;">
+                            Open in Google Maps
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Initialize Mapbox Map
+            let map;
+            try {
+                map = new mapboxgl.Map({
+                    container: 'map',
+                    style: 'mapbox://styles/mapbox/satellite-streets-v12',
+                    center: [destinationLng, destinationLat],
+                    zoom: 15,
+                    bearing: 0,
+                    pitch: 45
+                });
+                
+                console.log('Map initialized successfully');
+            } catch (error) {
+                console.error('Error initializing map:', error);
+                document.body.innerHTML = `
+                    <div style="padding: 20px; text-align: center; font-family: sans-serif;">
+                        <h2>🗺️ Map Loading Error</h2>
+                        <p>Unable to initialize the map. Error: ${error.message}</p>
+                        <div style="margin: 20px 0;">
+                            <button onclick="location.reload()" style="padding: 10px 20px; margin: 5px; cursor: pointer; background: #3b82f6; color: white; border: none; border-radius: 6px;">
+                                Retry
+                            </button>
+                            <button onclick="openExternalMaps()" style="padding: 10px 20px; margin: 5px; cursor: pointer; background: #10b981; color: white; border: none; border-radius: 6px;">
+                                Open in Google Maps
+                            </button>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
 
         // Navigation state
         let userLocationMarker = null;
