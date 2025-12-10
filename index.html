@@ -775,6 +775,27 @@
         { id: 'foodtruck', name: 'Food truck', url: 'https://raw.githubusercontent.com/namtonnest/3dmodels/main/food_truck.glb' }
     ];
 
+    // Default model dimensions in meters (Width X, Height Y, Depth Z)
+    // These represent the real-world size when scale = 1.0
+    const modelDimensions = {
+        'box-truck.glb': { x: 7.0, y: 3.5, z: 2.5 },
+        'roman_diesel_box_truck.glb': { x: 7.0, y: 3.5, z: 2.5 },
+        'truck.glb': { x: 6.0, y: 2.8, z: 2.2 },
+        'jeep.glb': { x: 4.5, y: 1.8, z: 2.0 },
+        'food_truck.glb': { x: 6.0, y: 3.0, z: 2.5 },
+        'restroom_model.glb': { x: 2.5, y: 2.8, z: 2.5 },
+        'restroom.glb': { x: 2.5, y: 2.8, z: 2.5 },
+        'low_poly_traffic_cone.glb': { x: 0.7, y: 1.0, z: 0.7 },
+        'traffic cone.gltf': { x: 0.7, y: 1.0, z: 0.7 }
+    };
+
+    // Function to get model dimensions from URL
+    function getModelDimensions(url) {
+        const fileName = url.split('/').pop() || '';
+        const dimensions = modelDimensions[fileName] || { x: 2.0, y: 2.0, z: 2.0 }; // default 2x2x2 meters
+        return dimensions;
+    }
+
 
     function loadLibrary() {
         try {
@@ -1165,15 +1186,16 @@
                     <input id="rot" type="number" value="0" step="1" style="width:88px;padding:6px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)">
                     <input id="rotSlider" type="range" min="-180" max="180" value="0" step="1" style="flex:1;min-width:120px;">
                 </label>
-                <label>Scale: <input id="scale" type="number" step="0.1" value="1"></label>
+                <label>Scale: <input id="scale" type="number" step="0.1" value="1"> <span id="scaleMeters" style="font-size:11px;color:#666"></span></label>
                 <details style="margin-top:4px">
-                    <summary style="cursor:pointer;font-size:12px;color:#666">Advanced scaling</summary>
+                    <summary style="cursor:pointer;font-size:12px;color:#666">Advanced scaling (meters)</summary>
                     <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:12px">
-                        <label>X: <input id="scaleX" type="number" step="0.1" value="1" style="width:60px"></label>
-                        <label>Y: <input id="scaleY" type="number" step="0.1" value="1" style="width:60px"></label>
-                        <label>Z: <input id="scaleZ" type="number" step="0.1" value="1" style="width:60px"></label>
+                        <label>Width (X): <input id="scaleX" type="number" step="0.1" value="1" style="width:50px">m</label>
+                        <label>Height (Y): <input id="scaleY" type="number" step="0.1" value="1" style="width:50px">m</label>
+                        <label>Depth (Z): <input id="scaleZ" type="number" step="0.1" value="1" style="width:50px">m</label>
                     </div>
-                    <button id="resetScale" style="margin-top:4px;font-size:11px;padding:2px 6px">Reset to uniform</button>
+                    <div style="margin-top:4px;font-size:10px;color:#888">Enter actual dimensions in meters</div>
+                    <button id="resetScale" style="margin-top:4px;font-size:11px;padding:2px 6px">Reset to default size</button>
                 </details>
                 <div style="margin-top:8px;font-size:12px">Nudge (meters): <input id="nudgeStep" type="number" value="1" style="width:60px"> </div>
                 <div style="margin-top:6px">
@@ -1728,6 +1750,7 @@
     const rot = document.getElementById('rot');
     const rotSlider = document.getElementById('rotSlider');
     const scaleInput = document.getElementById('scale');
+    const scaleMetersSpan = document.getElementById('scaleMeters');
     const scaleXInput = document.getElementById('scaleX');
     const scaleYInput = document.getElementById('scaleY');
     const scaleZInput = document.getElementById('scaleZ');
@@ -1760,27 +1783,57 @@
         // Only allow yaw (Y) rotation from the UI. Keep X/Z rotations at their stored values.
         entry.transform.rotateY = degToRad(Number(rot.value || 0));
         
-        // Handle both uniform and non-uniform scaling
-        if (entry.meterScale) {
-            // Check if we're using separate X/Y/Z scales or uniform scale
-            const scaleX = Number(scaleXInput.value || 1);
-            const scaleY = Number(scaleYInput.value || 1);
-            const scaleZ = Number(scaleZInput.value || 1);
+        // Handle both uniform and meter-based scaling
+        if (entry.meterScale && entry.baseDimensions) {
+            // Get input values
+            const scaleX = Number(scaleXInput.value || entry.baseDimensions.x);
+            const scaleY = Number(scaleYInput.value || entry.baseDimensions.y);
+            const scaleZ = Number(scaleZInput.value || entry.baseDimensions.z);
             const uniformScale = Number(scaleInput.value || 1);
             
-            // If all X/Y/Z scales are 1, use uniform scale
-            if (scaleX === 1 && scaleY === 1 && scaleZ === 1) {
+            // Convert meter dimensions to scale multipliers
+            const scaleXMultiplier = scaleX / entry.baseDimensions.x;
+            const scaleYMultiplier = scaleY / entry.baseDimensions.y;
+            const scaleZMultiplier = scaleZ / entry.baseDimensions.z;
+            
+            // Check if we're using separate X/Y/Z scales or uniform scale
+            const isUniformScaling = (scaleX === entry.baseDimensions.x * uniformScale && 
+                                    scaleY === entry.baseDimensions.y * uniformScale && 
+                                    scaleZ === entry.baseDimensions.z * uniformScale);
+            
+            if (isUniformScaling && scaleXMultiplier === scaleYMultiplier && scaleYMultiplier === scaleZMultiplier) {
+                // Use uniform scaling
                 entry.transform.scale = entry.meterScale * uniformScale;
                 entry.transform.scaleX = undefined;
                 entry.transform.scaleY = undefined;
                 entry.transform.scaleZ = undefined;
+                
+                // Update scale display
+                if (scaleMetersSpan) {
+                    const avgDim = (entry.baseDimensions.x + entry.baseDimensions.y + entry.baseDimensions.z) / 3;
+                    scaleMetersSpan.textContent = `(~${(avgDim * uniformScale).toFixed(1)}m avg)`;
+                }
             } else {
                 // Use non-uniform scaling
-                entry.transform.scaleX = entry.meterScale * scaleX;
-                entry.transform.scaleY = entry.meterScale * scaleY;
-                entry.transform.scaleZ = entry.meterScale * scaleZ;
+                entry.transform.scaleX = entry.meterScale * scaleXMultiplier;
+                entry.transform.scaleY = entry.meterScale * scaleYMultiplier;
+                entry.transform.scaleZ = entry.meterScale * scaleZMultiplier;
                 entry.transform.scale = entry.meterScale; // Keep base scale for compatibility
+                
+                // Clear scale display since it's not uniform
+                if (scaleMetersSpan) {
+                    scaleMetersSpan.textContent = '(custom dimensions)';
+                }
             }
+        } else {
+            // Fallback for models without dimension info
+            const uniformScale = Number(scaleInput.value || 1);
+            entry.transform.scale = (entry.meterScale || 1) * uniformScale;
+            entry.transform.scaleX = undefined;
+            entry.transform.scaleY = undefined;
+            entry.transform.scaleZ = undefined;
+            
+            if (scaleMetersSpan) scaleMetersSpan.textContent = '';
         }
     // update geographic coords shown in the sidebar
     updateEntryGeo(entry);
@@ -1819,12 +1872,17 @@
     if (scaleYInput) scaleYInput.addEventListener('input', applyTransformsFromInputs);
     if (scaleZInput) scaleZInput.addEventListener('input', applyTransformsFromInputs);
     
-    // Reset scale button - sets all scales back to uniform
+    // Reset scale button - sets all scales back to default dimensions
     if (resetScaleBtn) {
         resetScaleBtn.addEventListener('click', () => {
-            if (scaleXInput) scaleXInput.value = 1;
-            if (scaleYInput) scaleYInput.value = 1;
-            if (scaleZInput) scaleZInput.value = 1;
+            if (!selectedModelId) return;
+            const entry = placedModels.find(p => p.id === selectedModelId);
+            if (!entry || !entry.baseDimensions) return;
+            
+            if (scaleXInput) scaleXInput.value = entry.baseDimensions.x.toFixed(1);
+            if (scaleYInput) scaleYInput.value = entry.baseDimensions.y.toFixed(1);
+            if (scaleZInput) scaleZInput.value = entry.baseDimensions.z.toFixed(1);
+            if (scaleInput) scaleInput.value = "1.0";
             applyTransformsFromInputs();
         });
     }
@@ -1901,10 +1959,20 @@
         // update UI
     if (rot) rot.value = Math.round((entry.transform.rotateY * 180 / Math.PI) * 100) / 100;
         scaleInput.value = 1;
-        // Reset individual scale inputs
-        if (scaleXInput) scaleXInput.value = 1;
-        if (scaleYInput) scaleYInput.value = 1;
-        if (scaleZInput) scaleZInput.value = 1;
+        // Reset individual scale inputs to base dimensions
+        if (entry.baseDimensions) {
+            if (scaleXInput) scaleXInput.value = entry.baseDimensions.x.toFixed(1);
+            if (scaleYInput) scaleYInput.value = entry.baseDimensions.y.toFixed(1);
+            if (scaleZInput) scaleZInput.value = entry.baseDimensions.z.toFixed(1);
+            
+            const avgDim = (entry.baseDimensions.x + entry.baseDimensions.y + entry.baseDimensions.z) / 3;
+            if (scaleMetersSpan) scaleMetersSpan.textContent = `(~${avgDim.toFixed(1)}m avg)`;
+        } else {
+            if (scaleXInput) scaleXInput.value = 1;
+            if (scaleYInput) scaleYInput.value = 1;
+            if (scaleZInput) scaleZInput.value = 1;
+            if (scaleMetersSpan) scaleMetersSpan.textContent = '';
+        }
         // update coords/rotation shown in sidebar
         updateEntryGeo(entry);
         renderSidebar();
@@ -1971,6 +2039,7 @@
                     transform: Object.assign({}, p.transform),
                     original: Object.assign({}, p.original),
                     meterScale: p.meterScale,
+                    baseDimensions: p.baseDimensions,
                     geo: p.geo ? { lng: p.geo.lng, lat: p.geo.lat, alt: p.geo.alt } : null,
                     animated: !!p.animated,
                     spinSpeed: (p.spinSpeed || 0.2),
@@ -1985,6 +2054,7 @@
                 transform: Object.assign({}, p.transform),
                 original: Object.assign({}, p.original),
                 meterScale: p.meterScale,
+                baseDimensions: p.baseDimensions,
                 geo: p.geo ? { lng: p.geo.lng, lat: p.geo.lat, alt: p.geo.alt } : null,
                 animated: !!p.animated,
                 spinSpeed: (p.spinSpeed || 0.2),
@@ -2532,19 +2602,55 @@
         if (!entry) return;
         setControlsDisabled(false);
     if (rot) rot.value = Math.round((entry.transform.rotateY * 180 / Math.PI) * 100) / 100;
-        scaleInput.value = Math.round((entry.transform.scale / (entry.meterScale || 1)) * 100) / 100;
         
-        // Populate individual scale inputs
-        if (entry.transform.scaleX !== undefined && entry.meterScale) {
-            if (scaleXInput) scaleXInput.value = Math.round((entry.transform.scaleX / entry.meterScale) * 100) / 100;
-            if (scaleYInput) scaleYInput.value = Math.round((entry.transform.scaleY / entry.meterScale) * 100) / 100;
-            if (scaleZInput) scaleZInput.value = Math.round((entry.transform.scaleZ / entry.meterScale) * 100) / 100;
+        // Ensure model has base dimensions
+        if (!entry.baseDimensions && entry.url) {
+            entry.baseDimensions = getModelDimensions(entry.url);
+        }
+        
+        if (entry.baseDimensions && entry.meterScale) {
+            // Calculate current dimensions in meters
+            if (entry.transform.scaleX !== undefined) {
+                // Model has individual axis scaling
+                const currentXMeters = (entry.transform.scaleX / entry.meterScale) * entry.baseDimensions.x;
+                const currentYMeters = (entry.transform.scaleY / entry.meterScale) * entry.baseDimensions.y;
+                const currentZMeters = (entry.transform.scaleZ / entry.meterScale) * entry.baseDimensions.z;
+                
+                if (scaleXInput) scaleXInput.value = currentXMeters.toFixed(1);
+                if (scaleYInput) scaleYInput.value = currentYMeters.toFixed(1);
+                if (scaleZInput) scaleZInput.value = currentZMeters.toFixed(1);
+                
+                // Set uniform scale to average multiplier
+                const avgMultiplier = ((currentXMeters / entry.baseDimensions.x) + 
+                                     (currentYMeters / entry.baseDimensions.y) + 
+                                     (currentZMeters / entry.baseDimensions.z)) / 3;
+                scaleInput.value = avgMultiplier.toFixed(2);
+                
+                if (scaleMetersSpan) scaleMetersSpan.textContent = '(custom dimensions)';
+            } else {
+                // Model has uniform scaling
+                const currentScale = entry.transform.scale / entry.meterScale;
+                scaleInput.value = currentScale.toFixed(2);
+                
+                // Set individual dimensions based on uniform scale
+                if (scaleXInput) scaleXInput.value = (entry.baseDimensions.x * currentScale).toFixed(1);
+                if (scaleYInput) scaleYInput.value = (entry.baseDimensions.y * currentScale).toFixed(1);
+                if (scaleZInput) scaleZInput.value = (entry.baseDimensions.z * currentScale).toFixed(1);
+                
+                // Update scale display
+                const avgDim = (entry.baseDimensions.x + entry.baseDimensions.y + entry.baseDimensions.z) / 3;
+                if (scaleMetersSpan) scaleMetersSpan.textContent = `(~${(avgDim * currentScale).toFixed(1)}m avg)`;
+            }
         } else {
-            // Default to uniform scaling
-            const uniformScale = Math.round((entry.transform.scale / (entry.meterScale || 1)) * 100) / 100;
-            if (scaleXInput) scaleXInput.value = uniformScale;
-            if (scaleYInput) scaleYInput.value = uniformScale;
-            if (scaleZInput) scaleZInput.value = uniformScale;
+            // Fallback for models without dimension info
+            const currentScale = Math.round((entry.transform.scale / (entry.meterScale || 1)) * 100) / 100;
+            scaleInput.value = currentScale;
+            
+            if (scaleXInput) scaleXInput.value = currentScale.toFixed(1);
+            if (scaleYInput) scaleYInput.value = currentScale.toFixed(1);
+            if (scaleZInput) scaleZInput.value = currentScale.toFixed(1);
+            
+            if (scaleMetersSpan) scaleMetersSpan.textContent = '';
         }
         
         // sync animate button text to reflect entry state
@@ -3200,15 +3306,22 @@
             if (entry) {
                 entry.meterScale = entry.meterScale || modelAsMercatorCoordinate.meterInMercatorCoordinateUnits();
                 entry.original = Object.assign({}, entry.transform);
+                
+                // Add base dimensions for meter-based scaling
+                entry.baseDimensions = getModelDimensions(modelUrl);
 
                 setControlsDisabled(false);
                 if (rot) rot.value = Math.round((entry.transform.rotateY * 180 / Math.PI) * 100) / 100;
                 scaleInput.value = 1;
                 
-                // Initialize individual scale inputs to 1 for new models
-                if (scaleXInput) scaleXInput.value = 1;
-                if (scaleYInput) scaleYInput.value = 1;
-                if (scaleZInput) scaleZInput.value = 1;
+                // Initialize individual scale inputs to default dimensions
+                if (scaleXInput) scaleXInput.value = entry.baseDimensions.x.toFixed(1);
+                if (scaleYInput) scaleYInput.value = entry.baseDimensions.y.toFixed(1);
+                if (scaleZInput) scaleZInput.value = entry.baseDimensions.z.toFixed(1);
+                
+                // Update scale display
+                const avgDim = (entry.baseDimensions.x + entry.baseDimensions.y + entry.baseDimensions.z) / 3;
+                if (scaleMetersSpan) scaleMetersSpan.textContent = `(~${avgDim.toFixed(1)}m avg)`;
             }
         }
 
