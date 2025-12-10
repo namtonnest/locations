@@ -6,6 +6,15 @@
     <title>Navigation to Vehicle Location</title>
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.1.4/mapbox-gl.js"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.1.4/mapbox-gl.css" rel="stylesheet" />
+    <script>
+        // Ensure mapboxgl is available before proceeding
+        if (typeof mapboxgl === 'undefined') {
+            console.error('Mapbox GL JS failed to load');
+            document.addEventListener('DOMContentLoaded', function() {
+                document.body.innerHTML = '<div style="padding: 20px; text-align: center; font-family: sans-serif;"><h2>Loading Error</h2><p>Unable to load mapping library. Please refresh the page.</p></div>';
+            });
+        }
+    </script>
     <style>
         * {
             margin: 0;
@@ -266,12 +275,25 @@
     </div>
 
     <script>
-        // Get URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        const destinationLat = parseFloat(urlParams.get('lat'));
-        const destinationLng = parseFloat(urlParams.get('lng'));
-        const destinationName = urlParams.get('name') || 'Vehicle Location';
-        const modelId = urlParams.get('id');
+        // Wait for DOM and mapboxgl to be ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Double-check mapboxgl is available
+            if (typeof mapboxgl === 'undefined') {
+                console.error('Mapbox GL JS is not available');
+                document.body.innerHTML = '<div style="padding: 20px; text-align: center; font-family: sans-serif;"><h2>Error</h2><p>Mapping library failed to load. Please refresh the page.</p><button onclick="location.reload()" style="padding: 8px 16px; margin-top: 12px; cursor: pointer;">Refresh Page</button></div>';
+                return;
+            }
+
+            initializeNavigation();
+        });
+
+        function initializeNavigation() {
+            // Get URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const destinationLat = parseFloat(urlParams.get('lat'));
+            const destinationLng = parseFloat(urlParams.get('lng'));
+            const destinationName = urlParams.get('name') || 'Vehicle Location';
+            const modelId = urlParams.get('id');
 
         // Check if we have valid coordinates
         if (isNaN(destinationLat) || isNaN(destinationLng)) {
@@ -679,6 +701,8 @@
                 document.getElementById('destination-name').textContent = `${destinationName} - ${driverName}`;
             }
         }, 1000);
+        
+        } // End of initializeNavigation function
     </script>
 </body>
 </html>
