@@ -357,18 +357,29 @@
         
     const map = new mapboxgl.Map({
         container: 'map',
-    // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
-    // Default to Mapbox Light per user request
-    style: 'mapbox://styles/mapbox/light-v10',
-        config: {
-            basemap: {
-                theme: 'monochrome'
-            }
-        },
-    zoom: 18,
-    center: [-79.3875, 43.6426],
+        // Try the stable light style URL 
+        style: 'mapbox://styles/mapbox/light-v11',
+        zoom: 18,
+        center: [-79.3875, 43.6426],
         pitch: 60,
         antialias: true // create the gl context with MSAA antialiasing, so custom layers are antialiased
+    });
+
+    // Add error handling for map issues
+    map.on('error', (e) => {
+        console.error('Map error:', e);
+        console.log('Error details:', e.error);
+        alert('Map loading error: ' + (e.error ? e.error.message : 'Unknown error'));
+    });
+
+    map.on('styledata', () => {
+        console.log('Map style loaded successfully');
+    });
+
+    map.on('sourcedata', (e) => {
+        if (e.isSourceLoaded) {
+            console.log('Map source loaded:', e.sourceId);
+        }
     });
 
     // Add 3D buildings layer when the style is loaded (insert beneath labels)
