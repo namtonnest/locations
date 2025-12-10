@@ -3560,6 +3560,9 @@
                         <div style="text-align:center;font-size:10px;color:#9ca3af;">Width (m)</div>
                     </div>
                 </div>
+                <div style="font-size:10px;color:#f59e0b;margin-bottom:4px;text-align:center;background:#fef3c7;padding:2px 4px;border-radius:3px;">
+                    ⚠️ Models scale proportionally - the larger dimension determines overall size
+                </div>
                 <button id="tooltip-apply-dimensions" style="width:100%;padding:4px;border:1px solid #16a34a;border-radius:4px;cursor:pointer;font-size:11px;background:#16a34a;color:white;">
                     Apply Real Size
                 </button>
@@ -3675,8 +3678,8 @@
                 entry.realLength = length;
                 entry.realWidth = width;
                 
-                // Calculate appropriate scale based on typical model size
-                // Assume the original model is roughly 1 meter in its longest dimension
+                // Calculate appropriate scale based on largest dimension
+                // 3D models can only be scaled uniformly (proportionally)
                 const maxDimension = Math.max(length, width);
                 const calculatedScale = maxDimension / 1; // 1 meter base reference
                 
@@ -3700,7 +3703,21 @@
                 try { applyTransformsFromInputs(); } catch (e) {}
                 if (map) map.triggerRepaint();
                 
-                console.log(`Applied real size: ${length}m x ${width}m (scale: ${calculatedScale.toFixed(2)}x)`);
+                // Show which dimension was used for scaling
+                const usedDimension = length >= width ? 'length' : 'width';
+                console.log(`Applied real size: ${length}m x ${width}m (scale: ${calculatedScale.toFixed(2)}x, based on ${usedDimension})`);
+                
+                // Brief feedback to show which dimension determined the scale
+                const button = document.getElementById('tooltip-apply-dimensions');
+                if (button) {
+                    const originalText = button.textContent;
+                    button.textContent = `Scaled by ${usedDimension} (${maxDimension}m)`;
+                    button.style.background = '#059669';
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                        button.style.background = '#16a34a';
+                    }, 2000);
+                }
             }
         };
     }
