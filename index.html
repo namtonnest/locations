@@ -247,6 +247,20 @@
             min-width: 220px !important;
             max-width: 280px !important;
         }
+        
+        /* Adjust top-right button spacing on mobile */
+        #admin-btn {
+            top: 50px !important; /* Reduce gap from locate button */
+        }
+        
+        #route-tracking-btn {
+            top: 94px !important; /* Reduce gap from admin button */
+        }
+        
+        /* Ensure bottom buttons have more spacing to prevent overlap */
+        .controls-right .btn {
+            margin-bottom: 4px !important;
+        }
         /* Keep library panel pinned to viewport center and opt out of scaling so it stays visible */
         #library {
             position: fixed !important;
