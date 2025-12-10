@@ -2548,9 +2548,6 @@
     sidebar.id = 'sidebar';
     sidebar.className = 'hidden';
     sidebar.innerHTML = '<div style="font-weight:700;margin-bottom:8px">Placed models</div><div id="models-list"></div>';
-    sidebar.innerHTML = '<div style="font-weight:700;margin-bottom:8px">Placed models</div>' +
-        '<button id="auto-save-btn" class="btn secondary" style="margin-bottom:8px;width:100%">Auto-save OFF</button>' +
-        '<div id="models-list"></div>';
     document.body.appendChild(sidebar);
 
     // toggle sidebar open/close
@@ -2615,6 +2612,44 @@
                 } catch (e) { console.warn('toggleModelName failed', e); }
             });
             actions.appendChild(tooltipBtn);
+
+            // Navigate button
+            const navBtn = document.createElement('button');
+            navBtn.textContent = 'Navigate';
+            navBtn.style.background = '#10b981';
+            navBtn.style.color = 'white';
+            navBtn.style.border = '1px solid #10b981';
+            navBtn.addEventListener('click', () => {
+                generateNavigationLink(entry);
+            });
+            actions.appendChild(navBtn);
+
+            // Fly to button with crosshair icon
+            const flyToBtn = document.createElement('button');
+            flyToBtn.innerHTML = '⊹'; // crosshair-like symbol
+            flyToBtn.title = 'Fly to this model';
+            flyToBtn.style.fontWeight = 'bold';
+            flyToBtn.style.fontSize = '16px';
+            flyToBtn.addEventListener('click', () => {
+                if (entry.geo && map) {
+                    map.flyTo({
+                        center: [entry.geo.lng, entry.geo.lat],
+                        zoom: 18,
+                        pitch: 45,
+                        duration: 2000
+                    });
+                    
+                    // Briefly highlight the model
+                    showSelectedModelIndicator(entry);
+                    setTimeout(() => {
+                        if (selectedModelMarker) {
+                            selectedModelMarker.remove();
+                            selectedModelMarker = null;
+                        }
+                    }, 3000);
+                }
+            });
+            actions.appendChild(flyToBtn);
 
             const delBtn = document.createElement('button');
             delBtn.textContent = 'Remove';
@@ -5057,105 +5092,8 @@ map.on('click', (e) => {
 // --- Background location tracking and auto-save to admin states ---
 
 let autoSaveEnabled = false;
-let autoSaveIntervalId = null;
-const autoSaveBtn = document.getElementById('auto-save-btn');
-if (autoSaveBtn) {
-    function enableAutoSave() {
-        autoSaveEnabled = true;
-        autoSaveBtn.textContent = 'Auto-save ON';
-        autoSaveBtn.style.background = '#0077ff';
-        if (navigator.geolocation) {
-            autoTagLocationAndSave(); // run once immediately
-            autoSaveIntervalId = setInterval(() => {
-                navigator.geolocation.getCurrentPosition(
-                    autoTagLocationAndSave,
-                    (err) => { console.warn('Geolocation error for auto-tag', err); },
-                    { enableHighAccuracy: true, timeout: 10000 }
-                );
-            }, 10000);
-        }
-    }
-    function disableAutoSave() {
-        autoSaveEnabled = false;
-        autoSaveBtn.textContent = 'Auto-save OFF';
-        autoSaveBtn.style.background = '#6b7280';
-        if (autoSaveIntervalId !== null) {
-            clearInterval(autoSaveIntervalId);
-            autoSaveIntervalId = null;
-        }
-    }
-    autoSaveBtn.addEventListener('click', () => {
-        if (autoSaveEnabled) {
-            disableAutoSave();
-        } else {
-            enableAutoSave();
-        }
-    });
-    // Auto-save is OFF by default on page load
-    disableAutoSave();
-}
+// Auto-save functionality removed as requested
 
-async function autoTagLocationAndSave(pos) {
-    const lng = pos.coords.longitude;
-    const lat = pos.coords.latitude;
-    const accuracy = pos.coords.accuracy;
-    const markerId = 'auto-location-marker';
-    let marker = window[markerId];
-    if (marker) {
-        marker.setLngLat([lng, lat]);
-    } else {
-        marker = new mapboxgl.Marker({ color: '#0077ff' })
-            .setLngLat([lng, lat])
-            .addTo(map);
-        window[markerId] = marker;
-    }
-    let state = {};
-    try {
-        const data = serializePlacedModels();
-        state = {
-            mapCenter: map.getCenter(),
-            zoom: map.getZoom(),
-            pitch: map.getPitch(),
-            bearing: map.getBearing(),
-            models: data,
-            draws: drawnFeatures,
-            autoTaggedLocation: {
-                lng, lat, accuracy, timestamp: Date.now()
-            }
-        };
-        console.log('[AutoSave] Payload:', state);
-    } catch (e) {
-        console.warn('[AutoSave] Failed to serialize state for auto-save', e);
-    }
-    try {
-        if (typeof BACKEND_STATE_ENDPOINT !== 'string' || !BACKEND_STATE_ENDPOINT.length) {
-            console.warn('[AutoSave] No BACKEND_STATE_ENDPOINT configured for auto-save');
-            return;
-        }
-        const payload = {
-            state,
-            admin: true,
-            note: `Auto-tagged location at ${lng},${lat} (accuracy ${accuracy}m)`,
-            timestamp: Date.now()
-        };
-        console.log('[AutoSave] Sending POST to', BACKEND_STATE_ENDPOINT, payload);
-        const res = await fetch(BACKEND_STATE_ENDPOINT, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const text = await res.text();
-        if (!res.ok) {
-            console.warn('[AutoSave] Auto-save to admin states failed', text);
-        } else {
-            let json = null;
-            try { json = JSON.parse(text); } catch (e) {}
-            console.debug('[AutoSave] Success:', json || text);
-        }
-    } catch (e) {
-        console.warn('[AutoSave] Auto-save to admin states error', e);
-    }
-}
 </script>
 
 </body>
