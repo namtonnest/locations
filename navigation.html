@@ -4,15 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Navigation to Vehicle Location</title>
-    <script src="https://api.mapbox.com/mapbox-gl-js/v3.1.4/mapbox-gl.js"></script>
-    <link href="https://api.mapbox.com/mapbox-gl-js/v3.1.4/mapbox-gl.css" rel="stylesheet" />
+    <!-- Try multiple CDN sources for Mapbox GL JS -->
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
     <script>
-        // Ensure mapboxgl is available before proceeding
+        // Fallback to alternative CDN if primary fails
         if (typeof mapboxgl === 'undefined') {
-            console.error('Mapbox GL JS failed to load');
-            document.addEventListener('DOMContentLoaded', function() {
-                document.body.innerHTML = '<div style="padding: 20px; text-align: center; font-family: sans-serif;"><h2>Loading Error</h2><p>Unable to load mapping library. Please refresh the page.</p></div>';
-            });
+            console.warn('Primary Mapbox CDN failed, trying fallback...');
+            document.write('<script src="https://cdn.jsdelivr.net/npm/mapbox-gl@2.15.0/dist/mapbox-gl.js"><\/script>');
+            document.write('<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mapbox-gl@2.15.0/dist/mapbox-gl.css" />');
         }
     </script>
     <style>
@@ -277,15 +277,59 @@
     <script>
         // Wait for DOM and mapboxgl to be ready
         document.addEventListener('DOMContentLoaded', function() {
-            // Double-check mapboxgl is available
-            if (typeof mapboxgl === 'undefined') {
-                console.error('Mapbox GL JS is not available');
-                document.body.innerHTML = '<div style="padding: 20px; text-align: center; font-family: sans-serif;"><h2>Error</h2><p>Mapping library failed to load. Please refresh the page.</p><button onclick="location.reload()" style="padding: 8px 16px; margin-top: 12px; cursor: pointer;">Refresh Page</button></div>';
-                return;
+            // Wait a bit longer for script to load and retry multiple times
+            let retryCount = 0;
+            const maxRetries = 10;
+            
+            function checkMapboxAndInit() {
+                retryCount++;
+                
+                if (typeof mapboxgl !== 'undefined') {
+                    console.log('Mapbox GL JS loaded successfully');
+                    initializeNavigation();
+                } else if (retryCount < maxRetries) {
+                    console.log(`Mapbox GL JS not ready, retry ${retryCount}/${maxRetries}`);
+                    setTimeout(checkMapboxAndInit, 500); // Wait 500ms and try again
+                } else {
+                    console.error('Mapbox GL JS failed to load after multiple attempts');
+                    document.body.innerHTML = `
+                        <div style="padding: 20px; text-align: center; font-family: sans-serif; max-width: 400px; margin: 50px auto;">
+                            <h2>🗺️ Navigation Not Available</h2>
+                            <p>The mapping library failed to load. This could be due to:</p>
+                            <ul style="text-align: left; margin: 20px 0;">
+                                <li>Network connectivity issues</li>
+                                <li>Firewall or ad blocker restrictions</li>
+                                <li>CDN service temporary unavailability</li>
+                            </ul>
+                            <div style="margin: 20px 0;">
+                                <button onclick="location.reload()" style="padding: 10px 20px; margin: 5px; cursor: pointer; background: #3b82f6; color: white; border: none; border-radius: 6px;">
+                                    Retry
+                                </button>
+                                <button onclick="openExternalMaps()" style="padding: 10px 20px; margin: 5px; cursor: pointer; background: #10b981; color: white; border: none; border-radius: 6px;">
+                                    Open in Google Maps
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
             }
-
-            initializeNavigation();
+            
+            // Start checking after a short delay
+            setTimeout(checkMapboxAndInit, 100);
         });
+
+        // Fallback function for external maps
+        function openExternalMaps() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const lat = urlParams.get('lat');
+            const lng = urlParams.get('lng');
+            const name = urlParams.get('name') || 'Vehicle Location';
+            
+            if (lat && lng) {
+                const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&destination_place_id=${encodeURIComponent(name)}`;
+                window.open(googleMapsUrl, '_blank');
+            }
+        }
 
         function initializeNavigation() {
             // Get URL parameters
