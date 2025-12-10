@@ -1166,6 +1166,15 @@
                     <input id="rotSlider" type="range" min="-180" max="180" value="0" step="1" style="flex:1;min-width:120px;">
                 </label>
                 <label>Scale: <input id="scale" type="number" step="0.1" value="1"></label>
+                <details style="margin-top:4px">
+                    <summary style="cursor:pointer;font-size:12px;color:#666">Advanced scaling</summary>
+                    <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:12px">
+                        <label>X: <input id="scaleX" type="number" step="0.1" value="1" style="width:60px"></label>
+                        <label>Y: <input id="scaleY" type="number" step="0.1" value="1" style="width:60px"></label>
+                        <label>Z: <input id="scaleZ" type="number" step="0.1" value="1" style="width:60px"></label>
+                    </div>
+                    <button id="resetScale" style="margin-top:4px;font-size:11px;padding:2px 6px">Reset to uniform</button>
+                </details>
                 <div style="margin-top:8px;font-size:12px">Nudge (meters): <input id="nudgeStep" type="number" value="1" style="width:60px"> </div>
                 <div style="margin-top:6px">
                     <button id="nudgeN">N</button>
@@ -1719,6 +1728,10 @@
     const rot = document.getElementById('rot');
     const rotSlider = document.getElementById('rotSlider');
     const scaleInput = document.getElementById('scale');
+    const scaleXInput = document.getElementById('scaleX');
+    const scaleYInput = document.getElementById('scaleY');
+    const scaleZInput = document.getElementById('scaleZ');
+    const resetScaleBtn = document.getElementById('resetScale');
     const nudgeStep = document.getElementById('nudgeStep');
     const nudgeN = document.getElementById('nudgeN');
     const nudgeS = document.getElementById('nudgeS');
@@ -1733,7 +1746,7 @@
 
     // disabled until a model is placed
     function setControlsDisabled(disabled) {
-        [rot, rotSlider, scaleInput, nudgeStep, nudgeN, nudgeS, nudgeE, nudgeW, resetModelBtn, removeModelBtn, altitudeInput, altStepInput, altUpBtn, altDownBtn].forEach(el => { if (el) el.disabled = disabled; });
+        [rot, rotSlider, scaleInput, scaleXInput, scaleYInput, scaleZInput, nudgeStep, nudgeN, nudgeS, nudgeE, nudgeW, resetModelBtn, removeModelBtn, altitudeInput, altStepInput, altUpBtn, altDownBtn].forEach(el => { if (el) el.disabled = disabled; });
     }
     setControlsDisabled(true);
 
@@ -1746,9 +1759,28 @@
         if (!entry) return;
         // Only allow yaw (Y) rotation from the UI. Keep X/Z rotations at their stored values.
         entry.transform.rotateY = degToRad(Number(rot.value || 0));
-        // scaleInput is a multiplier on the stored meterScale
+        
+        // Handle both uniform and non-uniform scaling
         if (entry.meterScale) {
-            entry.transform.scale = entry.meterScale * Number(scaleInput.value || 1);
+            // Check if we're using separate X/Y/Z scales or uniform scale
+            const scaleX = Number(scaleXInput.value || 1);
+            const scaleY = Number(scaleYInput.value || 1);
+            const scaleZ = Number(scaleZInput.value || 1);
+            const uniformScale = Number(scaleInput.value || 1);
+            
+            // If all X/Y/Z scales are 1, use uniform scale
+            if (scaleX === 1 && scaleY === 1 && scaleZ === 1) {
+                entry.transform.scale = entry.meterScale * uniformScale;
+                entry.transform.scaleX = undefined;
+                entry.transform.scaleY = undefined;
+                entry.transform.scaleZ = undefined;
+            } else {
+                // Use non-uniform scaling
+                entry.transform.scaleX = entry.meterScale * scaleX;
+                entry.transform.scaleY = entry.meterScale * scaleY;
+                entry.transform.scaleZ = entry.meterScale * scaleZ;
+                entry.transform.scale = entry.meterScale; // Keep base scale for compatibility
+            }
         }
     // update geographic coords shown in the sidebar
     updateEntryGeo(entry);
@@ -1781,6 +1813,21 @@
         });
     }
     scaleInput.addEventListener('input', applyTransformsFromInputs);
+    
+    // Add event listeners for individual axis scaling
+    if (scaleXInput) scaleXInput.addEventListener('input', applyTransformsFromInputs);
+    if (scaleYInput) scaleYInput.addEventListener('input', applyTransformsFromInputs);
+    if (scaleZInput) scaleZInput.addEventListener('input', applyTransformsFromInputs);
+    
+    // Reset scale button - sets all scales back to uniform
+    if (resetScaleBtn) {
+        resetScaleBtn.addEventListener('click', () => {
+            if (scaleXInput) scaleXInput.value = 1;
+            if (scaleYInput) scaleYInput.value = 1;
+            if (scaleZInput) scaleZInput.value = 1;
+            applyTransformsFromInputs();
+        });
+    }
 
     // animate button wiring (toggle animation state on selected model)
     const animateBtn = document.getElementById('animateBtn');
@@ -1847,9 +1894,17 @@
     // preserve original X/Z rotations, but restore yaw (Y) from original
     entry.transform.rotateY = entry.original.rotateY;
         if (entry.meterScale) entry.transform.scale = entry.meterScale;
+        // clear any separate scaling
+        entry.transform.scaleX = undefined;
+        entry.transform.scaleY = undefined;
+        entry.transform.scaleZ = undefined;
         // update UI
     if (rot) rot.value = Math.round((entry.transform.rotateY * 180 / Math.PI) * 100) / 100;
         scaleInput.value = 1;
+        // Reset individual scale inputs
+        if (scaleXInput) scaleXInput.value = 1;
+        if (scaleYInput) scaleYInput.value = 1;
+        if (scaleZInput) scaleZInput.value = 1;
         // update coords/rotation shown in sidebar
         updateEntryGeo(entry);
         renderSidebar();
@@ -2478,6 +2533,20 @@
         setControlsDisabled(false);
     if (rot) rot.value = Math.round((entry.transform.rotateY * 180 / Math.PI) * 100) / 100;
         scaleInput.value = Math.round((entry.transform.scale / (entry.meterScale || 1)) * 100) / 100;
+        
+        // Populate individual scale inputs
+        if (entry.transform.scaleX !== undefined && entry.meterScale) {
+            if (scaleXInput) scaleXInput.value = Math.round((entry.transform.scaleX / entry.meterScale) * 100) / 100;
+            if (scaleYInput) scaleYInput.value = Math.round((entry.transform.scaleY / entry.meterScale) * 100) / 100;
+            if (scaleZInput) scaleZInput.value = Math.round((entry.transform.scaleZ / entry.meterScale) * 100) / 100;
+        } else {
+            // Default to uniform scaling
+            const uniformScale = Math.round((entry.transform.scale / (entry.meterScale || 1)) * 100) / 100;
+            if (scaleXInput) scaleXInput.value = uniformScale;
+            if (scaleYInput) scaleYInput.value = uniformScale;
+            if (scaleZInput) scaleZInput.value = uniformScale;
+        }
+        
         // sync animate button text to reflect entry state
         try {
             const animateBtn = document.getElementById('animateBtn');
@@ -2816,9 +2885,9 @@
                     )
                     .scale(
                         new THREE.Vector3(
-                            entry.transform.scale,
-                            -entry.transform.scale,
-                            entry.transform.scale
+                            entry.transform.scaleX !== undefined ? entry.transform.scaleX : entry.transform.scale,
+                            entry.transform.scaleY !== undefined ? -entry.transform.scaleY : -entry.transform.scale,
+                            entry.transform.scaleZ !== undefined ? entry.transform.scaleZ : entry.transform.scale
                         )
                     )
                     .multiply(rotationX)
@@ -3135,6 +3204,11 @@
                 setControlsDisabled(false);
                 if (rot) rot.value = Math.round((entry.transform.rotateY * 180 / Math.PI) * 100) / 100;
                 scaleInput.value = 1;
+                
+                // Initialize individual scale inputs to 1 for new models
+                if (scaleXInput) scaleXInput.value = 1;
+                if (scaleYInput) scaleYInput.value = 1;
+                if (scaleZInput) scaleZInput.value = 1;
             }
         }
 
