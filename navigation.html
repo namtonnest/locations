@@ -330,6 +330,23 @@
                 window.open(googleMapsUrl, '_blank');
             }
         }
+        
+        // Helper function to show error messages
+        function showMapboxError(message, showRetry = true) {
+            document.body.innerHTML = `
+                <div style="padding: 20px; text-align: center; font-family: sans-serif; max-width: 500px; margin: 50px auto;">
+                    <h2>🗺️ Navigation Not Available</h2>
+                    <p style="margin: 20px 0; color: #6b7280;">${message}</p>
+                    <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px; margin: 20px 0; font-size: 14px;">
+                        <strong>Alternative:</strong> You can still get directions using Google Maps or other navigation apps.
+                    </div>
+                    <div style="margin: 20px 0;">
+                        ${showRetry ? `<button onclick="location.reload()" style="padding: 10px 20px; margin: 5px; cursor: pointer; background: #3b82f6; color: white; border: none; border-radius: 6px;">Retry</button>` : ''}
+                        <button onclick="openExternalMaps()" style="padding: 10px 20px; margin: 5px; cursor: pointer; background: #10b981; color: white; border: none; border-radius: 6px;">Open in Google Maps</button>
+                    </div>
+                </div>
+            `;
+        }
 
         function initializeNavigation() {
             // Get URL parameters
@@ -350,21 +367,13 @@
             document.getElementById('destination-name').textContent = destinationName;
             document.getElementById('destination-coords').textContent = `${destinationLat.toFixed(6)}, ${destinationLng.toFixed(6)}`;
 
-            // Set Mapbox access token - using the same token as main application
-            mapboxgl.accessToken = 'pk.eyJ1IjoibmFtdG9ubmVzdCIsImEiOiJjbTBrbWxieGoxMTJlMmpzN2o5Nnd3a2ZkIn0.eqncjfXHTSQA3d4rJAEMrg';
+            // Set Mapbox access token - using the correct token from main application
+            mapboxgl.accessToken = 'pk.eyJ1IjoicHVycGhhY3RzIiwiYSI6ImNsdzY1bzVvNzFwb3IyamxyOG1vY3oyM2gifQ.2LikTeWKwlWsAcEneBXW0Q';
             
             // Verify token is set
             if (!mapboxgl.accessToken) {
                 console.error('Mapbox access token not set');
-                document.body.innerHTML = `
-                    <div style="padding: 20px; text-align: center; font-family: sans-serif;">
-                        <h2>Configuration Error</h2>
-                        <p>Mapbox access token is missing. Please contact support.</p>
-                        <button onclick="openExternalMaps()" style="padding: 10px 20px; margin: 10px; cursor: pointer; background: #10b981; color: white; border: none; border-radius: 6px;">
-                            Open in Google Maps
-                        </button>
-                    </div>
-                `;
+                showMapboxError('Mapbox access token is missing. Please contact support.');
                 return;
             }
             
@@ -381,22 +390,20 @@
                 });
                 
                 console.log('Map initialized successfully');
+                
+                // Handle map load errors (like 401 token errors)
+                map.on('error', (e) => {
+                    console.error('Map error:', e.error);
+                    if (e.error && e.error.status === 401) {
+                        showMapboxError('The mapping service access token is invalid or expired. This may be a temporary issue.', true);
+                    } else {
+                        showMapboxError(`Map loading failed: ${e.error ? e.error.message : 'Unknown error'}`, true);
+                    }
+                });
+                
             } catch (error) {
                 console.error('Error initializing map:', error);
-                document.body.innerHTML = `
-                    <div style="padding: 20px; text-align: center; font-family: sans-serif;">
-                        <h2>🗺️ Map Loading Error</h2>
-                        <p>Unable to initialize the map. Error: ${error.message}</p>
-                        <div style="margin: 20px 0;">
-                            <button onclick="location.reload()" style="padding: 10px 20px; margin: 5px; cursor: pointer; background: #3b82f6; color: white; border: none; border-radius: 6px;">
-                                Retry
-                            </button>
-                            <button onclick="openExternalMaps()" style="padding: 10px 20px; margin: 5px; cursor: pointer; background: #10b981; color: white; border: none; border-radius: 6px;">
-                                Open in Google Maps
-                            </button>
-                        </div>
-                    </div>
-                `;
+                showMapboxError(`Unable to initialize the map: ${error.message}`, true);
                 return;
             }
 
