@@ -326,8 +326,24 @@
             const name = urlParams.get('name') || 'Vehicle Location';
             
             if (lat && lng) {
-                const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&destination_place_id=${encodeURIComponent(name)}`;
-                window.open(googleMapsUrl, '_blank');
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                
+                if (isIOS) {
+                    // Force Google Maps on iOS
+                    const googleMapsApp = `comgooglemaps://?daddr=${lat},${lng}&directionsmode=driving`;
+                    const googleMapsWeb = `https://maps.google.com/?daddr=${lat},${lng}`;
+                    
+                    // Try to open Google Maps app
+                    window.location.href = googleMapsApp;
+                    
+                    // Fallback to web version
+                    setTimeout(() => {
+                        window.open(googleMapsWeb, '_blank');
+                    }, 1000);
+                } else {
+                    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&destination_place_id=${encodeURIComponent(name)}`;
+                    window.open(googleMapsUrl, '_blank');
+                }
             }
         }
         
@@ -739,15 +755,34 @@
 
         // External navigation apps
         function openExternalNavigation() {
-            const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${destinationLat},${destinationLng}`;
-            const appleMapsUrl = `http://maps.apple.com/?daddr=${destinationLat},${destinationLng}`;
-            const wazeUrl = `https://waze.com/ul?ll=${destinationLat}%2C${destinationLng}&navigate=yes`;
-
+            // Force Google Maps on all platforms including iOS
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-
+            
             if (isIOS) {
-                window.open(appleMapsUrl, '_blank');
+                // Try Google Maps app first, fallback to web
+                const googleMapsApp = `comgooglemaps://?daddr=${destinationLat},${destinationLng}&directionsmode=driving`;
+                const googleMapsWeb = `https://maps.google.com/?daddr=${destinationLat},${destinationLng}`;
+                
+                // Create a temporary link to test if Google Maps app is available
+                const tempLink = document.createElement('a');
+                tempLink.href = googleMapsApp;
+                tempLink.style.display = 'none';
+                document.body.appendChild(tempLink);
+                
+                // Try to open Google Maps app
+                setTimeout(() => {
+                    window.location.href = googleMapsApp;
+                }, 100);
+                
+                // Fallback to web version after short delay
+                setTimeout(() => {
+                    window.open(googleMapsWeb, '_blank');
+                    document.body.removeChild(tempLink);
+                }, 1000);
+                
             } else {
+                // For other platforms, use standard Google Maps URL
+                const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${destinationLat},${destinationLng}`;
                 window.open(googleMapsUrl, '_blank');
             }
         }

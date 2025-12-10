@@ -4098,6 +4098,25 @@ function generateNavigationLink(entry) {
     
     // Detect mobile platform
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    
+    // Function to force Google Maps on iOS
+    function openGoogleMaps() {
+        if (isIOS) {
+            // Try Google Maps app first, fallback to web
+            const googleMapsApp = `comgooglemaps://?daddr=${lat},${lng}&directionsmode=driving`;
+            const googleMapsWeb = `https://maps.google.com/?daddr=${lat},${lng}`;
+            
+            // Try to open Google Maps app
+            window.location.href = googleMapsApp;
+            
+            // Fallback to web version after short delay
+            setTimeout(() => {
+                window.open(googleMapsWeb, '_blank');
+            }, 1000);
+        } else {
+            window.open(googleMapsUrl, '_blank');
+        }
+    }
     const isAndroid = /Android/.test(navigator.userAgent);
     
     // Create navigation options modal
@@ -4124,12 +4143,8 @@ function generateNavigationLink(entry) {
                     🗺️ Open Navigation Page
                 </button>
                 <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 4px 0;">
-                <button onclick="window.open('${googleMapsUrl}', '_blank')" style="padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 14px; background: #f9fafb; display: flex; align-items: center; justify-content: center;">
+                <button onclick="openGoogleMaps()" style="padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 14px; background: #f9fafb; display: flex; align-items: center; justify-content: center;">
                     🗺️ Google Maps
-                </button>
-                ${isIOS ? `<button onclick="window.open('${appleMapsUrl}', '_blank')" style="padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 14px; background: #f9fafb; display: flex; align-items: center; justify-content: center;">🍎 Apple Maps</button>` : ''}
-                <button onclick="window.open('${wazeUrl}', '_blank')" style="padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 14px; background: #f9fafb; display: flex; align-items: center; justify-content: center;">
-                    🚗 Waze
                 </button>
             </div>
             <button onclick="this.parentElement.parentElement.remove()" style="margin-top: 16px; width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 14px; background: #f9fafb;">
