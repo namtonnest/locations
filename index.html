@@ -230,14 +230,22 @@
         #right-stack .btn{ position: static !important; right: auto !important; top: auto !important; width:36px !important; height:36px !important; display:flex !important; align-items:center !important; justify-content:center !important }
     }
 
-    /* Additional mobile compacting: scale down UI to 30% smaller for better mobile experience
+    /* Additional mobile compacting: scale down UI to 20% smaller for better mobile experience
        so more controls fit on small screens without changing layout logic. */
     @media (max-width: 640px) {
-        :root { --ui-scale: 0.70; }
+        :root { --ui-scale: 0.80; }
         /* Apply a subtle visual scale to primary overlay containers except panels that we pin to viewport */
-        .topbar, #model-controls, #sidebar, #draw-panel, #address-bar, .controls, .controls-left, .controls-right, #locate-btn, #admin-btn {
+        .topbar, #model-controls, #sidebar, #draw-panel, #address-bar, .controls, .controls-left, .controls-right, #locate-btn, #admin-btn, .tooltip, #save-btn {
             transform: scale(var(--ui-scale));
             transform-origin: top left;
+        }
+        
+        /* Make tooltip 10% smaller on mobile and adjust sizing */
+        #model-tooltip {
+            transform: scale(0.72); /* 0.80 * 0.90 = 0.72 for 20% + 10% reduction */
+            transform-origin: top right;
+            min-width: 220px !important;
+            max-width: 280px !important;
         }
         /* Keep library panel pinned to viewport center and opt out of scaling so it stays visible */
         #library {
@@ -3856,9 +3864,16 @@
                     let finalLeft = absLeft + 12;
                     let finalTop = absTop + 12;
                     
-                    if (finalLeft + tooltipRect.width > window.innerWidth) {
-                        finalLeft = absLeft - tooltipRect.width - 12;
+                    // On mobile, align tooltip right edge with screen edge
+                    if (window.innerWidth <= 640) {
+                        finalLeft = window.innerWidth - tooltipRect.width - 8;
+                    } else {
+                        // Desktop positioning logic
+                        if (finalLeft + tooltipRect.width > window.innerWidth) {
+                            finalLeft = absLeft - tooltipRect.width - 12;
+                        }
                     }
+                    
                     if (finalTop + tooltipRect.height > window.innerHeight) {
                         finalTop = absTop - tooltipRect.height - 12;
                     }
