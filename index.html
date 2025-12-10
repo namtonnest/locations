@@ -3395,7 +3395,7 @@
         }
     });
 
-    // --- Interactive Model Tooltip with Controls ---
+    // --- Interactive Model Tooltip with Advanced Meter-Based Controls ---
     const modelTooltip = document.createElement('div');
     modelTooltip.id = 'model-tooltip';
     modelTooltip.style.position = 'absolute';
@@ -3410,8 +3410,8 @@
     modelTooltip.style.zIndex = '1000';
     modelTooltip.style.display = 'none';
     modelTooltip.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-    modelTooltip.style.minWidth = '200px';
-    modelTooltip.style.maxWidth = '280px';
+    modelTooltip.style.minWidth = '240px';
+    modelTooltip.style.maxWidth = '320px';
     document.body.appendChild(modelTooltip);
 
     // Prevent tooltip from being hidden when mouse is over it
@@ -3528,8 +3528,33 @@
 
     function updateTooltipContent(entry) {
         const rotationDegrees = Math.round((entry.transform.rotateY * 180 / Math.PI) * 100) / 100;
-        const scaleValue = entry.meterScale ? Math.round((entry.transform.scale / entry.meterScale) * 100) / 100 : 1;
         const moveButtonStyle = tooltipMoveMode ? 'background:#16a34a;color:white' : 'background:#f3f4f6;color:#374151';
+        
+        // Ensure model has base dimensions
+        if (!entry.baseDimensions && entry.url) {
+            entry.baseDimensions = getModelDimensions(entry.url);
+        }
+        
+        // Calculate current dimensions in meters
+        let currentXMeters, currentYMeters, currentZMeters, uniformScale;
+        if (entry.baseDimensions && entry.meterScale) {
+            if (entry.transform.scaleX !== undefined) {
+                currentXMeters = (entry.transform.scaleX / entry.meterScale) * entry.baseDimensions.x;
+                currentYMeters = (entry.transform.scaleY / entry.meterScale) * entry.baseDimensions.y;
+                currentZMeters = (entry.transform.scaleZ / entry.meterScale) * entry.baseDimensions.z;
+                uniformScale = ((currentXMeters / entry.baseDimensions.x) + 
+                              (currentYMeters / entry.baseDimensions.y) + 
+                              (currentZMeters / entry.baseDimensions.z)) / 3;
+            } else {
+                uniformScale = entry.transform.scale / entry.meterScale;
+                currentXMeters = entry.baseDimensions.x * uniformScale;
+                currentYMeters = entry.baseDimensions.y * uniformScale;
+                currentZMeters = entry.baseDimensions.z * uniformScale;
+            }
+        } else {
+            uniformScale = 1;
+            currentXMeters = currentYMeters = currentZMeters = 2; // fallback
+        }
         
         modelTooltip.innerHTML = `
             <div style="font-weight:600;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
@@ -3543,28 +3568,31 @@
                 <div style="text-align:center;font-size:11px;color:#9ca3af;">${rotationDegrees}°</div>
             </div>
             <div style="margin-bottom:8px;">
-                <label style="display:block;font-size:11px;color:#6b7280;margin-bottom:2px;">Real-world Dimensions (meters)</label>
-                <div style="display:flex;gap:8px;margin-bottom:4px;">
-                    <div style="flex:1;">
-                        <input type="number" id="tooltip-length" placeholder="Length" value="${entry.realLength || 5}" 
-                               style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;" step="0.1" min="0.1">
-                        <div style="text-align:center;font-size:10px;color:#9ca3af;">Length (m)</div>
-                    </div>
-                    <div style="flex:1;">
-                        <input type="number" id="tooltip-width" placeholder="Width" value="${entry.realWidth || 3}" 
-                               style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;" step="0.1" min="0.1">
-                        <div style="text-align:center;font-size:10px;color:#9ca3af;">Width (m)</div>
-                    </div>
-                </div>
-                <button id="tooltip-apply-dimensions" style="width:100%;padding:4px;border:1px solid #16a34a;border-radius:4px;cursor:pointer;font-size:11px;background:#16a34a;color:white;">
-                    Apply Real Size
-                </button>
+                <label style="display:block;font-size:11px;color:#6b7280;margin-bottom:2px;">Scale Multiplier</label>
+                <input type="range" id="tooltip-scale" min="0.1" max="5" step="0.1" value="${uniformScale.toFixed(1)}" 
+                       style="width:100%;margin-bottom:4px;">
+                <div style="text-align:center;font-size:11px;color:#9ca3af;">${uniformScale.toFixed(1)}x</div>
             </div>
             <div style="margin-bottom:8px;">
-                <label style="display:block;font-size:11px;color:#6b7280;margin-bottom:2px;">Scale</label>
-                <input type="range" id="tooltip-scale" min="0.1" max="5" step="0.1" value="${scaleValue}" 
-                       style="width:100%;margin-bottom:4px;">
-                <div style="text-align:center;font-size:11px;color:#9ca3af;">${scaleValue}x</div>
+                <label style="display:block;font-size:11px;color:#6b7280;margin-bottom:4px;">Real-World Dimensions (meters)</label>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:12px;">
+                    <label>Width:
+                        <input id="tooltip-scaleX" type="number" step="0.1" value="${currentXMeters.toFixed(1)}" 
+                               style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;">
+                    </label>
+                    <label>Height:
+                        <input id="tooltip-scaleY" type="number" step="0.1" value="${currentYMeters.toFixed(1)}" 
+                               style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;">
+                    </label>
+                    <label>Depth:
+                        <input id="tooltip-scaleZ" type="number" step="0.1" value="${currentZMeters.toFixed(1)}" 
+                               style="width:100%;padding:4px;border:1px solid #d1d5db;border-radius:4px;font-size:11px;">
+                    </label>
+                </div>
+                <div style="margin-top:4px;font-size:10px;color:#888;text-align:center;">Enter actual dimensions in meters</div>
+                <button id="tooltip-reset-scale" style="width:100%;margin-top:4px;padding:4px;border:1px solid #6b7280;border-radius:4px;cursor:pointer;font-size:11px;background:#f9fafb;color:#374151;">
+                    Reset to Default Size
+                </button>
             </div>
             <div style="display:flex;gap:8px;margin-top:8px;">
                 <button id="tooltip-move" style="flex:1;padding:6px;border:1px solid #d1d5db;border-radius:4px;cursor:pointer;font-size:12px;${moveButtonStyle}">
@@ -3581,14 +3609,8 @@
             e.stopPropagation();
             e.preventDefault();
             hideModelTooltip();
-            
-            // Ensure cursor is reset to normal
             map.getCanvas().style.cursor = '';
-            
-            // Small delay to ensure clean state before allowing new clicks
-            setTimeout(() => {
-                mouseOverTooltip = false;
-            }, 50);
+            setTimeout(() => mouseOverTooltip = false, 50);
         };
 
         document.getElementById('tooltip-rotation').oninput = (e) => {
@@ -3597,37 +3619,62 @@
             const radians = degrees * Math.PI / 180;
             entry.transform.rotateY = radians;
             
-            // Update the degree display
-            const display = e.target.nextElementSibling;
-            display.textContent = degrees + '°';
+            e.target.nextElementSibling.textContent = degrees + '°';
             
-            // Update rotation slider in main panel if this model is selected
             if (selectedModelId === entry.id && rot) {
                 rot.value = degrees;
+                if (rotSlider) rotSlider.value = degrees;
             }
             
-            try { applyTransformsFromInputs(); } catch (e) {}
             if (map) map.triggerRepaint();
         };
 
         document.getElementById('tooltip-scale').oninput = (e) => {
             e.stopPropagation();
             const scale = parseFloat(e.target.value);
-            if (entry.meterScale) {
+            
+            // Apply uniform scaling and update dimension inputs
+            if (entry.meterScale && entry.baseDimensions) {
                 entry.transform.scale = entry.meterScale * scale;
+                entry.transform.scaleX = entry.transform.scaleY = entry.transform.scaleZ = undefined;
+                
+                // Update dimension inputs to show new uniform dimensions
+                const newX = (entry.baseDimensions.x * scale).toFixed(1);
+                const newY = (entry.baseDimensions.y * scale).toFixed(1);
+                const newZ = (entry.baseDimensions.z * scale).toFixed(1);
+                
+                document.getElementById('tooltip-scaleX').value = newX;
+                document.getElementById('tooltip-scaleY').value = newY;
+                document.getElementById('tooltip-scaleZ').value = newZ;
             }
             
-            // Update the scale display
-            const display = e.target.nextElementSibling;
-            display.textContent = scale + 'x';
+            e.target.nextElementSibling.textContent = scale + 'x';
             
-            // Update scale input in main panel if this model is selected
             if (selectedModelId === entry.id && scaleInput) {
                 scaleInput.value = scale;
             }
             
-            try { applyTransformsFromInputs(); } catch (e) {}
             if (map) map.triggerRepaint();
+        };
+
+        // Individual dimension input handlers
+        const dimensionInputs = ['tooltip-scaleX', 'tooltip-scaleY', 'tooltip-scaleZ'];
+        dimensionInputs.forEach(id => {
+            document.getElementById(id).oninput = (e) => {
+                e.stopPropagation();
+                applyTooltipDimensions(entry);
+            };
+        });
+
+        document.getElementById('tooltip-reset-scale').onclick = (e) => {
+            e.stopPropagation();
+            if (entry.baseDimensions) {
+                document.getElementById('tooltip-scaleX').value = entry.baseDimensions.x.toFixed(1);
+                document.getElementById('tooltip-scaleY').value = entry.baseDimensions.y.toFixed(1);
+                document.getElementById('tooltip-scaleZ').value = entry.baseDimensions.z.toFixed(1);
+                document.getElementById('tooltip-scale').value = "1.0";
+                applyTooltipDimensions(entry);
+            }
         };
 
         document.getElementById('tooltip-move').onclick = (e) => {
@@ -3637,7 +3684,6 @@
             
             if (tooltipMoveMode) {
                 map.getCanvas().style.cursor = 'move';
-                // Auto-hide tooltip after 3 seconds in move mode
                 setTimeout(() => {
                     if (tooltipMoveMode) {
                         tooltipMoveMode = false;
@@ -3653,52 +3699,43 @@
         document.getElementById('tooltip-select').onclick = (e) => {
             e.stopPropagation();
             selectedModelId = entry.id;
-            if (rot) rot.value = rotationDegrees;
-            if (scaleInput) scaleInput.value = Math.round((entry.transform.scale / (entry.meterScale || 1)) * 100) / 100;
-            setControlsDisabled(false);
-            try { renderSidebar(); } catch (e) {}
+            selectModel(entry.id);
             hideModelTooltip();
         };
+    }
 
-        // Add event listener for Apply Real Size button
-        document.getElementById('tooltip-apply-dimensions').onclick = (e) => {
-            e.stopPropagation();
-            const length = parseFloat(document.getElementById('tooltip-length').value);
-            const width = parseFloat(document.getElementById('tooltip-width').value);
-            
-            if (length > 0 && width > 0) {
-                // Store the real-world dimensions
-                entry.realLength = length;
-                entry.realWidth = width;
-                
-                // Calculate appropriate scale based on typical model size
-                // Assume the original model is roughly 1 meter in its longest dimension
-                const maxDimension = Math.max(length, width);
-                const calculatedScale = maxDimension / 1; // 1 meter base reference
-                
-                // Apply the calculated scale
-                if (entry.meterScale) {
-                    entry.transform.scale = entry.meterScale * calculatedScale;
-                }
-                
-                // Update the scale slider display
-                const scaleSlider = document.getElementById('tooltip-scale');
-                if (scaleSlider) {
-                    scaleSlider.value = calculatedScale;
-                    scaleSlider.nextElementSibling.textContent = calculatedScale.toFixed(2) + 'x';
-                }
-                
-                // Update main panel scale input if this model is selected
-                if (selectedModelId === entry.id && scaleInput) {
-                    scaleInput.value = calculatedScale.toFixed(2);
-                }
-                
-                try { applyTransformsFromInputs(); } catch (e) {}
-                if (map) map.triggerRepaint();
-                
-                console.log(`Applied real size: ${length}m x ${width}m (scale: ${calculatedScale.toFixed(2)}x)`);
-            }
-        };
+    function applyTooltipDimensions(entry) {
+        if (!entry.baseDimensions || !entry.meterScale) return;
+        
+        const scaleX = parseFloat(document.getElementById('tooltip-scaleX').value || entry.baseDimensions.x);
+        const scaleY = parseFloat(document.getElementById('tooltip-scaleY').value || entry.baseDimensions.y);  
+        const scaleZ = parseFloat(document.getElementById('tooltip-scaleZ').value || entry.baseDimensions.z);
+        
+        // Convert meter dimensions to scale multipliers
+        const scaleXMultiplier = scaleX / entry.baseDimensions.x;
+        const scaleYMultiplier = scaleY / entry.baseDimensions.y;
+        const scaleZMultiplier = scaleZ / entry.baseDimensions.z;
+        
+        // Apply non-uniform scaling
+        entry.transform.scaleX = entry.meterScale * scaleXMultiplier;
+        entry.transform.scaleY = entry.meterScale * scaleYMultiplier;
+        entry.transform.scaleZ = entry.meterScale * scaleZMultiplier;
+        entry.transform.scale = entry.meterScale; // Keep base scale for compatibility
+        
+        // Update scale slider to average
+        const avgMultiplier = (scaleXMultiplier + scaleYMultiplier + scaleZMultiplier) / 3;
+        document.getElementById('tooltip-scale').value = avgMultiplier.toFixed(1);
+        document.getElementById('tooltip-scale').nextElementSibling.textContent = avgMultiplier.toFixed(1) + 'x';
+        
+        // Sync with main panel if this model is selected
+        if (selectedModelId === entry.id) {
+            if (scaleXInput) scaleXInput.value = scaleX.toFixed(1);
+            if (scaleYInput) scaleYInput.value = scaleY.toFixed(1);
+            if (scaleZInput) scaleZInput.value = scaleZ.toFixed(1);
+            if (scaleInput) scaleInput.value = avgMultiplier.toFixed(2);
+        }
+        
+        if (map) map.triggerRepaint();
     }
 
     // Handle model movement when in move mode
