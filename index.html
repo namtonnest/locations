@@ -250,11 +250,16 @@
         
         /* Adjust top-right button spacing on mobile */
         #admin-btn {
-            top: 50px !important; /* Reduce gap from locate button */
+            top: 37px !important; /* 25px gap from locate button */
         }
         
         #route-tracking-btn {
-            top: 94px !important; /* Reduce gap from admin button */
+            top: 74px !important; /* 25px gap from admin button */
+        }
+        
+        /* Ensure save button doesn't overlap with route tracking */
+        #save-btn {
+            top: 120px !important; /* Move save button below route tracking with gap */
         }
         
         /* Ensure bottom buttons have more spacing to prevent overlap */
