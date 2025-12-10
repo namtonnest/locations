@@ -230,12 +230,12 @@
         #right-stack .btn{ position: static !important; right: auto !important; top: auto !important; width:36px !important; height:36px !important; display:flex !important; align-items:center !important; justify-content:center !important }
     }
 
-    /* Additional mobile compacting: scale down UI to 70% smaller for better mobile experience
+    /* Additional mobile compacting: scale down UI to 30% smaller for better mobile experience
        so more controls fit on small screens without changing layout logic. */
     @media (max-width: 640px) {
-        :root { --ui-scale: 0.30; }
+        :root { --ui-scale: 0.70; }
         /* Apply a subtle visual scale to primary overlay containers except panels that we pin to viewport */
-        .topbar, #model-controls, #sidebar, #draw-panel, #address-bar, .controls, .controls-left, .controls-right {
+        .topbar, #model-controls, #sidebar, #draw-panel, #address-bar, .controls, .controls-left, .controls-right, #locate-btn, #admin-btn {
             transform: scale(var(--ui-scale));
             transform-origin: top left;
         }
