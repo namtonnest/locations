@@ -1835,8 +1835,14 @@
 
     // Locate me button: use Geolocation API to add a Point feature and center map
     if (locateBtn) locateBtn.addEventListener('click', () => {
-        if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
+        if (!navigator.geolocation) { 
+            alert('Geolocation is not supported by your browser'); 
+            return; 
+        }
+        
         locateBtn.disabled = true;
+        locateBtn.textContent = 'Locating...';
+        
         navigator.geolocation.getCurrentPosition((pos) => {
             const lng = pos.coords.longitude;
             const lat = pos.coords.latitude;
@@ -1850,7 +1856,28 @@
             try { nudgeDrawLayers(); } catch (e) {}
             locateBtn.disabled = false;
             saveDraws();
-        }, (err) => { alert('Failed to get location: ' + (err && err.message)); locateBtn.disabled = false; }, { enableHighAccuracy: true, timeout: 10000 });
+        }, (error) => { 
+            // Handle geolocation errors with proper permission messaging
+            console.warn('[LOCATE] Geolocation error:', error);
+            locateBtn.disabled = false;
+            
+            let errorMessage = 'Unable to access your location. ';
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMessage += 'Permission denied. Please enable location access in your browser settings and try again.';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMessage += 'Location information is unavailable.';
+                    break;
+                case error.TIMEOUT:
+                    errorMessage += 'Location request timed out. Please try again.';
+                    break;
+                default:
+                    errorMessage += 'An unknown error occurred: ' + error.message;
+                    break;
+            }
+            alert(errorMessage);
+        }, { enableHighAccuracy: true, timeout: 10000 });
     });
 
     // open admin page in new tab
@@ -2280,9 +2307,15 @@
                             const shareUrl = location.origin + location.pathname + '?user_state_id=' + encodeURIComponent(data.id);
                             alert(`Saved to your account!\nState ID: ${data.id}\n\nShare URL:\n${shareUrl}`);
                             
-                            // Copy to clipboard
-                            if (navigator.clipboard && navigator.clipboard.writeText) {
-                                await navigator.clipboard.writeText(shareUrl);
+                            // Copy to clipboard with permission handling
+                            try {
+                                if (navigator.clipboard && navigator.clipboard.writeText) {
+                                    await navigator.clipboard.writeText(shareUrl);
+                                    console.log('[SAVE] Share URL copied to clipboard');
+                                }
+                            } catch (clipboardError) {
+                                console.warn('[SAVE] Clipboard permission denied or not available:', clipboardError.message);
+                                // Silently fail - the URL is already shown in the alert
                             }
                         } else {
                             alert('Failed to save: ' + (data.error || 'Unknown error'));
@@ -2357,8 +2390,15 @@
                     if (navigator.share) { await navigator.share({ url }); return; }
                 } catch (e) { console.warn('navigator.share failed', e); }
                 try {
-                    if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(url); alert('Share URL copied to clipboard'); return; }
-                } catch (e) { console.warn('clipboard write failed', e); }
+                    if (navigator.clipboard && navigator.clipboard.writeText) { 
+                        await navigator.clipboard.writeText(url); 
+                        alert('Share URL copied to clipboard'); 
+                        return; 
+                    }
+                } catch (clipboardError) {
+                    console.warn('[SHARE] Clipboard permission denied:', clipboardError.message);
+                    // Fall back to prompt
+                }
                 try { window.prompt('Copy this URL', url); } catch (e) { alert(url); }
             } else {
                 // Use temporary backend for sharing
