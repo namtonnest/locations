@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navigation to Vehicle Location</title>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.1.4/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.1.4/mapbox-gl.css" rel="stylesheet" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f3f4f6;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
+
+        .navigation-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 12px 16px;
+            z-index: 1000;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .destination-info {
+            flex: 1;
+        }
+
+        .destination-name {
+            font-weight: 600;
+            font-size: 16px;
+            color: #1f2937;
+        }
+
+        .destination-coords {
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #4b5563;
+            border: 1px solid #d1d5db;
+        }
+
+        .btn-secondary:hover {
+            background: #e5e7eb;
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .route-info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            display: none;
+        }
+
+        .route-stats {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 12px;
+        }
+
+        .route-stat {
+            text-align: center;
+        }
+
+        .route-stat-value {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+        .route-stat-label {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 2px;
+        }
+
+        .navigation-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .status-indicator {
+            position: absolute;
+            top: 80px;
+            left: 16px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #374151;
+            z-index: 1000;
+        }
+
+        .location-dot {
+            width: 16px;
+            height: 16px;
+            background: #3b82f6;
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+            animation: pulse 2s infinite;
+        }
+
+        .destination-marker {
+            width: 30px;
+            height: 30px;
+            background: #ef4444;
+            border: 3px solid white;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+        }
+
+        .destination-marker::after {
+            content: '';
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: white;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(45deg);
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.9; }
+            50% { transform: scale(1.2); opacity: 0.6; }
+            100% { transform: scale(1); opacity: 0.9; }
+        }
+
+        @media (max-width: 768px) {
+            .navigation-header {
+                padding: 10px 12px;
+            }
+            
+            .destination-name {
+                font-size: 14px;
+            }
+            
+            .btn {
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+            
+            .route-info {
+                bottom: 10px;
+                left: 10px;
+                right: 10px;
+                padding: 12px;
+            }
+            
+            .route-stat-value {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="navigation-header">
+        <div class="destination-info">
+            <div class="destination-name" id="destination-name">Loading...</div>
+            <div class="destination-coords" id="destination-coords"></div>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-success" id="start-navigation">Start Navigation</button>
+            <button class="btn btn-secondary" id="external-nav">External App</button>
+        </div>
+    </div>
+
+    <div class="status-indicator" id="status-indicator">
+        Preparing navigation...
+    </div>
+
+    <div id="map"></div>
+
+    <div class="route-info" id="route-info">
+        <div class="route-stats">
+            <div class="route-stat">
+                <div class="route-stat-value" id="route-distance">--</div>
+                <div class="route-stat-label">Distance</div>
+            </div>
+            <div class="route-stat">
+                <div class="route-stat-value" id="route-duration">--</div>
+                <div class="route-stat-label">Duration</div>
+            </div>
+            <div class="route-stat">
+                <div class="route-stat-value" id="route-eta">--</div>
+                <div class="route-stat-label">ETA</div>
+            </div>
+        </div>
+        <div class="navigation-controls">
+            <button class="btn btn-primary" id="center-route">Center Route</button>
+            <button class="btn btn-secondary" id="follow-location">Follow Location</button>
+            <button class="btn btn-danger" id="clear-navigation">Clear Navigation</button>
+        </div>
+    </div>
+
+    <script>
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const destinationLat = parseFloat(urlParams.get('lat'));
+        const destinationLng = parseFloat(urlParams.get('lng'));
+        const destinationName = urlParams.get('name') || 'Vehicle Location';
+        const modelId = urlParams.get('id');
+
+        // Check if we have valid coordinates
+        if (isNaN(destinationLat) || isNaN(destinationLng)) {
+            alert('Invalid destination coordinates. Please try again.');
+            window.close();
+        }
+
+        // Update header with destination info
+        document.getElementById('destination-name').textContent = destinationName;
+        document.getElementById('destination-coords').textContent = `${destinationLat.toFixed(6)}, ${destinationLng.toFixed(6)}`;
+
+        // Initialize Mapbox
+        mapboxgl.accessToken = 'pk.eyJ1IjoibmFtdG9ubmVzdCIsImEiOiJjbTBrbWxieGoxMTJlMmpzN2o5Nnd3a2ZkIn0.eqncjfXHTSQA3d4rJAEMrg';
+
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/satellite-streets-v12',
+            center: [destinationLng, destinationLat],
+            zoom: 15,
+            bearing: 0,
+            pitch: 45
+        });
+
+        // Navigation state
+        let userLocationMarker = null;
+        let destinationMarker = null;
+        let watchPositionId = null;
+        let isNavigating = false;
+        let followLocation = false;
+        let currentRoute = null;
+        let sessionId = `nav_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        let driverName = `Driver ${Math.floor(Math.random() * 1000)}`;
+
+        // Add destination marker
+        function addDestinationMarker() {
+            const markerElement = document.createElement('div');
+            markerElement.className = 'destination-marker';
+
+            destinationMarker = new mapboxgl.Marker(markerElement)
+                .setLngLat([destinationLng, destinationLat])
+                .addTo(map);
+        }
+
+        // Add user location marker
+        function addUserLocationMarker(lng, lat) {
+            if (userLocationMarker) {
+                userLocationMarker.setLngLat([lng, lat]);
+            } else {
+                const locationElement = document.createElement('div');
+                locationElement.className = 'location-dot';
+
+                userLocationMarker = new mapboxgl.Marker(locationElement)
+                    .setLngLat([lng, lat])
+                    .addTo(map);
+            }
+
+            if (followLocation) {
+                map.easeTo({
+                    center: [lng, lat],
+                    duration: 1000
+                });
+            }
+            
+            // Send location update to main map
+            if (isNavigating) {
+                sendRouteUpdateToMainMap(currentRoute);
+            }
+        }
+
+        // Get and display route
+        function showRoute(startLng, startLat) {
+            const directionsUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${startLng},${startLat};${destinationLng},${destinationLat}?geometries=geojson&access_token=${mapboxgl.accessToken}`;
+
+            fetch(directionsUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.routes && data.routes.length > 0) {
+                        currentRoute = data.routes[0];
+
+                        // Remove existing route
+                        if (map.getLayer('route')) {
+                            map.removeLayer('route');
+                        }
+                        if (map.getSource('route')) {
+                            map.removeSource('route');
+                        }
+
+                        // Add route to map
+                        map.addSource('route', {
+                            type: 'geojson',
+                            data: {
+                                type: 'Feature',
+                                properties: {},
+                                geometry: currentRoute.geometry
+                            }
+                        });
+
+                        map.addLayer({
+                            id: 'route',
+                            type: 'line',
+                            source: 'route',
+                            layout: {
+                                'line-join': 'round',
+                                'line-cap': 'round'
+                            },
+                            paint: {
+                                'line-color': '#3b82f6',
+                                'line-width': 6,
+                                'line-opacity': 0.8
+                            }
+                        });
+
+                        // Update route info
+                        updateRouteInfo(currentRoute);
+
+                        // Show route info panel
+                        document.getElementById('route-info').style.display = 'block';
+
+                        // Fit map to show route
+                        if (!followLocation) {
+                            fitMapToRoute();
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error getting route:', error);
+                    updateStatus('Unable to get route');
+                });
+        }
+
+        // Update route information
+        function updateRouteInfo(route) {
+            const distance = (route.distance / 1000).toFixed(1);
+            const duration = Math.round(route.duration / 60);
+            const eta = new Date(Date.now() + route.duration * 1000);
+
+            document.getElementById('route-distance').textContent = distance + ' km';
+            document.getElementById('route-duration').textContent = duration + ' min';
+            document.getElementById('route-eta').textContent = eta.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            // Send route update to main map
+            sendRouteUpdateToMainMap(route);
+        }
+
+        // Send route data to main map via localStorage
+        function sendRouteUpdateToMainMap(route) {
+            try {
+                const routeUpdate = {
+                    sessionId: sessionId,
+                    driverName: driverName,
+                    destinationName: destinationName,
+                    destinationLat: destinationLat,
+                    destinationLng: destinationLng,
+                    driverLocation: userLocationMarker ? {
+                        lat: userLocationMarker.getLngLat().lat,
+                        lng: userLocationMarker.getLngLat().lng
+                    } : null,
+                    routeGeometry: route ? route.geometry : null,
+                    routeDistance: route ? route.distance : null,
+                    routeDuration: route ? route.duration : null,
+                    lastUpdate: Date.now()
+                };
+
+                // Get existing routes from localStorage
+                let existingRoutes = [];
+                try {
+                    const stored = localStorage.getItem('navigation_routes');
+                    if (stored) {
+                        existingRoutes = JSON.parse(stored);
+                    }
+                } catch (e) {
+                    existingRoutes = [];
+                }
+
+                // Update or add this session's route
+                const existingIndex = existingRoutes.findIndex(r => r.sessionId === sessionId);
+                if (existingIndex >= 0) {
+                    existingRoutes[existingIndex] = routeUpdate;
+                } else {
+                    existingRoutes.push(routeUpdate);
+                }
+
+                // Clean up old routes (older than 1 minute)
+                const now = Date.now();
+                existingRoutes = existingRoutes.filter(r => now - r.lastUpdate < 60000);
+
+                // Store updated routes
+                localStorage.setItem('navigation_routes', JSON.stringify(existingRoutes));
+                
+                console.log('Route update sent to main map:', routeUpdate);
+            } catch (error) {
+                console.error('Error sending route update:', error);
+            }
+        }
+
+        // Remove this session's route from localStorage
+        function removeRouteFromMainMap() {
+            try {
+                let existingRoutes = [];
+                try {
+                    const stored = localStorage.getItem('navigation_routes');
+                    if (stored) {
+                        existingRoutes = JSON.parse(stored);
+                    }
+                } catch (e) {
+                    existingRoutes = [];
+                }
+
+                // Remove this session's route
+                existingRoutes = existingRoutes.filter(r => r.sessionId !== sessionId);
+                localStorage.setItem('navigation_routes', JSON.stringify(existingRoutes));
+                
+                console.log('Route removed from main map');
+            } catch (error) {
+                console.error('Error removing route:', error);
+            }
+        }
+
+        // Fit map to show entire route
+        function fitMapToRoute() {
+            if (!currentRoute) return;
+
+            const coordinates = currentRoute.geometry.coordinates;
+            const bounds = coordinates.reduce((bounds, coord) => {
+                return bounds.extend(coord);
+            }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+
+            map.fitBounds(bounds, {
+                padding: { top: 120, bottom: 200, left: 50, right: 50 },
+                maxZoom: 16
+            });
+        }
+
+        // Update status indicator
+        function updateStatus(message) {
+            document.getElementById('status-indicator').textContent = message;
+        }
+
+        // Start navigation
+        function startNavigation() {
+            if ('geolocation' in navigator) {
+                isNavigating = true;
+                followLocation = true;
+                updateStatus('Getting your location...');
+
+                const options = {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 60000
+                };
+
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const userLat = position.coords.latitude;
+                        const userLng = position.coords.longitude;
+
+                        addUserLocationMarker(userLng, userLat);
+                        showRoute(userLng, userLat);
+                        startLocationTracking();
+                        updateStatus('Navigation active');
+
+                        document.getElementById('start-navigation').textContent = 'Navigation Active';
+                        document.getElementById('start-navigation').disabled = true;
+                        document.getElementById('follow-location').textContent = '✓ Following';
+                    },
+                    (error) => {
+                        console.error('Geolocation error:', error);
+                        updateStatus('Location access denied');
+                        alert('Unable to get your location. Please enable location services.');
+                    },
+                    options
+                );
+            } else {
+                alert('Geolocation is not supported by this browser.');
+            }
+        }
+
+        // Start continuous location tracking
+        function startLocationTracking() {
+            if (watchPositionId) {
+                navigator.geolocation.clearWatch(watchPositionId);
+            }
+
+            const options = {
+                enableHighAccuracy: true,
+                timeout: 5000,
+                maximumAge: 30000
+            };
+
+            watchPositionId = navigator.geolocation.watchPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+
+                    addUserLocationMarker(lng, lat);
+
+                    if (isNavigating) {
+                        showRoute(lng, lat);
+                    }
+                },
+                (error) => {
+                    console.warn('Location tracking error:', error);
+                    updateStatus('Location tracking error');
+                },
+                options
+            );
+        }
+
+        // Clear navigation
+        function clearNavigation() {
+            isNavigating = false;
+            followLocation = false;
+
+            // Clear location tracking
+            if (watchPositionId) {
+                navigator.geolocation.clearWatch(watchPositionId);
+                watchPositionId = null;
+            }
+
+            // Remove user location marker
+            if (userLocationMarker) {
+                userLocationMarker.remove();
+                userLocationMarker = null;
+            }
+
+            // Remove route
+            if (map.getLayer('route')) {
+                map.removeLayer('route');
+            }
+            if (map.getSource('route')) {
+                map.removeSource('route');
+            }
+
+            // Hide route info
+            document.getElementById('route-info').style.display = 'none';
+
+            // Reset buttons
+            document.getElementById('start-navigation').textContent = 'Start Navigation';
+            document.getElementById('start-navigation').disabled = false;
+            document.getElementById('follow-location').textContent = 'Follow Location';
+
+            updateStatus('Navigation cleared');
+            
+            // Remove route from main map
+            removeRouteFromMainMap();
+
+            // Center on destination
+            map.easeTo({
+                center: [destinationLng, destinationLat],
+                zoom: 15
+            });
+        }
+
+        // External navigation apps
+        function openExternalNavigation() {
+            const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${destinationLat},${destinationLng}`;
+            const appleMapsUrl = `http://maps.apple.com/?daddr=${destinationLat},${destinationLng}`;
+            const wazeUrl = `https://waze.com/ul?ll=${destinationLat}%2C${destinationLng}&navigate=yes`;
+
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+            if (isIOS) {
+                window.open(appleMapsUrl, '_blank');
+            } else {
+                window.open(googleMapsUrl, '_blank');
+            }
+        }
+
+        // Event listeners
+        document.getElementById('start-navigation').addEventListener('click', startNavigation);
+        document.getElementById('external-nav').addEventListener('click', openExternalNavigation);
+        document.getElementById('center-route').addEventListener('click', fitMapToRoute);
+        document.getElementById('follow-location').addEventListener('click', () => {
+            followLocation = !followLocation;
+            document.getElementById('follow-location').textContent = followLocation ? '✓ Following' : 'Follow Location';
+        });
+        document.getElementById('clear-navigation').addEventListener('click', clearNavigation);
+
+        // Initialize map
+        map.on('load', () => {
+            addDestinationMarker();
+            updateStatus('Ready to navigate');
+        });
+
+        // Handle page visibility to pause/resume tracking
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && watchPositionId) {
+                navigator.geolocation.clearWatch(watchPositionId);
+                watchPositionId = null;
+            } else if (!document.hidden && isNavigating) {
+                startLocationTracking();
+            }
+        });
+
+        // Clean up when page is closed
+        window.addEventListener('beforeunload', () => {
+            removeRouteFromMainMap();
+        });
+
+        // Prompt for driver name on load
+        setTimeout(() => {
+            const name = prompt('Enter your name for route tracking:', driverName);
+            if (name && name.trim()) {
+                driverName = name.trim();
+                document.getElementById('destination-name').textContent = `${destinationName} - ${driverName}`;
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

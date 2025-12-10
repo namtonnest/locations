@@ -4093,14 +4093,12 @@ function generateNavigationLink(entry) {
     const appleMapsUrl = `http://maps.apple.com/?daddr=${lat},${lng}`;
     const wazeUrl = `https://waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`;
     
+    // Create navigation page URL with parameters
+    const navigationPageUrl = `navigation.html?lat=${lat}&lng=${lng}&name=${encodeURIComponent(name)}&id=${entry.id}`;
+    
     // Detect mobile platform
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const isAndroid = /Android/.test(navigator.userAgent);
-    
-    let primaryUrl = googleMapsUrl;
-    if (isIOS) {
-        primaryUrl = appleMapsUrl;
-    }
     
     // Create navigation options modal
     const modal = document.createElement('div');
@@ -4120,17 +4118,18 @@ function generateNavigationLink(entry) {
     modal.innerHTML = `
         <div style="background: white; border-radius: 12px; padding: 24px; max-width: 320px; margin: 20px;">
             <h3 style="margin: 0 0 16px 0; font-size: 18px; color: #1f2937;">Navigate to ${name}</h3>
-            <p style="margin: 0 0 20px 0; font-size: 14px; color: #6b7280;">Choose your preferred navigation app:</p>
+            <p style="margin: 0 0 20px 0; font-size: 14px; color: #6b7280;">Choose your preferred navigation method:</p>
             <div style="display: flex; flex-direction: column; gap: 12px;">
+                <button onclick="window.open('${navigationPageUrl}', '_blank')" style="padding: 12px; border: 1px solid #10b981; border-radius: 8px; cursor: pointer; font-size: 14px; background: #10b981; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600;">
+                    🗺️ Open Navigation Page
+                </button>
+                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 4px 0;">
                 <button onclick="window.open('${googleMapsUrl}', '_blank')" style="padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 14px; background: #f9fafb; display: flex; align-items: center; justify-content: center;">
                     🗺️ Google Maps
                 </button>
                 ${isIOS ? `<button onclick="window.open('${appleMapsUrl}', '_blank')" style="padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 14px; background: #f9fafb; display: flex; align-items: center; justify-content: center;">🍎 Apple Maps</button>` : ''}
                 <button onclick="window.open('${wazeUrl}', '_blank')" style="padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 14px; background: #f9fafb; display: flex; align-items: center; justify-content: center;">
                     🚗 Waze
-                </button>
-                <button onclick="startInAppNavigation(${lat}, ${lng}, '${name}')" style="padding: 12px; border: 1px solid #10b981; border-radius: 8px; cursor: pointer; font-size: 14px; background: #10b981; color: white; display: flex; align-items: center; justify-content: center;">
-                    📍 Show Route on Map
                 </button>
             </div>
             <button onclick="this.parentElement.parentElement.remove()" style="margin-top: 16px; width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; cursor: pointer; font-size: 14px; background: #f9fafb;">
@@ -4141,10 +4140,10 @@ function generateNavigationLink(entry) {
     
     document.body.appendChild(modal);
     
-    // Auto-remove modal after 10 seconds
+    // Auto-remove modal after 15 seconds
     setTimeout(() => {
         if (modal.parentElement) modal.remove();
-    }, 10000);
+    }, 15000);
 }
 
 function startInAppNavigation(destLat, destLng, destName) {
@@ -4346,6 +4345,308 @@ function clearNavigation() {
     const routeInfo = document.getElementById('route-info');
     if (routeInfo) routeInfo.remove();
 }
+
+// --- Centralized Route Tracking for Multiple Drivers ---
+let activeNavigationSessions = new Map(); // sessionId -> {driverLocation, route, lastUpdate, driverName}
+let routeCheckInterval = null;
+const ROUTE_CHECK_INTERVAL = 5000; // Check for route updates every 5 seconds
+const ROUTE_EXPIRY_TIME = 30000; // Remove routes older than 30 seconds
+
+function startRouteTracking() {
+    if (routeCheckInterval) return; // Already running
+    
+    routeCheckInterval = setInterval(() => {
+        checkForActiveRoutes();
+        cleanupExpiredRoutes();
+    }, ROUTE_CHECK_INTERVAL);
+    
+    console.log('Started centralized route tracking');
+}
+
+function stopRouteTracking() {
+    if (routeCheckInterval) {
+        clearInterval(routeCheckInterval);
+        routeCheckInterval = null;
+    }
+    clearAllDriverRoutes();
+}
+
+function checkForActiveRoutes() {
+    // Check localStorage for route updates from navigation pages
+    try {
+        const routeUpdates = localStorage.getItem('navigation_routes');
+        if (routeUpdates) {
+            const routes = JSON.parse(routeUpdates);
+            updateDriverRoutes(routes);
+        }
+    } catch (error) {
+        console.warn('Error checking route updates:', error);
+    }
+}
+
+function updateDriverRoutes(routes) {
+    routes.forEach(routeData => {
+        const sessionId = routeData.sessionId;
+        const existingSession = activeNavigationSessions.get(sessionId);
+        
+        // Update or add route
+        activeNavigationSessions.set(sessionId, {
+            ...routeData,
+            lastUpdate: Date.now()
+        });
+        
+        // Update map display
+        displayDriverRoute(routeData);
+        displayDriverLocation(routeData);
+    });
+}
+
+function displayDriverRoute(routeData) {
+    const routeId = `driver-route-${routeData.sessionId}`;
+    
+    // Remove existing route
+    if (map.getLayer(routeId)) {
+        map.removeLayer(routeId);
+    }
+    if (map.getSource(routeId)) {
+        map.removeSource(routeId);
+    }
+    
+    if (routeData.routeGeometry) {
+        // Add route to map
+        map.addSource(routeId, {
+            type: 'geojson',
+            data: {
+                type: 'Feature',
+                properties: {
+                    driverName: routeData.driverName || 'Driver',
+                    destination: routeData.destinationName || 'Vehicle'
+                },
+                geometry: routeData.routeGeometry
+            }
+        });
+        
+        // Generate unique color for each driver
+        const routeColor = generateDriverColor(routeData.sessionId);
+        
+        map.addLayer({
+            id: routeId,
+            type: 'line',
+            source: routeId,
+            layout: {
+                'line-join': 'round',
+                'line-cap': 'round'
+            },
+            paint: {
+                'line-color': routeColor,
+                'line-width': 4,
+                'line-opacity': 0.8,
+                'line-dasharray': [2, 2]
+            }
+        });
+    }
+}
+
+function displayDriverLocation(routeData) {
+    const markerId = `driver-location-${routeData.sessionId}`;
+    
+    // Remove existing marker
+    const existingMarker = document.querySelector(`[data-driver-id="${routeData.sessionId}"]`);
+    if (existingMarker && existingMarker.mapboxMarker) {
+        existingMarker.mapboxMarker.remove();
+    }
+    
+    if (routeData.driverLocation) {
+        // Create driver location marker
+        const markerElement = document.createElement('div');
+        markerElement.setAttribute('data-driver-id', routeData.sessionId);
+        markerElement.style.cssText = `
+            width: 24px;
+            height: 24px;
+            background: ${generateDriverColor(routeData.sessionId)};
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            position: relative;
+            cursor: pointer;
+        `;
+        
+        // Add driver indicator
+        const indicator = document.createElement('div');
+        indicator.style.cssText = `
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: ${generateDriverColor(routeData.sessionId)};
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            white-space: nowrap;
+            pointer-events: none;
+        `;
+        indicator.textContent = routeData.driverName || 'Driver';
+        markerElement.appendChild(indicator);
+        
+        const marker = new mapboxgl.Marker(markerElement)
+            .setLngLat([routeData.driverLocation.lng, routeData.driverLocation.lat])
+            .addTo(map);
+        
+        // Store marker reference
+        markerElement.mapboxMarker = marker;
+        
+        // Add click handler for driver info
+        markerElement.addEventListener('click', () => {
+            showDriverInfo(routeData);
+        });
+    }
+}
+
+function generateDriverColor(sessionId) {
+    // Generate consistent color based on session ID
+    const colors = [
+        '#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4',
+        '#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e', '#84cc16'
+    ];
+    
+    const hash = sessionId.split('').reduce((a, b) => {
+        a = ((a << 5) - a) + b.charCodeAt(0);
+        return a & a;
+    }, 0);
+    
+    return colors[Math.abs(hash) % colors.length];
+}
+
+function showDriverInfo(routeData) {
+    const info = document.createElement('div');
+    info.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        z-index: 10000;
+        max-width: 300px;
+    `;
+    
+    const eta = new Date(Date.now() + (routeData.routeDuration || 0) * 1000);
+    
+    info.innerHTML = `
+        <h3 style="margin: 0 0 12px 0; color: #1f2937;">${routeData.driverName || 'Driver'}</h3>
+        <div style="margin-bottom: 8px;"><strong>Destination:</strong> ${routeData.destinationName || 'Vehicle'}</div>
+        <div style="margin-bottom: 8px;"><strong>Distance:</strong> ${((routeData.routeDistance || 0) / 1000).toFixed(1)} km</div>
+        <div style="margin-bottom: 8px;"><strong>Duration:</strong> ${Math.round((routeData.routeDuration || 0) / 60)} min</div>
+        <div style="margin-bottom: 16px;"><strong>ETA:</strong> ${eta.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+        <button onclick="this.parentElement.remove()" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer; background: #f9fafb;">Close</button>
+    `;
+    
+    document.body.appendChild(info);
+    
+    // Auto-remove after 10 seconds
+    setTimeout(() => {
+        if (info.parentElement) info.remove();
+    }, 10000);
+}
+
+function cleanupExpiredRoutes() {
+    const now = Date.now();
+    const expiredSessions = [];
+    
+    activeNavigationSessions.forEach((session, sessionId) => {
+        if (now - session.lastUpdate > ROUTE_EXPIRY_TIME) {
+            expiredSessions.push(sessionId);
+        }
+    });
+    
+    expiredSessions.forEach(sessionId => {
+        removeDriverRoute(sessionId);
+        activeNavigationSessions.delete(sessionId);
+    });
+}
+
+function removeDriverRoute(sessionId) {
+    const routeId = `driver-route-${sessionId}`;
+    
+    // Remove route layer
+    if (map.getLayer(routeId)) {
+        map.removeLayer(routeId);
+    }
+    if (map.getSource(routeId)) {
+        map.removeSource(routeId);
+    }
+    
+    // Remove driver marker
+    const markerElement = document.querySelector(`[data-driver-id="${sessionId}"]`);
+    if (markerElement && markerElement.mapboxMarker) {
+        markerElement.mapboxMarker.remove();
+    }
+}
+
+function clearAllDriverRoutes() {
+    activeNavigationSessions.forEach((_, sessionId) => {
+        removeDriverRoute(sessionId);
+    });
+    activeNavigationSessions.clear();
+}
+
+// Add toggle button for route tracking
+function addRouteTrackingControl() {
+    const control = document.createElement('button');
+    control.id = 'route-tracking-btn';
+    control.innerHTML = '🚛';
+    control.title = 'Toggle Driver Route Tracking';
+    control.style.cssText = `
+        position: absolute;
+        top: 112px;
+        right: 12px;
+        z-index: 30;
+        width: 36px;
+        height: 36px;
+        background: white;
+        border: 1px solid rgba(0,0,0,0.1);
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    `;
+    
+    let isTracking = false;
+    
+    control.addEventListener('click', () => {
+        isTracking = !isTracking;
+        
+        if (isTracking) {
+            startRouteTracking();
+            control.style.background = '#10b981';
+            control.style.color = 'white';
+            control.title = 'Driver Route Tracking: ON (Click to turn off)';
+        } else {
+            stopRouteTracking();
+            control.style.background = 'white';
+            control.style.color = 'black';
+            control.title = 'Driver Route Tracking: OFF (Click to turn on)';
+        }
+    });
+    
+    document.body.appendChild(control);
+}
+
+// Initialize route tracking control
+addRouteTrackingControl();
+
+// Make functions globally available
+window.startRouteTracking = startRouteTracking;
+window.stopRouteTracking = stopRouteTracking;
+
+// --- End Centralized Route Tracking ---
 
 // Make functions globally available
 window.startInAppNavigation = startInAppNavigation;
