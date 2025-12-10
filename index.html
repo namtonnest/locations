@@ -276,10 +276,89 @@
     #address-bar{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;z-index:9;background:rgba(255,255,255,0.98);padding:8px;border-radius:10px;box-shadow:var(--shadow);display:flex;gap:8px;align-items:center;min-width:320px;max-width:90%}
     #address-bar input{flex:1;padding:8px;border-radius:6px;border:1px solid rgba(2,6,23,0.06)}
     #address-bar button{padding:8px 10px;border-radius:8px}
+    
+    /* Mobile-friendly input modal */
+    #mobile-input-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+    }
+    
+    #mobile-input-modal.show {
+        display: flex;
+    }
+    
+    .modal-content {
+        background: white;
+        padding: 24px;
+        border-radius: 12px;
+        width: min(90%, 400px);
+        max-width: 400px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    }
+    
+    .modal-content h3 {
+        margin: 0 0 16px 0;
+        color: var(--ui-text);
+        font-size: 18px;
+    }
+    
+    .modal-content input {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        font-size: 16px;
+        margin-bottom: 16px;
+        box-sizing: border-box;
+    }
+    
+    .modal-buttons {
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+    }
+    
+    .modal-buttons button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        cursor: pointer;
+        font-weight: 600;
+    }
+    
+    .modal-buttons .cancel-btn {
+        background: #f3f4f6;
+        color: #374151;
+    }
+    
+    .modal-buttons .confirm-btn {
+        background: var(--accent);
+        color: white;
+    }
 
 </style>
 </head>
 <body>
+    <!-- Mobile-friendly input modal -->
+    <div id="mobile-input-modal">
+        <div class="modal-content">
+            <h3 id="modal-title">Enter name</h3>
+            <input type="text" id="modal-input" placeholder="Enter a name for this map (optional)">
+            <div class="modal-buttons">
+                <button class="cancel-btn" onclick="closeMobileModal()">Cancel</button>
+                <button class="confirm-btn" onclick="confirmMobileModal()">Save</button>
+            </div>
+        </div>
+    </div>
 <script src="https://unpkg.com/three@0.126.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.126.0/examples/js/loaders/GLTFLoader.js"></script>
 <!-- Load font and text geometry helpers so we can generate 3D text at runtime -->
@@ -295,7 +374,7 @@
                     <button id="open-library-btn" class="btn secondary">Models</button>
                     <button id="open-models-btn" class="btn secondary">Info</button>
                     <button id="share-btn" class="btn secondary">Share</button>
-                    <button id="save-btn" class="btn secondary" title="Save state to server">Save</button>
+                    <button id="save-btn" class="btn secondary" title="Save state to server" style="touch-action: manipulation; -webkit-tap-highlight-color: transparent;">Save</button>
                 </div>
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
@@ -530,6 +609,73 @@
         sessionToken = tempToken;
         console.log('[DEBUG] Generated temporary session token:', tempToken);
         return tempToken;
+    }
+    
+    // Mobile-friendly input modal functions
+    let modalResolve = null;
+    
+    function showMobileModal(title, placeholder, defaultValue = '') {
+        return new Promise((resolve) => {
+            modalResolve = resolve;
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-input').placeholder = placeholder;
+            document.getElementById('modal-input').value = defaultValue;
+            document.getElementById('mobile-input-modal').classList.add('show');
+            
+            // Focus on input for better UX
+            setTimeout(() => {
+                document.getElementById('modal-input').focus();
+            }, 100);
+        });
+    }
+    
+    function closeMobileModal() {
+        document.getElementById('mobile-input-modal').classList.remove('show');
+        if (modalResolve) {
+            modalResolve(null);
+            modalResolve = null;
+        }
+    }
+    
+    function confirmMobileModal() {
+        const value = document.getElementById('modal-input').value.trim();
+        document.getElementById('mobile-input-modal').classList.remove('show');
+        if (modalResolve) {
+            modalResolve(value || null);
+            modalResolve = null;
+        }
+    }
+    
+    // Handle Enter key in modal
+    document.addEventListener('DOMContentLoaded', () => {
+        const modalInput = document.getElementById('modal-input');
+        if (modalInput) {
+            modalInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    confirmMobileModal();
+                }
+                if (e.key === 'Escape') {
+                    closeMobileModal();
+                }
+            });
+        }
+    });
+    
+    // Mobile-friendly prompt function
+    async function mobilePrompt(message, defaultText = '') {
+        // Check if we're on mobile
+        const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 640;
+        
+        if (isMobile) {
+            return await showMobileModal('Save Map', message, defaultText);
+        } else {
+            try {
+                return prompt(message, defaultText);
+            } catch (e) {
+                // Fallback to mobile modal if prompt fails
+                return await showMobileModal('Save Map', message, defaultText);
+            }
+        }
     }
     
     // Ensure user has a session token (generate one if needed)
@@ -988,10 +1134,10 @@
             const actions = document.createElement('div');
             const selectBtn = document.createElement('button');
             selectBtn.textContent = 'Use';
-            selectBtn.addEventListener('click', () => {
+            selectBtn.addEventListener('click', async () => {
                 if (item.type === '3dtext') {
                     // prompt for text and enable text placement mode
-                    const txt = prompt('Enter text to place');
+                    const txt = await mobilePrompt('Enter text to place', '');
                     if (!txt) return;
                     placingText = { text: txt };
                     placingModel = true; addBtn.setAttribute('aria-pressed', 'true'); addBtn.textContent = 'Cancel';
@@ -1116,7 +1262,7 @@
         if (!e.originalEvent) return; // safety
         const isShift = e.originalEvent.shiftKey;
         if (!isShift) return; // normal model placement handled elsewhere
-        const txt = prompt('Enter text for 3D label');
+        const txt = await mobilePrompt('Enter text for 3D label', '');
         if (!txt) return;
         const coords = [e.lngLat.lng, e.lngLat.lat];
         try {
@@ -2089,7 +2235,12 @@
                 const payload = { mapCenter: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), models: data, draws: drawnFeatures };
                 // Prompt user for an optional name for this saved map
                 let name = null;
-                try { name = prompt('Enter a name for this map (optional)'); } catch (e) { name = null; }
+                try { 
+                    name = await mobilePrompt('Enter a name for this map (optional)');
+                } catch (e) { 
+                    console.warn('Failed to get map name:', e);
+                    name = null; 
+                }
                 if (name !== null) name = (String(name).trim() || null);
 
                 if (sessionToken) {
